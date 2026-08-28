@@ -1,13 +1,15 @@
 # OrcaRouter Samples
 
-Simple sample code for using the OrcaRouter API from different environments.
+This repository provides simple examples for using the OrcaRouter API in different environments.
 
-This repository is for developers who want to learn how to connect to OrcaRouter with simple examples.
+## Sample Environments
 
-## Samples
+- [Web](Web/README.md) — Browser-based sample
+- [PowerShell](PowerShell/README.md) — PowerShell sample
+- [VBA](VBA/README.md) — Excel VBA sample
 
-- Web
-- PowerShell
-- VBA
+## Project Status
+
+The sample programs are not implemented yet. This repository currently contains only the planned folder structure and documentation.
 
 More samples may be added in the future.
