@@ -502,7 +502,7 @@ function Invoke-StreamingMode {
             })
 
             $details = Get-OrcaErrorDetails -HttpStatus $status -HttpStatusText $response.ReasonPhrase -Headers $headers -RawBody $rawResponse
-            throw "HTTP $status: $($details.ErrorMessage) $($details.Guidance)"
+            throw "HTTP ${status}: $($details.ErrorMessage) $($details.Guidance)"
         }
 
         Add-Trace -Step 'STEP 4' -Direction 'RESPONSE' -Title 'SSEストリームを開始' -Data ([ordered]@{
