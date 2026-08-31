@@ -50,6 +50,9 @@ Public Sub SendOrcaRouterStreaming()
     Dim contentPart As String
     Dim answerText As String
     Dim stderrText As String
+    Dim responseHeaders As String
+    Dim nonSseOutput As String
+    Dim httpStatus As Long
 
     Dim eventCount As Long
     Dim startedAt As Double
@@ -100,7 +103,7 @@ Public Sub SendOrcaRouterStreaming()
              "curl.exe --config - --no-buffer --silent --show-error" & vbCrLf & _
              "APIキーはcurlのコマンドライン引数ではなくstdin configへ渡します。"
 
-    command = """" & curlPath & """ --config - --no-buffer --silent --show-error"
+    command = """" & curlPath & """ --config - --no-buffer --silent --show-error --include"
 
     Set shell = CreateObject("WScript.Shell")
     Set exec = shell.Exec(command)
@@ -119,7 +122,12 @@ Public Sub SendOrcaRouterStreaming()
 
             lineText = exec.StdOut.ReadLine
 
-            If Left$(lineText, 5) = "data:" Then
+            If Left$(lineText, 5) = "HTTP/" Then
+
+                httpStatus = ParseHttpStatusLine(lineText)
+                responseHeaders = responseHeaders & lineText & vbCrLf
+
+            ElseIf Left$(lineText, 5) = "data:" Then
 
                 payload = Trim$(Mid$(lineText, 6))
 
@@ -162,6 +170,19 @@ Public Sub SendOrcaRouterStreaming()
 
                 End If
 
+            ElseIf Len(lineText) > 0 Then
+
+                If InStr(1, lineText, ":", vbBinaryCompare) > 0 And _
+                   Len(nonSseOutput) = 0 Then
+
+                    responseHeaders = responseHeaders & lineText & vbCrLf
+
+                Else
+
+                    nonSseOutput = nonSseOutput & lineText & vbCrLf
+
+                End If
+
             End If
 
         Else
@@ -185,9 +206,20 @@ Public Sub SendOrcaRouterStreaming()
                   "curl.exe がエラー終了しました。ExitCode=" & exec.ExitCode & vbCrLf & stderrText
     End If
 
+    If httpStatus <> 0 Then
+
+        If httpStatus < 200 Or httpStatus >= 300 Then
+            RaiseHttpError httpStatus, responseHeaders, nonSseOutput
+        End If
+
+    End If
+
     AddTrace ws, "STEP 4", "RESPONSE", "Streaming受信完了", _
+             "HTTP Status: " & IIf(httpStatus = 0, "(unknown)", CStr(httpStatus)) & vbCrLf & _
              "Events: " & eventCount & vbCrLf & _
              "Elapsed: " & Format$(ElapsedSeconds(startedAt), "0.000") & " sec" & vbCrLf & _
+             "Headers:" & vbCrLf & responseHeaders & vbCrLf & _
+             "Non-SSE body:" & vbCrLf & IIf(Len(nonSseOutput) = 0, "(empty)", nonSseOutput) & vbCrLf & _
              "curl stderr: " & IIf(Len(stderrText) = 0, "(empty)", stderrText)
 
     'STEP 5: Parse / process result.
@@ -865,6 +897,23 @@ Private Function FindCurlPath() As String
 
     Set exec = Nothing
     Set shell = Nothing
+
+End Function
+
+
+Private Function ParseHttpStatusLine(ByVal statusLine As String) As Long
+
+    Dim parts() As String
+
+    parts = Split(Trim$(statusLine), " ")
+
+    If UBound(parts) >= 1 Then
+
+        If IsNumeric(parts(1)) Then
+            ParseHttpStatusLine = CLng(parts(1))
+        End If
+
+    End If
 
 End Function
 
