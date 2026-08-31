@@ -27,6 +27,12 @@ Add-Type -AssemblyName System.Net.Http
 
 $script:ApiEndpoint = 'https://api.orcarouter.ai/v1/chat/completions'
 $script:ApiKeyPlaceholder = 'xxx-your-orcarouter-api-key-xxx'
+
+# LOCAL TEST ONLY:
+# 実APIキーをソースへ一時的に埋め込んで試す場合は、次の値だけを書き換えます。
+# 公開GitHubへ実APIキーをコミットしないでください。
+$script:DefaultApiKey = 'xxx-your-orcarouter-api-key-xxx'
+
 $script:RequestTimeoutSeconds = 60
 
 if ([System.Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') {
@@ -173,7 +179,7 @@ $sendButton = $window.FindName('SendButton')
 $clearTraceButton = $window.FindName('ClearTraceButton')
 $statusText = $window.FindName('StatusText')
 
-$apiKeyBox.Password = $script:ApiKeyPlaceholder
+$apiKeyBox.Password = $script:DefaultApiKey
 
 function Add-Trace {
     param(
