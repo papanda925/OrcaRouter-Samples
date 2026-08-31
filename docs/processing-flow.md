@@ -1,6 +1,6 @@
 # Common processing flow
 
-All three samples in this repository use the same six processing steps so that learners can compare the implementations side by side.
+All three samples in this repository use the same top-level six processing steps so that learners can compare the implementations side by side. The UI can switch between Chat, Streaming, and Tool Calling.
 
 ## API contract
 
@@ -43,8 +43,8 @@ sequenceDiagram
     UI->>C: STEP 1 Validate inputs
     C->>C: STEP 2 Build request
     C->>O: STEP 3 Send HTTP POST
-    O-->>C: STEP 4 Receive HTTP response
-    C->>C: STEP 5 Parse assistant message
+    O-->>C: STEP 4 Receive response / SSE
+    C->>C: STEP 5 Parse / process result
     C-->>UI: STEP 6 Update answer and trace
 ```
 
@@ -62,11 +62,17 @@ Send the request to OrcaRouter and record the start time.
 
 ### STEP 4 - Receive response
 
-Capture the HTTP status, elapsed time, response headers where available, and raw response body.
+For normal Chat and Tool Calling, capture the HTTP status, elapsed time, response headers where available, and raw response body.
 
-### STEP 5 - Parse assistant message
+For Streaming, read OpenAI-compatible SSE `data:` events until `[DONE]`. If an SSE JSON object contains an `error` field, treat the stream as failed even though the initial HTTP response was successful.
 
-Read `choices[0].message.content`. If the expected data is missing, raise an understandable error and keep the raw response in the trace.
+### STEP 5 - Parse / process result
+
+- Chat: read `choices[0].message.content`.
+- Streaming: append `choices[0].delta.content` and aggregate usage when returned.
+- Tool Calling: read `message.tool_calls`, execute the local `calculate_sum` demo tool, send the `role=tool` result in a second request, then read the final assistant message.
+
+Tool Calling is shown with sub-steps `STEP 5A`, `STEP 5B`, and `STEP 5C` so learners can see the extra round trip.
 
 ### STEP 6 - Update UI and trace
 
@@ -94,3 +100,14 @@ Each implementation records as much of the following as possible:
 **Never write a real API key to the trace.**
 
 These samples are designed for learning. Before using the same approach in production, add secret management, retry/backoff, telemetry rules, and application-specific security controls.
+
+
+## Mode comparison
+
+| Mode | STEP 2 | STEP 4 | STEP 5 |
+|---|---|---|---|
+| Chat | messages request | JSON response | assistant content |
+| Streaming | `stream:true` | SSE events | aggregate deltas |
+| Tool Calling | tools + tool_choice | first/second JSON response | tool call → local function → tool result → final answer |
+
+For detailed payloads and official documentation links, see [Advanced API tests](advanced-features.md).
