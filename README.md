@@ -2,15 +2,15 @@
 
 OrcaRouter API を **Web / PowerShell / Excel VBA** から呼び出す、学習者向けのサンプル集です。
 
-3つの実装は、言語やUIが違っても処理を比較しやすいように、同じ6ステップ・同じ用語・同じTrace方針にそろえています。
+3つの実装は、言語やUIが違っても処理を比較しやすいように、同じ6ステップ・同じ用語・同じTrace方針にそろえています。現在は **Chat / Streaming / Tool Calling** の3モードを実装しています。
 
 ## Samples
 
 | Sample | UI | HTTP implementation | Status |
 |---|---|---|---|
-| [Web](Web/README.md) | HTML / CSS | Browser `fetch` | Implemented |
-| [PowerShell](PowerShell/README.md) | WPF / XAML | `System.Net.Http.HttpClient` | Implemented |
-| [VBA](VBA/README.md) | Excel worksheet / cells | `WinHttp.WinHttpRequest.5.1` | Implemented |
+| [Web](Web/README.md) | HTML / CSS | Browser `fetch` / ReadableStream | Chat / Streaming / Tool Calling |
+| [PowerShell](PowerShell/README.md) | WPF / XAML | `System.Net.Http.HttpClient` | Chat / Streaming / Tool Calling |
+| [VBA](VBA/README.md) | Excel worksheet / cells | WinHTTP + curl(SSE) | Chat / Streaming / Tool Calling |
 
 ## What you can see
 
@@ -46,7 +46,7 @@ Traceには学習用として、通常より多めのデバッグ情報を残し
 5. **STEP 5 - Parse assistant message**
 6. **STEP 6 - Update UI and trace**
 
-共通シーケンス図とAPI電文は [docs/processing-flow.md](docs/processing-flow.md) を参照してください。
+共通シーケンス図とAPI電文は [docs/processing-flow.md](docs/processing-flow.md) を参照してください。Streaming / Tool Calling / 有料モデル互換性 / エラー処理の詳細は [docs/advanced-features.md](docs/advanced-features.md) にまとめています。
 
 ## API configuration
 
@@ -99,7 +99,9 @@ orcarouter/free
 ```text
 OrcaRouter-Samples/
 ├─ docs/
-│  └─ processing-flow.md
+│  ├─ processing-flow.md
+│  ├─ advanced-features.md
+│  └─ api-key-setup.md
 ├─ Web/
 │  ├─ index.html
 │  ├─ style.css
@@ -150,7 +152,6 @@ VBA版も学習しやすさを優先してシートからAPIキーを読み取�
 - rate-limit handling
 - structured logging
 - proxy / backend architecture
-- streaming
 - conversation history
 - unit / integration tests
 - organization-specific security controls
