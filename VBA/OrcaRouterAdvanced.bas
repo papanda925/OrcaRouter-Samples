@@ -101,7 +101,7 @@ Public Sub SendOrcaRouterStreaming()
 
     'STEP 3: Send HTTP POST.
     AddTrace ws, "STEP 3", "REQUEST", "curl.exeでStreaming POSTを送信", _
-             "curl.exe --config - --no-buffer --silent --show-error" & vbCrLf & _
+             "curl.exe --config - --no-buffer --silent --show-error --include" & vbCrLf & _
              "APIキーはcurlのコマンドライン引数ではなくstdin configへ渡します。"
 
     command = """" & curlPath & """ --config - --no-buffer --silent --show-error --include"
@@ -580,6 +580,10 @@ Private Function BuildToolResultRequestJson( _
         "{" & _
         """model"":""" & JsonEscape(model) & """," & _
         """messages"":[" & _
+            "{" & _
+                """role"":""system""," & _
+                """content"":""This is a Tool Calling learning demo. Call calculate_sum. If the user did not provide two numbers, use 123 and 456.""" & _
+            "}," & _
             "{" & _
                 """role"":""user""," & _
                 """content"":""" & JsonEscape(question) & """" & _
