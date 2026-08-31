@@ -387,7 +387,7 @@ function Invoke-OrcaJsonRequest {
 
         if (-not $response.IsSuccessStatusCode) {
             $details = Get-OrcaErrorDetails -HttpStatus $status -HttpStatusText $response.ReasonPhrase -Headers $headers -RawBody $rawResponse
-            $exception = [System.Exception]::new("HTTP $status: $($details.ErrorMessage) $($details.Guidance)")
+            $exception = [System.Exception]::new("HTTP ${status}: $($details.ErrorMessage) $($details.Guidance)")
             $exception.Data['OrcaErrorDetails'] = (ConvertTo-TraceText $details)
             throw $exception
         }
