@@ -517,10 +517,16 @@ Private Function BuildStreamingRequestJson( _
     BuildStreamingRequestJson = _
         "{" & _
         """model"":""" & JsonEscape(model) & """," & _
-        """messages"":[{" & _
-            """role"":""user""," & _
-            """content"":""" & JsonEscape(question) & """" & _
-        "}]," & _
+        """messages"":[" & _
+            "{" & _
+                """role"":""system""," & _
+                """content"":""This is a Tool Calling learning demo. Call calculate_sum. If the user did not provide two numbers, use 123 and 456.""" & _
+            "}," & _
+            "{" & _
+                """role"":""user""," & _
+                """content"":""" & JsonEscape(question) & """" & _
+            "}" & _
+        "]," & _
         """stream"":true," & _
         """stream_options"":{""include_usage"":true}" & _
         "}"
