@@ -28,6 +28,8 @@ xxx-your-orcarouter-api-key-xxx
 
 OrcaRouterで発行したAPIキーへ画面上で差し替えてください。
 
+ローカル検証用に `Web/app.js` へ一時的に埋め込む方法も用意しています。詳しくは [APIキーの設定方法](../docs/api-key-setup.md) を参照してください。
+
 既定モデルは、学習用途で試しやすい `orcarouter/free` です。
 
 ローカルHTTPサーバーで開く例:
