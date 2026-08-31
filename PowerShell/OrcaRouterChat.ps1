@@ -97,11 +97,31 @@ function Get-AssistantText {
         $ResponseJson
     )
 
-    if ($null -eq $ResponseJson.choices -or $ResponseJson.choices.Count -lt 1) {
+    $choicesProperty = $ResponseJson.PSObject.Properties['choices']
+
+    if ($null -eq $choicesProperty) {
+        throw 'choices が見つかりません。Trace の Raw response を確認してください。'
+    }
+
+    $choices = @($choicesProperty.Value)
+
+    if ($choices.Count -lt 1) {
         throw 'choices[0] が見つかりません。Trace の Raw response を確認してください。'
     }
 
-    $content = $ResponseJson.choices[0].message.content
+    $messageProperty = $choices[0].PSObject.Properties['message']
+
+    if ($null -eq $messageProperty) {
+        throw 'choices[0].message が見つかりません。Trace の Raw response を確認してください。'
+    }
+
+    $contentProperty = $messageProperty.Value.PSObject.Properties['content']
+
+    if ($null -eq $contentProperty) {
+        throw 'choices[0].message.content が見つかりません。Trace の Raw response を確認してください。'
+    }
+
+    $content = $contentProperty.Value
 
     if ($content -is [string]) {
         return $content
@@ -111,8 +131,18 @@ function Get-AssistantText {
         $parts = @()
 
         foreach ($part in $content) {
-            if ($null -ne $part -and $part.type -eq 'text' -and $part.text) {
-                $parts += [string]$part.text
+            if ($null -eq $part) {
+                continue
+            }
+
+            $typeProperty = $part.PSObject.Properties['type']
+            $textProperty = $part.PSObject.Properties['text']
+
+            if ($null -ne $typeProperty -and
+                $null -ne $textProperty -and
+                $typeProperty.Value -eq 'text' -and
+                $textProperty.Value) {
+                $parts += [string]$textProperty.Value
             }
         }
 
@@ -258,19 +288,19 @@ function Invoke-OrcaRouterChat {
             TimeoutSeconds = $script:RequestTimeoutSeconds
         })
 
-        $client = New-Object System.Net.Http.HttpClient
+        $client = [System.Net.Http.HttpClient]::new()
         $client.Timeout = [TimeSpan]::FromSeconds($script:RequestTimeoutSeconds)
 
-        $request = New-Object System.Net.Http.HttpRequestMessage(
+        $request = [System.Net.Http.HttpRequestMessage]::new(
             [System.Net.Http.HttpMethod]::Post,
-            $script:ApiEndpoint
+            [string]$script:ApiEndpoint
         )
 
         $request.Headers.Authorization =
-            New-Object System.Net.Http.Headers.AuthenticationHeaderValue('Bearer', $apiKey)
+            [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $apiKey)
 
         $request.Content =
-            New-Object System.Net.Http.StringContent(
+            [System.Net.Http.StringContent]::new(
                 $requestJson,
                 [System.Text.Encoding]::UTF8,
                 'application/json'
@@ -304,9 +334,11 @@ function Invoke-OrcaRouterChat {
 
         $assistantText = Get-AssistantText -ResponseJson $responseJson
 
+        $usageProperty = $responseJson.PSObject.Properties['usage']
+
         Add-Trace -Step 'STEP 5' -Direction 'LOCAL' -Title 'Assistantメッセージを解析' -Data ([ordered]@{
             AnswerChars = $assistantText.Length
-            Usage       = if ($responseJson.usage) { $responseJson.usage } else { '(usage not returned)' }
+            Usage       = if ($null -ne $usageProperty) { $usageProperty.Value } else { '(usage not returned)' }
         })
 
         # STEP 6: Update UI and trace.
