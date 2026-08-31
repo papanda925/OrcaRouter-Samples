@@ -70,6 +70,8 @@ xxx-your-orcarouter-api-key-xxx
 
 実行するときだけ、自分のOrcaRouter APIキーへ差し替えてください。
 
+**どのファイルのどこを書き換えるか、ローカル限定でソースへ埋め込む方法、push前の確認方法まで含めた手順は [APIキーの設定方法](docs/api-key-setup.md) を参照してください。**
+
 既定モデルは次の値にしています。
 
 ```text
