@@ -50,8 +50,7 @@
                     Text="ORCAROUTER API LEARNING SAMPLE"
                     Foreground="#0F766E"
                     FontSize="12"
-                    FontWeight="Bold"
-                    CharacterSpacing="120"/>
+                    FontWeight="Bold"/>
                 <TextBlock
                     Text="PowerShell / XAML Chat"
                     Margin="0,4,0,0"
