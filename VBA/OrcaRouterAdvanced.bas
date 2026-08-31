@@ -53,6 +53,7 @@ Public Sub SendOrcaRouterStreaming()
     Dim responseHeaders As String
     Dim nonSseOutput As String
     Dim httpStatus As Long
+    Dim readingHeaders As Boolean
 
     Dim eventCount As Long
     Dim startedAt As Double
@@ -126,6 +127,11 @@ Public Sub SendOrcaRouterStreaming()
 
                 httpStatus = ParseHttpStatusLine(lineText)
                 responseHeaders = responseHeaders & lineText & vbCrLf
+                readingHeaders = True
+
+            ElseIf Len(lineText) = 0 Then
+
+                readingHeaders = False
 
             ElseIf Left$(lineText, 5) = "data:" Then
 
@@ -170,18 +176,13 @@ Public Sub SendOrcaRouterStreaming()
 
                 End If
 
+            ElseIf readingHeaders Then
+
+                responseHeaders = responseHeaders & lineText & vbCrLf
+
             ElseIf Len(lineText) > 0 Then
 
-                If InStr(1, lineText, ":", vbBinaryCompare) > 0 And _
-                   Len(nonSseOutput) = 0 Then
-
-                    responseHeaders = responseHeaders & lineText & vbCrLf
-
-                Else
-
-                    nonSseOutput = nonSseOutput & lineText & vbCrLf
-
-                End If
+                nonSseOutput = nonSseOutput & lineText & vbCrLf
 
             End If
 
