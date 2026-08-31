@@ -78,6 +78,18 @@ Public Sub SetupOrcaRouterSample()
         .Borders.Color = RGB(217, 225, 236)
     End With
 
+    'Mode
+    ws.Range("A5").Value = "Mode"
+    With ws.Range("B5:D5")
+        .Merge
+        .Value = "Chat"
+        .Interior.Color = RGB(251, 253, 255)
+        .Borders.Color = RGB(217, 225, 236)
+        .Validation.Delete
+        .Validation.Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, _
+                        Operator:=xlBetween, Formula1:="Chat,Streaming,Tool Calling"
+    End With
+
     'Question
     ws.Range("A6").Value = "質問"
     With ws.Range("B6:H9")
@@ -126,7 +138,7 @@ Public Sub SetupOrcaRouterSample()
     ws.Columns("E").ColumnWidth = 90
     ws.Columns("F:H").ColumnWidth = 12
 
-    ws.Rows("3:4").RowHeight = 24
+    ws.Rows("3:5").RowHeight = 24
     ws.Rows("6:9").RowHeight = 26
     ws.Rows("11:15").RowHeight = 26
 
@@ -200,6 +212,7 @@ Public Sub SendOrcaRouterChat()
 
     Dim apiKey As String
     Dim model As String
+    Dim mode As String
     Dim question As String
     Dim requestBody As String
 
@@ -221,7 +234,18 @@ Public Sub SendOrcaRouterChat()
 
     apiKey = Trim$(CStr(ws.Range("B3").Value))
     model = Trim$(CStr(ws.Range("B4").Value))
+    mode = Trim$(CStr(ws.Range("B5").Value))
     question = Trim$(CStr(ws.Range("B6").Value))
+
+    If StrComp(mode, "Streaming", vbTextCompare) = 0 Then
+        SendOrcaRouterStreaming
+        GoTo CleanExit
+    End If
+
+    If StrComp(mode, "Tool Calling", vbTextCompare) = 0 Then
+        SendOrcaRouterToolCalling
+        GoTo CleanExit
+    End If
 
     ws.Range("B11").Value = vbNullString
 
@@ -229,6 +253,7 @@ Public Sub SendOrcaRouterChat()
     AddTrace ws, "STEP 1", "LOCAL", "入力値を検証", _
              "API Key: " & MaskApiKey(apiKey) & vbCrLf & _
              "Model: " & model & vbCrLf & _
+             "Mode: " & mode & vbCrLf & _
              "Question length: " & Len(question)
 
     If Len(apiKey) = 0 Or apiKey = API_KEY_PLACEHOLDER Or Left$(apiKey, 4) = "xxx-" Then
@@ -396,7 +421,7 @@ Private Function BuildRequestJson(ByVal model As String, ByVal question As Strin
 
 End Function
 
-Private Function JsonEscape(ByVal value As String) As String
+Public Function JsonEscape(ByVal value As String) As String
 
     Dim i As Long
     Dim oneCharacter As String
@@ -445,7 +470,7 @@ Private Function JsonEscape(ByVal value As String) As String
 
 End Function
 
-Private Function ExtractAssistantContent(ByVal responseJson As String) As String
+Public Function ExtractAssistantContent(ByVal responseJson As String) As String
 
     Dim regularExpression As Object
     Dim matches As Object
@@ -488,7 +513,7 @@ Private Function ExtractAssistantContent(ByVal responseJson As String) As String
 
 End Function
 
-Private Function JsonUnescape(ByVal encodedText As String) As String
+Public Function JsonUnescape(ByVal encodedText As String) As String
 
     Dim i As Long
     Dim oneCharacter As String
@@ -583,7 +608,7 @@ Private Function JsonUnescape(ByVal encodedText As String) As String
 End Function
 
 
-Private Function StringToUtf8Bytes(ByVal value As String) As Variant
+Public Function StringToUtf8Bytes(ByVal value As String) As Variant
 
     Dim stream As Object
 
@@ -611,7 +636,7 @@ Private Function StringToUtf8Bytes(ByVal value As String) As Variant
 
 End Function
 
-Private Function MaskApiKey(ByVal apiKey As String) As String
+Public Function MaskApiKey(ByVal apiKey As String) As String
 
     If Len(apiKey) = 0 Then
         MaskApiKey = "(empty)"
@@ -627,7 +652,7 @@ Private Function MaskApiKey(ByVal apiKey As String) As String
 
 End Function
 
-Private Function ElapsedSeconds(ByVal startedAt As Double) As Double
+Public Function ElapsedSeconds(ByVal startedAt As Double) As Double
 
     Dim currentTime As Double
 
@@ -642,7 +667,7 @@ Private Function ElapsedSeconds(ByVal startedAt As Double) As Double
 
 End Function
 
-Private Sub AddTrace( _
+Public Sub AddTrace( _
     ByVal ws As Worksheet, _
     ByVal stepName As String, _
     ByVal direction As String, _
