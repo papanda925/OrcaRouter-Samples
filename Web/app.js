@@ -1,5 +1,11 @@
 const API_ENDPOINT = "https://api.orcarouter.ai/v1/chat/completions";
 const API_KEY_PLACEHOLDER = "xxx-your-orcarouter-api-key-xxx";
+
+// LOCAL TEST ONLY:
+// 実APIキーをソースへ一時的に埋め込んで試す場合は、次の値だけを書き換えます。
+// 公開GitHubへ実APIキーをコミットしないでください。
+const DEFAULT_API_KEY = "xxx-your-orcarouter-api-key-xxx";
+
 const REQUEST_TIMEOUT_MS = 60000;
 
 const apiKeyInput = document.getElementById("apiKey");
@@ -11,6 +17,8 @@ const sendButton = document.getElementById("sendButton");
 const clearTraceButton = document.getElementById("clearTraceButton");
 const statusText = document.getElementById("statusText");
 const traceItemTemplate = document.getElementById("traceItemTemplate");
+
+apiKeyInput.value = DEFAULT_API_KEY;
 
 function setStatus(message, isError = false) {
   statusText.textContent = message;
