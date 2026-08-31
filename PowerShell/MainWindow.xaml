@@ -58,7 +58,7 @@
                     FontSize="34"
                     FontWeight="Bold"/>
                 <TextBlock
-                    Text="質問・回答・HTTP電文を1画面で追跡できる学習者向けサンプル"
+                    Text="Chat / Streaming / Tool Calling とHTTP電文を1画面で追跡できる学習者向けサンプル"
                     Margin="0,6,0,0"
                     Foreground="#64748B"
                     FontSize="14"/>
@@ -88,6 +88,8 @@
                     <ColumnDefinition Width="2*"/>
                     <ColumnDefinition Width="16"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0">
@@ -98,6 +100,15 @@
                 <StackPanel Grid.Column="2">
                     <TextBlock Text="Model" Margin="0,0,0,6" Foreground="#64748B" FontWeight="SemiBold"/>
                     <TextBox x:Name="ModelBox" Height="42" Text="orcarouter/free"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="4">
+                    <TextBlock Text="Mode" Margin="0,0,0,6" Foreground="#64748B" FontWeight="SemiBold"/>
+                    <ComboBox x:Name="ModeBox" Height="42" SelectedIndex="0">
+                        <ComboBoxItem Content="Chat"/>
+                        <ComboBoxItem Content="Streaming"/>
+                        <ComboBoxItem Content="Tool Calling"/>
+                    </ComboBox>
                 </StackPanel>
             </Grid>
         </Border>
