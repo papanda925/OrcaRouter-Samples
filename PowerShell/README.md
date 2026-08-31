@@ -42,6 +42,8 @@ xxx-your-orcarouter-api-key-xxx
 
 画面上で実APIキーへ差し替えてください。既定モデルは `orcarouter/free` です。
 
+ローカル検証用に `OrcaRouterChat.ps1` へ一時的に埋め込む場所も明示しています。詳しくは [APIキーの設定方法](../docs/api-key-setup.md) を参照してください。
+
 ## Common processing steps
 
 Web版・VBA版と同じ6ステップにそろえています。
