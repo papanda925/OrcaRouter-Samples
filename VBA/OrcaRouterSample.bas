@@ -247,7 +247,7 @@ Public Sub SendOrcaRouterChat()
              "Method: POST" & vbCrLf & _
              "Endpoint: " & API_ENDPOINT & vbCrLf & _
              "Authorization: Bearer " & MaskApiKey(apiKey) & vbCrLf & _
-             "Content-Type: application/json" & vbCrLf & _
+             "Content-Type: application/json; charset=utf-8" & vbCrLf & _
              "Body:" & vbCrLf & requestBody
 
     'STEP 3: Send HTTP POST.
@@ -263,8 +263,8 @@ Public Sub SendOrcaRouterChat()
         .Open "POST", API_ENDPOINT, False
         .SetTimeouts 10000, 10000, 30000, 60000
         .SetRequestHeader "Authorization", "Bearer " & apiKey
-        .SetRequestHeader "Content-Type", "application/json"
-        .Send requestBody
+        .SetRequestHeader "Content-Type", "application/json; charset=utf-8"
+        .Send StringToUtf8Bytes(requestBody)
 
         httpStatus = .Status
         responseHeaders = .GetAllResponseHeaders
@@ -573,6 +573,35 @@ Private Function JsonUnescape(ByVal encodedText As String) As String
     Loop
 
     JsonUnescape = result
+
+End Function
+
+
+Private Function StringToUtf8Bytes(ByVal value As String) As Variant
+
+    Dim stream As Object
+
+    'ADODB.Streamをlate bindingで使い、VBA文字列をUTF-8のbyte配列へ変換します。
+    '日本語などの非ASCII文字をJSONで安全に送るための処理です。
+    Set stream = CreateObject("ADODB.Stream")
+
+    With stream
+        .Type = 2
+        .Charset = "utf-8"
+        .Open
+        .WriteText value
+
+        .Position = 0
+        .Type = 1
+
+        'UTF-8 BOM (EF BB BF) はHTTP bodyには不要なので3byte読み飛ばします。
+        .Position = 3
+
+        StringToUtf8Bytes = .Read
+        .Close
+    End With
+
+    Set stream = Nothing
 
 End Function
 
