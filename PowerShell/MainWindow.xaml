@@ -1,0 +1,242 @@
+<Window
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="OrcaRouter PowerShell Chat Sample"
+    Width="1100"
+    Height="820"
+    MinWidth="900"
+    MinHeight="700"
+    WindowStartupLocation="CenterScreen"
+    Background="#F4F7FB"
+    FontFamily="Segoe UI">
+    <Window.Resources>
+        <Style TargetType="TextBox">
+            <Setter Property="BorderBrush" Value="#D9E1EC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10"/>
+            <Setter Property="Background" Value="#FBFDFF"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="PasswordBox">
+            <Setter Property="BorderBrush" Value="#D9E1EC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10"/>
+            <Setter Property="Background" Value="#FBFDFF"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="16,9"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="2*"/>
+            <RowDefinition Height="2*"/>
+            <RowDefinition Height="3*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock
+                    Text="ORCAROUTER API LEARNING SAMPLE"
+                    Foreground="#0F766E"
+                    FontSize="12"
+                    FontWeight="Bold"/>
+                <TextBlock
+                    Text="PowerShell / XAML Chat"
+                    Margin="0,4,0,0"
+                    Foreground="#172033"
+                    FontSize="34"
+                    FontWeight="Bold"/>
+                <TextBlock
+                    Text="質問・回答・HTTP電文を1画面で追跡できる学習者向けサンプル"
+                    Margin="0,6,0,0"
+                    Foreground="#64748B"
+                    FontSize="14"/>
+            </StackPanel>
+            <Border
+                Grid.Column="1"
+                Padding="12,8"
+                VerticalAlignment="Center"
+                Background="#FFF8DF"
+                BorderBrush="#F3D27A"
+                BorderThickness="1"
+                CornerRadius="8">
+                <TextBlock Text="APIキーはトレースに平文出力しません" Foreground="#7C5C00"/>
+            </Border>
+        </Grid>
+
+        <Border
+            Grid.Row="1"
+            Margin="0,0,0,14"
+            Padding="16"
+            Background="White"
+            BorderBrush="#D9E1EC"
+            BorderThickness="1"
+            CornerRadius="12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="API key" Margin="0,0,0,6" Foreground="#64748B" FontWeight="SemiBold"/>
+                    <PasswordBox x:Name="ApiKeyBox" Height="42"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2">
+                    <TextBlock Text="Model" Margin="0,0,0,6" Foreground="#64748B" FontWeight="SemiBold"/>
+                    <TextBox x:Name="ModelBox" Height="42" Text="orcarouter/free"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border
+            Grid.Row="2"
+            Margin="0,0,0,14"
+            Padding="16"
+            Background="White"
+            BorderBrush="#D9E1EC"
+            BorderThickness="1"
+            CornerRadius="12">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0" Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="INPUT" Foreground="#0F766E" FontSize="11" FontWeight="Bold"/>
+                        <TextBlock Text="質問" FontSize="18" FontWeight="Bold"/>
+                    </StackPanel>
+                    <Button
+                        x:Name="SendButton"
+                        Grid.Column="1"
+                        Content="送信"
+                        MinWidth="110"
+                        Background="#0F172A"
+                        Foreground="White"
+                        BorderBrush="#0F172A"/>
+                </Grid>
+                <TextBox
+                    x:Name="QuestionBox"
+                    Grid.Row="1"
+                    AcceptsReturn="True"
+                    TextWrapping="Wrap"
+                    VerticalScrollBarVisibility="Auto"
+                    VerticalContentAlignment="Top"
+                    Text="こんにちは。OrcaRouterについて一言で説明してください。"/>
+            </Grid>
+        </Border>
+
+        <Border
+            Grid.Row="3"
+            Margin="0,0,0,14"
+            Padding="16"
+            Background="White"
+            BorderBrush="#D9E1EC"
+            BorderThickness="1"
+            CornerRadius="12">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <StackPanel Margin="0,0,0,10">
+                    <TextBlock Text="OUTPUT" Foreground="#0F766E" FontSize="11" FontWeight="Bold"/>
+                    <TextBlock Text="回答" FontSize="18" FontWeight="Bold"/>
+                </StackPanel>
+                <TextBox
+                    x:Name="AnswerBox"
+                    Grid.Row="1"
+                    IsReadOnly="True"
+                    AcceptsReturn="True"
+                    TextWrapping="Wrap"
+                    VerticalScrollBarVisibility="Auto"
+                    VerticalContentAlignment="Top"
+                    Text="ここに回答が表示されます。"/>
+            </Grid>
+        </Border>
+
+        <Border
+            Grid.Row="4"
+            Margin="0,0,0,14"
+            Padding="16"
+            Background="White"
+            BorderBrush="#D9E1EC"
+            BorderThickness="1"
+            CornerRadius="12">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0" Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="TRACE" Foreground="#0F766E" FontSize="11" FontWeight="Bold"/>
+                        <TextBlock Text="処理ステップ / HTTPトレース" FontSize="18" FontWeight="Bold"/>
+                    </StackPanel>
+                    <Button
+                        x:Name="ClearTraceButton"
+                        Grid.Column="1"
+                        Content="クリア"
+                        MinWidth="90"
+                        Background="White"
+                        Foreground="#172033"
+                        BorderBrush="#D9E1EC"/>
+                </Grid>
+
+                <TextBox
+                    x:Name="TraceBox"
+                    Grid.Row="1"
+                    IsReadOnly="True"
+                    AcceptsReturn="True"
+                    TextWrapping="NoWrap"
+                    HorizontalScrollBarVisibility="Auto"
+                    VerticalScrollBarVisibility="Auto"
+                    VerticalContentAlignment="Top"
+                    FontFamily="Consolas"
+                    FontSize="12"
+                    Foreground="#D9E7FF"
+                    Background="#0F172A"
+                    BorderBrush="#0F172A"/>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="5">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                x:Name="StatusText"
+                Text="Ready"
+                Foreground="#64748B"
+                VerticalAlignment="Center"/>
+            <TextBlock
+                Grid.Column="1"
+                Text="Ctrl+Enter でも送信できます"
+                Foreground="#94A3B8"
+                VerticalAlignment="Center"/>
+        </Grid>
+    </Grid>
+</Window>
