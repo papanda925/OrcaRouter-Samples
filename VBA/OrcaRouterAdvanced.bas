@@ -210,7 +210,7 @@ Public Sub SendOrcaRouterStreaming()
     If httpStatus <> 0 Then
 
         If httpStatus < 200 Or httpStatus >= 300 Then
-            RaiseHttpError httpStatus, responseHeaders, nonSseOutput
+            RaiseOrcaRouterHttpError httpStatus, responseHeaders, nonSseOutput
         End If
 
     End If
@@ -356,7 +356,7 @@ Public Sub SendOrcaRouterToolCalling()
              "Raw response:" & vbCrLf & firstResponse
 
     If firstStatus < 200 Or firstStatus >= 300 Then
-        RaiseHttpError firstStatus, firstHeaders, firstResponse
+        RaiseOrcaRouterHttpError firstStatus, firstHeaders, firstResponse
     End If
 
     'STEP 5A: Parse tool call.
@@ -430,7 +430,7 @@ Public Sub SendOrcaRouterToolCalling()
              "Raw response:" & vbCrLf & secondResponse
 
     If secondStatus < 200 Or secondStatus >= 300 Then
-        RaiseHttpError secondStatus, secondHeaders, secondResponse
+        RaiseOrcaRouterHttpError secondStatus, secondHeaders, secondResponse
     End If
 
     'STEP 5: Parse final assistant answer.
@@ -629,7 +629,7 @@ Private Sub SendJsonRequest( _
 
 End Sub
 
-Private Sub RaiseHttpError( _
+Public Sub RaiseOrcaRouterHttpError( _
     ByVal httpStatus As Long, _
     ByVal responseHeaders As String, _
     ByVal responseText As String)
@@ -647,7 +647,7 @@ Private Sub RaiseHttpError( _
     retryAfter = ExtractHeaderValue(responseHeaders, "Retry-After")
     guidance = BuildHttpGuidance(httpStatus, errorCode, retryAfter)
 
-    Err.Raise vbObjectError + 2300 + httpStatus, "RaiseHttpError", _
+    Err.Raise vbObjectError + 2300 + httpStatus, "RaiseOrcaRouterHttpError", _
               "HTTP " & httpStatus & vbCrLf & _
               "error.type: " & IIf(Len(errorType) = 0, "(empty)", errorType) & vbCrLf & _
               "error.code: " & IIf(Len(errorCode) = 0, "(empty)", errorCode) & vbCrLf & _
