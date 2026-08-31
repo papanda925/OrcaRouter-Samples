@@ -1,6 +1,6 @@
 # OrcaRouter PowerShell Sample
 
-PowerShell + WPF/XAML で OrcaRouter の Chat Completions API を呼び出す、学習者向けサンプルです。
+PowerShell + WPF/XAML で OrcaRouter の Chat Completions API を呼び出し、**Chat / Streaming / Tool Calling** を切り替えて比較できる学習者向けサンプルです。
 
 ## Architecture
 
@@ -8,6 +8,14 @@ PowerShell + WPF/XAML で OrcaRouter の Chat Completions API を呼び出す、
 - `OrcaRouterChat.ps1` - API呼び出し、トレース、エラー処理
 
 画面と処理を分離して、XAMLを読める人・PowerShellを読める人のどちらにも追いやすい構成にしています。
+
+## Modes
+
+- `Chat` - 通常のChat Completions
+- `Streaming` - `HttpClient` + `ResponseHeadersRead` でSSEを逐次処理
+- `Tool Calling` - `calculate_sum` のTool Callをローカル実行して最終回答まで取得
+
+Model欄は自由入力なので、無料ルーターと有料モデルで同じ実装を比較できます。
 
 ## 画面
 
@@ -83,3 +91,12 @@ POST https://api.orcarouter.ai/v1/chat/completions
 Authorization: Bearer <API_KEY>
 Content-Type: application/json
 ```
+
+
+## Advanced verification
+
+Streamingでは `data:` SSE行を順に処理し、`choices[0].delta.content` を回答欄へ逐次反映します。Tool Callingでは `tools` / `tool_choice`、モデルの `tool_calls`、ローカル実行結果、2回目のAPI RequestをすべてTraceできます。
+
+HTTPエラーは `error.code`、`error.type`、`Retry-After` 等を可能な範囲で診断します。
+
+詳細: [Advanced API tests](../docs/advanced-features.md)
