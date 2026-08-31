@@ -312,9 +312,7 @@ Public Sub SendOrcaRouterChat()
              "Raw response:" & vbCrLf & responseText
 
     If httpStatus < 200 Or httpStatus >= 300 Then
-        Err.Raise vbObjectError + 1004, "SendOrcaRouterChat", _
-                  "HTTPエラーが返されました。Status=" & httpStatus & _
-                  "。TraceのRaw responseを確認してください。"
+        RaiseOrcaRouterHttpError httpStatus, responseHeaders, responseText
     End If
 
     'STEP 5: Parse assistant message.
