@@ -43,6 +43,8 @@ xxx-your-orcarouter-api-key-xxx
 
 既定モデルは `orcarouter/free` です。
 
+B3セルへの入力だけでなく、ローカル検証用に `OrcaRouterSample.bas` の定数へ一時的に埋め込む方法も用意しています。詳しくは [APIキーの設定方法](../docs/api-key-setup.md) を参照してください。
+
 ## Common processing steps
 
 Web版・PowerShell版と同じ6ステップにそろえています。
