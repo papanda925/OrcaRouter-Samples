@@ -455,9 +455,9 @@ Private Function ExtractAssistantContent(ByVal responseJson As String) As String
     'For production code, use a full JSON parser.
     pattern = _
         Chr$(34) & "content" & Chr$(34) & _
-        "s*:s*" & _
+        Chr$(92) & "s*:" & Chr$(92) & "s*" & _
         Chr$(34) & _
-        "((\.|[^" & Chr$(34) & "\])*)" & _
+        "((" & Chr$(92) & Chr$(92) & ".|[^" & Chr$(34) & Chr$(92) & Chr$(92) & "])*)" & _
         Chr$(34)
 
     With regularExpression
