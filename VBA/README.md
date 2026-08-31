@@ -1,13 +1,96 @@
 # OrcaRouter VBA Sample
 
-This directory is for an Excel VBA sample that uses the OrcaRouter API.
+Excel VBA から OrcaRouter の Chat Completions API を呼び出す、学習者向けサンプルです。
 
-## Status
+## Architecture
 
-The sample program is not implemented yet.
+このサンプルは **ExcelシートをそのままUIとして使います**。
 
-## Plan
+外部UserFormは使わず、セルと図形ボタンだけで次を表現します。
 
-This sample will show how to connect to the OrcaRouter API from Excel VBA.
+| Area | Excel |
+|---|---|
+| API key | B3 |
+| Model | B4 |
+| Question | B6:H9 |
+| Answer | B11:H15 |
+| Trace | A18:E... |
+| Send | 図形ボタン |
+| Clear trace | 図形ボタン |
 
-In the future, this directory may also include low-level communication examples using the Windows API or Winsock API.
+`OrcaRouterSample.bas` を標準モジュールとしてインポートし、`SetupOrcaRouterSample` を1回実行すると画面を自動生成します。
+
+## Files
+
+- `OrcaRouterSample.bas` - シートUI作成、API呼び出し、レスポンス解析、Trace、エラー処理
+
+外部JSONライブラリを必須にしないため、この学習版では Chat Completions の `content` 文字列を取り出す軽量な処理を含めています。本番コードではフル機能のJSONパーサー利用を推奨します。
+
+## Quick start
+
+1. 新しいExcelブックを `.xlsm` 形式で保存
+2. `Alt + F11` でVBEを開く
+3. `ファイル > ファイルのインポート` から `OrcaRouterSample.bas` を読み込む
+4. `SetupOrcaRouterSample` を実行
+5. 作成された `OrcaRouter Chat` シートの B3 にAPIキーを入力
+6. 「送信」ボタンを押す
+
+初期APIキーはダミーです。
+
+```text
+xxx-your-orcarouter-api-key-xxx
+```
+
+既定モデルは `orcarouter/free` です。
+
+## Common processing steps
+
+Web版・PowerShell版と同じ6ステップにそろえています。
+
+1. Validate inputs
+2. Build request
+3. Send HTTP POST
+4. Receive response
+5. Parse assistant message
+6. Update UI and trace
+
+VBAコード内にも `STEP 1` ～ `STEP 6` の同じコメントを配置しています。
+
+詳細は [Common processing flow](../docs/processing-flow.md) を参照してください。
+
+## HTTP implementation
+
+HTTP通信には、参照設定を追加せずに使える late binding の `WinHttp.WinHttpRequest.5.1` を利用します。
+
+```text
+POST https://api.orcarouter.ai/v1/chat/completions
+Authorization: Bearer <API_KEY>
+Content-Type: application/json
+```
+
+## Trace / debug
+
+シート下部に次を時系列で記録します。
+
+- Time
+- Step
+- Direction
+- Detail
+- masked API key
+- endpoint / model
+- request JSON
+- HTTP status
+- elapsed time
+- response headers
+- raw response body
+- VBA error number / source / description
+
+実APIキーそのものはTraceへ出力しません。
+
+Excelセルの最大文字数と可読性を考慮し、非常に長いTraceデータは一定長で切り詰めます。
+
+## Notes
+
+- Windows版Excelを想定しています。
+- API呼び出しは同期処理です。学習しやすさを優先し、非同期化はしていません。
+- 本番用途ではAPIキーをワークシートへ平文保存しない設計に変更してください。
