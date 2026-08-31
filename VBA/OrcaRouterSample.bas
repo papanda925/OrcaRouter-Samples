@@ -19,7 +19,13 @@ Option Explicit
 '===============================================================================
 
 Private Const API_ENDPOINT As String = "https://api.orcarouter.ai/v1/chat/completions"
-Private Const DUMMY_API_KEY As String = "xxx-your-orcarouter-api-key-xxx"
+Private Const API_KEY_PLACEHOLDER As String = "xxx-your-orcarouter-api-key-xxx"
+
+'LOCAL TEST ONLY:
+'実APIキーをソースへ一時的に埋め込んで試す場合は、次の値だけを書き換えます。
+'公開GitHubへ実APIキーをコミットしないでください。
+Private Const DEFAULT_API_KEY As String = "xxx-your-orcarouter-api-key-xxx"
+
 Private Const DEFAULT_MODEL As String = "orcarouter/free"
 Private Const SAMPLE_SHEET_NAME As String = "OrcaRouter Chat"
 Private Const TRACE_HEADER_ROW As Long = 18
@@ -58,7 +64,7 @@ Public Sub SetupOrcaRouterSample()
     ws.Range("A3").Value = "API Key"
     With ws.Range("B3:H3")
         .Merge
-        .Value = DUMMY_API_KEY
+        .Value = DEFAULT_API_KEY
         .Interior.Color = RGB(251, 253, 255)
         .Borders.Color = RGB(217, 225, 236)
     End With
@@ -225,7 +231,7 @@ Public Sub SendOrcaRouterChat()
              "Model: " & model & vbCrLf & _
              "Question length: " & Len(question)
 
-    If Len(apiKey) = 0 Or apiKey = DUMMY_API_KEY Or Left$(apiKey, 4) = "xxx-" Then
+    If Len(apiKey) = 0 Or apiKey = API_KEY_PLACEHOLDER Or Left$(apiKey, 4) = "xxx-" Then
         Err.Raise vbObjectError + 1001, "SendOrcaRouterChat", _
                   "APIキーがダミー値のままです。B3セルへOrcaRouterのAPIキーを入力してください。"
     End If
