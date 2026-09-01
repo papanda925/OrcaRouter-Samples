@@ -53,6 +53,15 @@ jobs:
             throw 'ModeBox was not found in MainWindow.xaml'
           }
 
+      - name: Execute script parser through Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          & powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File '.\PowerShell\OrcaRouterChat.ps1' -SyntaxCheck
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows PowerShell 5.1 failed to decode/parse OrcaRouterChat.ps1."
+          }
+
   safety:
     name: Source safety checks
     runs-on: ubuntu-latest
