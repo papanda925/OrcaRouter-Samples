@@ -38,19 +38,22 @@ Public Sub SetupOrcaRouterSample()
     Dim sendButton As Shape
     Dim clearButton As Shape
     Dim listSeparator As String
+    Dim workbookNameForOnAction As String
     Dim previousScreenUpdating As Boolean
 
     On Error GoTo ErrorHandler
 
+    previousScreenUpdating = Application.ScreenUpdating
+
     Set ws = GetOrCreateSampleSheet()
 
-    previousScreenUpdating = Application.ScreenUpdating
     Application.ScreenUpdating = False
 
     ws.Cells.UnMerge
     ws.Cells.Clear
 
     listSeparator = Application.International(xlListSeparator)
+    workbookNameForOnAction = Replace$(ThisWorkbook.Name, "'", "''")
 
     Do While ws.Shapes.Count > 0
         ws.Shapes(1).Delete
@@ -168,7 +171,7 @@ Public Sub SetupOrcaRouterSample()
         .Fill.ForeColor.RGB = RGB(15, 23, 42)
         .Line.ForeColor.RGB = RGB(15, 23, 42)
         .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
-        .OnAction = "'" & ThisWorkbook.Name & "'!SendOrcaRouterChat"
+        .OnAction = "'" & workbookNameForOnAction & "'!SendOrcaRouterChat"
     End With
 
     'Clear trace button
@@ -185,7 +188,7 @@ Public Sub SetupOrcaRouterSample()
         .Fill.ForeColor.RGB = RGB(255, 255, 255)
         .Line.ForeColor.RGB = RGB(217, 225, 236)
         .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(23, 32, 51)
-        .OnAction = "'" & ThisWorkbook.Name & "'!ClearOrcaRouterTrace"
+        .OnAction = "'" & workbookNameForOnAction & "'!ClearOrcaRouterTrace"
     End With
 
     AddTrace ws, "READY", "LOCAL", "Created sample UI", _
