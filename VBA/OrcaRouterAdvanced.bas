@@ -19,11 +19,15 @@ Option Explicit
 ' STEP 5 - Parse / process result
 ' STEP 6 - Update UI and trace
 '
-' Streaming note:
-' WinHttp.WinHttpRequest is intentionally kept for ordinary requests.
-' For a dependency-light VBA streaming demo, Windows curl.exe is started and
-' its SSE stdout is read line-by-line. The API key is passed through curl's
-' stdin config, not on the process command line.
+' Transport note:
+' Normal Chat and Tool Calling use asynchronous MSXML2.XMLHTTP.6.0 because this
+' is an interactive desktop Excel sample and XMLHTTP follows current-user
+' networking/proxy settings more closely than the machine-level WinHTTP stack.
+'
+' Streaming still uses Windows curl.exe in this version because XMLHTTP does
+' not provide a simple late-bound incremental SSE callback. curl stdout is read
+' line-by-line, and the API key is passed through stdin config rather than on
+' the process command line.
 '===============================================================================
 
 Private Const API_ENDPOINT_ADV As String = "https://api.orcarouter.ai/v1/chat/completions"
