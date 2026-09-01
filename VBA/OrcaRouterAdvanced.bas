@@ -490,6 +490,94 @@ ErrorHandler:
 
 End Sub
 
+Public Sub RunOrcaRouterAdvancedSelfTests()
+
+    Dim streamingJson As String
+    Dim toolJson As String
+    Dim toolResultJson As String
+    Dim extractedText As String
+    Dim extractedNumber As Double
+    Dim statusCode As Long
+    Dim headerValue As String
+
+    streamingJson = BuildStreamingRequestJson("orcarouter/free", "hello")
+
+    If InStr(1, streamingJson, """stream"":true", vbBinaryCompare) = 0 Or _
+       InStr(1, streamingJson, """include_usage"":true", vbBinaryCompare) = 0 Then
+
+        Err.Raise vbObjectError + 3101, "RunOrcaRouterAdvancedSelfTests", _
+                  "BuildStreamingRequestJson produced an unexpected result."
+    End If
+
+    toolJson = BuildToolRequestJson("orcarouter/free", "add 1 and 2")
+
+    If InStr(1, toolJson, """name"":""calculate_sum""", vbBinaryCompare) = 0 Or _
+       InStr(1, toolJson, """tool_choice""", vbBinaryCompare) = 0 Then
+
+        Err.Raise vbObjectError + 3102, "RunOrcaRouterAdvancedSelfTests", _
+                  "BuildToolRequestJson produced an unexpected result."
+    End If
+
+    toolResultJson = BuildToolResultRequestJson( _
+                         "orcarouter/free", _
+                         "add 1 and 2", _
+                         "call_123", _
+                         "calculate_sum", _
+                         "{""a"":1,""b"":2}", _
+                         "{""a"":1,""b"":2,""sum"":3}")
+
+    If InStr(1, toolResultJson, """tool_call_id"":""call_123""", vbBinaryCompare) = 0 Or _
+       InStr(1, toolResultJson, """role"":""tool""", vbBinaryCompare) = 0 Then
+
+        Err.Raise vbObjectError + 3103, "RunOrcaRouterAdvancedSelfTests", _
+                  "BuildToolResultRequestJson produced an unexpected result."
+    End If
+
+    If Not TryExtractJsonStringProperty( _
+               "{""message"":""hello""}", _
+               "message", _
+               extractedText) Then
+
+        Err.Raise vbObjectError + 3104, "RunOrcaRouterAdvancedSelfTests", _
+                  "TryExtractJsonStringProperty did not find a known property."
+    End If
+
+    If extractedText <> "hello" Then
+        Err.Raise vbObjectError + 3105, "RunOrcaRouterAdvancedSelfTests", _
+                  "TryExtractJsonStringProperty decoded an unexpected value."
+    End If
+
+    extractedNumber = ExtractJsonNumber("{""a"":123.5}", "a")
+
+    If Abs(extractedNumber - 123.5) > 0.000001 Then
+        Err.Raise vbObjectError + 3106, "RunOrcaRouterAdvancedSelfTests", _
+                  "ExtractJsonNumber produced an unexpected value."
+    End If
+
+    statusCode = ParseHttpStatusLine("HTTP/2 200")
+
+    If statusCode <> 200 Then
+        Err.Raise vbObjectError + 3107, "RunOrcaRouterAdvancedSelfTests", _
+                  "ParseHttpStatusLine produced an unexpected value."
+    End If
+
+    headerValue = ExtractHeaderValue( _
+                      "Content-Type: application/json" & vbCrLf & _
+                      "Retry-After: 10" & vbCrLf, _
+                      "Retry-After")
+
+    If headerValue <> "10" Then
+        Err.Raise vbObjectError + 3108, "RunOrcaRouterAdvancedSelfTests", _
+                  "ExtractHeaderValue produced an unexpected value."
+    End If
+
+    If JsonNumber(123.5) <> "123.5" Then
+        Err.Raise vbObjectError + 3109, "RunOrcaRouterAdvancedSelfTests", _
+                  "JsonNumber did not produce locale-independent JSON."
+    End If
+
+End Sub
+
 Private Sub ValidateAdvancedInputs( _
     ByVal apiKey As String, _
     ByVal model As String, _
