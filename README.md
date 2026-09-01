@@ -64,7 +64,7 @@ OrcaRouter API を **Web / PowerShell / Excel VBA** から呼び出す、学習�
 - **10-turn limit** - user + assistant を1往復として、直近10往復のみ保持
 - **New chat** - APIへリセット電文は送らず、アプリ側の履歴だけをクリア
 - **Prompt examples** - 要約、初心者向け説明、コードレビュー、JSON、翻訳
-- **Developer Information** - HTTP Status、処理時間、Token、Cost、Request JSON、Response JSON
+- **Developer Information** - HTTP Status、Elapsed、Model、Prompt Tokens、Completion Tokens、Total Tokens、Cost、Request JSON、Response JSON
 
 Cost取得では OrcaRouter のChat Completions仕様にある `X-OrcaRouter-Include-Cost: true` を使用します。APIから `usage.cost_usd` が返らない場合は、推測せず `(not returned)` と表示します。
 
