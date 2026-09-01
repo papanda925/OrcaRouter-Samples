@@ -183,7 +183,7 @@
         </Border>
 
         <GridSplitter
-            Grid.Row="5"
+            Grid.Row="3"
             Height="6"
             Margin="24,0"
             HorizontalAlignment="Stretch"
@@ -194,7 +194,7 @@
             ShowsPreview="True"/>
 
         <Border
-            Grid.Row="6"
+            Grid.Row="4"
             Margin="0,0,0,14"
             Padding="16"
             Background="White"
@@ -224,7 +224,7 @@
         </Border>
 
         <GridSplitter
-            Grid.Row="3"
+            Grid.Row="5"
             Height="6"
             Margin="24,0"
             HorizontalAlignment="Stretch"
@@ -235,7 +235,7 @@
             ShowsPreview="True"/>
 
         <Border
-            Grid.Row="4"
+            Grid.Row="6"
             Margin="0,0,0,14"
             Padding="16"
             Background="White"
