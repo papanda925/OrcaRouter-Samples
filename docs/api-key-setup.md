@@ -314,7 +314,7 @@ README、Issue、Pull Request、Trace例、スクリーンショットへ次の�
 NG:  C:\Users\actual-user-name\Documents\OrcaRouter-Samples
 OK:  <repository-root>
 
-NG:  /home/actual-user-name/OrcaRouter-Samples
+NG:  /home/<USER>/OrcaRouter-Samples
 OK:  <repository-root>
 
 NG:  sk-orca-<real-secret-value>
