@@ -10,8 +10,12 @@ $sourceFiles = @(
     "OrcaRouterAdvanced.bas"
 )
 
-$utf8 = [System.Text.Encoding]::UTF8
-$shiftJis = [System.Text.Encoding]::GetEncoding(932)
+$utf8 = [System.Text.UTF8Encoding]::new($false, $true)
+$shiftJis = [System.Text.Encoding]::GetEncoding(
+    932,
+    [System.Text.EncoderExceptionFallback]::new(),
+    [System.Text.DecoderExceptionFallback]::new()
+)
 
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 
@@ -23,8 +27,11 @@ foreach ($fileName in $sourceFiles) {
         throw "Source file not found: $sourcePath"
     }
 
-    $text = [System.IO.File]::ReadAllText($sourcePath, $utf8)
-    [System.IO.File]::WriteAllText($destinationPath, $text, $shiftJis)
+    $sourceBytes = [System.IO.File]::ReadAllBytes($sourcePath)
+    $text = $utf8.GetString($sourceBytes)
+    $destinationBytes = $shiftJis.GetBytes($text)
+
+    [System.IO.File]::WriteAllBytes($destinationPath, $destinationBytes)
 
     Write-Host ("Created VBE import file: {0}" -f $destinationPath)
 }
