@@ -324,7 +324,6 @@ function Set-DeveloperInformation {
     param($WorkerEvent)
 
     $usage = $WorkerEvent.Usage
-
     $promptTokens = '-'
     $completionTokens = '-'
     $totalTokens = '-'
@@ -341,7 +340,45 @@ function Set-DeveloperInformation {
             $totalTokens = [string]$usage.total_tokens
         }
         if ($null -ne $usage.PSObject.Properties['cost_usd']) {
-            $costText = '
+            $costText = [string][char]36 + ([double]$usage.cost_usd).ToString(
+                '0.000000',
+                [Globalization.CultureInfo]::InvariantCulture
+            )
+        }
+    }
+
+    $requestText = '{}'
+    if ($null -ne $WorkerEvent.Request) {
+        $requestText = ConvertTo-TraceText -Data $WorkerEvent.Request
+    }
+
+    $responseText = '{}'
+    if ($null -ne $WorkerEvent.Response) {
+        $responseText = ConvertTo-TraceText -Data $WorkerEvent.Response
+    }
+
+    $developerBox.Text = @(
+        'Developer Information'
+        ('=' * 72)
+        "HTTP Status      : $($WorkerEvent.HttpStatus)"
+        "Elapsed          : $($WorkerEvent.TotalElapsedMs) ms"
+        "Model            : $($WorkerEvent.ActualModel)"
+        "Prompt Tokens    : $promptTokens"
+        "Completion Tokens: $completionTokens"
+        "Total Tokens     : $totalTokens"
+        "Cost             : $costText"
+        "History          : $($script:conversationHistory.Count) / $($script:MaxHistoryTurns) turns"
+        ''
+        '--- Request JSON ---'
+        $requestText
+        ''
+        '--- Response JSON ---'
+        $responseText
+    ) -join [Environment]::NewLine
+}
+
+function Set-UiBusy {
+    param([bool]$Busy)
 
     $sendButton.IsEnabled = -not $Busy
     $newChatButton.IsEnabled = -not $Busy
