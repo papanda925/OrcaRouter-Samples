@@ -248,6 +248,7 @@ Public Sub SendOrcaRouterStreaming()
              "Total elapsed: " & Format$(ElapsedSeconds(startedAt), "0.000") & " sec"
 
 CleanExit:
+    Application.StatusBar = False
     Set exec = Nothing
     Set shell = Nothing
     Set ws = Nothing
@@ -456,6 +457,7 @@ Public Sub SendOrcaRouterToolCalling()
              "Total elapsed: " & Format$(ElapsedSeconds(startedAt), "0.000") & " sec"
 
 CleanExit:
+    Application.StatusBar = False
     Set httpRequest = Nothing
     Set ws = Nothing
     Exit Sub
