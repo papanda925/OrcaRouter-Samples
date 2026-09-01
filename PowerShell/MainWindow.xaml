@@ -5,7 +5,7 @@
     Width="1200"
     Height="900"
     MinWidth="900"
-    MinHeight="760"
+    MinHeight="720"
     WindowStartupLocation="CenterScreen"
     WindowState="Maximized"
     ResizeMode="CanResizeWithGrip"
@@ -31,17 +31,20 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
+        <Style TargetType="TabItem">
+            <Setter Property="Padding" Value="18,9"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="14"/>
+        </Style>
     </Window.Resources>
 
     <Grid Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="3*" MinHeight="170"/>
+            <RowDefinition Height="2*" MinHeight="170"/>
             <RowDefinition Height="8"/>
-            <RowDefinition Height="3*" MinHeight="160"/>
-            <RowDefinition Height="8"/>
-            <RowDefinition Height="4*" MinHeight="190"/>
+            <RowDefinition Height="5*" MinHeight="320"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
@@ -206,85 +209,82 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
+
                 <StackPanel Margin="0,0,0,10">
-                    <TextBlock Text="OUTPUT" Foreground="#0F766E" FontSize="11" FontWeight="Bold"/>
-                    <TextBlock Text="回答" FontSize="18" FontWeight="Bold"/>
+                    <TextBlock Text="RESULT" Foreground="#0F766E" FontSize="11" FontWeight="Bold"/>
+                    <TextBlock Text="回答 / HTTPトレース" FontSize="18" FontWeight="Bold"/>
                 </StackPanel>
-                <TextBox
-                    x:Name="AnswerBox"
+
+                <TabControl
+                    x:Name="ResultTabs"
                     Grid.Row="1"
-                    IsReadOnly="True"
-                    AcceptsReturn="True"
-                    TextWrapping="Wrap"
-                    VerticalScrollBarVisibility="Auto"
-                    MinHeight="80"
-                    VerticalContentAlignment="Top"
-                    Text="{Binding Answer, Mode=OneWay}"/>
+                    SelectedIndex="0"
+                    Background="White"
+                    BorderBrush="#D9E1EC">
+
+                    <TabItem Header="回答">
+                        <Grid Margin="10">
+                            <TextBox
+                                x:Name="AnswerBox"
+                                IsReadOnly="True"
+                                AcceptsReturn="True"
+                                TextWrapping="Wrap"
+                                VerticalScrollBarVisibility="Auto"
+                                HorizontalScrollBarVisibility="Disabled"
+                                MinHeight="180"
+                                VerticalContentAlignment="Top"
+                                Text="{Binding Answer, Mode=OneWay}"/>
+                        </Grid>
+                    </TabItem>
+
+                    <TabItem Header="トレース">
+                        <Grid Margin="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    Text="処理ステップ / HTTP電文"
+                                    Foreground="#64748B"
+                                    VerticalAlignment="Center"/>
+                                <Button
+                                    x:Name="ClearTraceButton"
+                                    Grid.Column="1"
+                                    Content="クリア"
+                                    MinWidth="90"
+                                    Background="White"
+                                    Foreground="#172033"
+                                    BorderBrush="#D9E1EC"/>
+                            </Grid>
+
+                            <TextBox
+                                x:Name="TraceBox"
+                                Grid.Row="1"
+                                IsReadOnly="True"
+                                AcceptsReturn="True"
+                                TextWrapping="NoWrap"
+                                HorizontalScrollBarVisibility="Auto"
+                                VerticalScrollBarVisibility="Auto"
+                                MinHeight="180"
+                                VerticalContentAlignment="Top"
+                                FontFamily="Consolas"
+                                FontSize="12"
+                                Foreground="#D9E7FF"
+                                Background="#0F172A"
+                                BorderBrush="#0F172A"/>
+                        </Grid>
+                    </TabItem>
+                </TabControl>
             </Grid>
         </Border>
 
-        <GridSplitter
-            Grid.Row="5"
-            Height="6"
-            Margin="24,0"
-            HorizontalAlignment="Stretch"
-            VerticalAlignment="Center"
-            Background="#D9E1EC"
-            ResizeDirection="Rows"
-            ResizeBehavior="PreviousAndNext"
-            ShowsPreview="True"/>
-
-        <Border
-            Grid.Row="6"
-            Margin="0,0,0,14"
-            Padding="16"
-            Background="White"
-            BorderBrush="#D9E1EC"
-            BorderThickness="1"
-            CornerRadius="12">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-                <Grid Grid.Row="0" Margin="0,0,0,10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel>
-                        <TextBlock Text="TRACE" Foreground="#0F766E" FontSize="11" FontWeight="Bold"/>
-                        <TextBlock Text="処理ステップ / HTTPトレース" FontSize="18" FontWeight="Bold"/>
-                    </StackPanel>
-                    <Button
-                        x:Name="ClearTraceButton"
-                        Grid.Column="1"
-                        Content="クリア"
-                        MinWidth="90"
-                        Background="White"
-                        Foreground="#172033"
-                        BorderBrush="#D9E1EC"/>
-                </Grid>
-
-                <TextBox
-                    x:Name="TraceBox"
-                    Grid.Row="1"
-                    IsReadOnly="True"
-                    AcceptsReturn="True"
-                    TextWrapping="NoWrap"
-                    HorizontalScrollBarVisibility="Auto"
-                    VerticalScrollBarVisibility="Auto"
-                    MinHeight="100"
-                    VerticalContentAlignment="Top"
-                    FontFamily="Consolas"
-                    FontSize="12"
-                    Foreground="#D9E7FF"
-                    Background="#0F172A"
-                    BorderBrush="#0F172A"/>
-            </Grid>
-        </Border>
-
-        <Grid Grid.Row="7">
+        <Grid Grid.Row="5">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
