@@ -25,6 +25,7 @@ Model欄は自由入力なので、`orcarouter/free` から利用可能な有料
 - `index.html` - 画面
 - `style.css` - モダンでシンプルなUI
 - `app.js` - API呼び出し、6ステップの処理、トレース、エラー処理
+- `start-server.ps1` - Python不要のWindows用ローカルHTTPサーバー
 
 ## Quick start
 
@@ -42,14 +43,31 @@ OrcaRouter Console からAPIキーのファイルをダウンロードした場�
 
 既定モデルは、学習用途で試しやすい `orcarouter/free` です。
 
-ローカルHTTPサーバーで開く例:
+ローカルHTTPサーバーで開く例です。
+
+### Windows / PowerShellだけで起動する場合（Python不要）
+
+```powershell
+cd Web
+powershell.exe -ExecutionPolicy Bypass -File .\start-server.ps1
+```
+
+または、すでにPowerShellを開いている場合:
+
+```powershell
+.\start-server.ps1
+```
+
+起動後、ブラウザで `http://localhost:8000/` を開きます。
+
+停止は `Ctrl + C` です。
+
+### Pythonがある場合
 
 ```bash
 cd Web
 python -m http.server 8000
 ```
-
-ブラウザで `http://localhost:8000/` を開きます。
 
 ## Important security note
 
