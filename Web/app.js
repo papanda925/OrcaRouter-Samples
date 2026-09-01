@@ -67,10 +67,10 @@ async function loadApiKeyFromFile(file) {
 
   clearTracePlaceholder();
   addTrace("KEY", "LOCAL", "APIキーをローカルファイルから読み込み", {
-    fileName: file.name,
+    source: "(local file selected)",
     fileSize: file.size,
     apiKey: maskApiKey(apiKey),
-    note: "ファイル本文や完全なAPIキーはTraceへ出力していません。"
+    note: "ファイル名・ファイル本文・完全なAPIキーはTraceへ出力していません。"
   });
 
   setStatus("API Key loaded from local file");
@@ -778,7 +778,7 @@ apiKeyFileInput.addEventListener("change", async () => {
 
     clearTracePlaceholder();
     addTrace("KEY", "ERROR", "APIキーファイルの読み込みに失敗", {
-      fileName: file?.name ?? "(not selected)",
+      source: file ? "(local file selected)" : "(not selected)",
       message
     });
 
