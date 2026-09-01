@@ -182,7 +182,7 @@ Public Sub SetupOrcaRouterSample()
     AddTrace ws, "READY", "LOCAL", "サンプル画面を作成", _
              "Endpoint: " & API_ENDPOINT & vbCrLf & _
              "Model: " & DEFAULT_MODEL & vbCrLf & _
-             "API Key: " & MaskApiKey(DUMMY_API_KEY) & vbCrLf & _
+             "API Key: " & MaskApiKey(DEFAULT_API_KEY) & vbCrLf & _
              "実行前にB3セルのAPIキーを差し替えてください。"
 
     ws.Activate
