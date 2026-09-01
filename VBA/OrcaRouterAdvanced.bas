@@ -20,51 +20,59 @@ Option Explicit
 ' STEP 6 - Update UI and trace
 '
 ' Transport note:
-' Normal Chat and Tool Calling use asynchronous MSXML2.XMLHTTP.6.0 because this
-' is an interactive desktop Excel sample and XMLHTTP follows current-user
-' networking/proxy settings more closely than the machine-level WinHTTP stack.
+' Chat, Streaming, and Tool Calling all use asynchronous MSXML2.XMLHTTP.6.0.
 '
-' Streaming still uses Windows curl.exe in this version because XMLHTTP does
-' not provide a simple late-bound incremental SSE callback. curl stdout is read
-' line-by-line, and the API key is passed through stdin config rather than on
-' the process command line.
+' Streaming reads XMLHTTP.responseText incrementally while readyState = 3
+' (LOADING). This keeps the sample inside Excel/VBA, avoids an external
+' curl.exe process, and lets MSXML decode the UTF-8 HTTP response into a VBA
+' Unicode String before text is written to worksheet cells.
 '===============================================================================
 
 Private Const API_ENDPOINT_ADV As String = "https://api.orcarouter.ai/v1/chat/completions"
 Private Const API_KEY_PLACEHOLDER_ADV As String = "xxx-your-orcarouter-api-key-xxx"
 Private Const SAMPLE_SHEET_NAME_ADV As String = "OrcaRouter Chat"
 Private Const MAX_STREAM_TRACE_EVENTS As Long = 50
-Private Const STREAM_CONNECT_TIMEOUT_SECONDS As Long = 15
 Private Const STREAM_MAX_TIME_SECONDS As Long = 90
+Private Const STREAM_WAIT_TRACE_INTERVAL_SECONDS As Long = 15
+Private Const STREAM_POLL_INTERVAL_MS As Long = 50
 Private Const TOOL_REQUEST_TIMEOUT_SECONDS As Long = 120
+
+#If VBA7 Then
+    Private Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+#Else
+    Private Declare Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+#End If
 
 Public Sub SendOrcaRouterStreaming()
 
     Dim ws As Worksheet
+    Dim httpRequest As Object
+
     Dim apiKey As String
     Dim model As String
     Dim question As String
     Dim requestBody As String
 
-    Dim curlPath As String
-    Dim command As String
-    Dim configText As String
-    Dim shell As Object
-    Dim exec As Object
-
+    Dim currentResponseText As String
+    Dim newResponseText As String
+    Dim pendingText As String
     Dim lineText As String
     Dim payload As String
     Dim latestJsonPayload As String
     Dim contentPart As String
     Dim answerText As String
-    Dim stderrText As String
     Dim responseHeaders As String
-    Dim nonSseOutput As String
-    Dim httpStatus As Long
-    Dim readingHeaders As Boolean
 
+    Dim processedChars As Long
+    Dim lineFeedPosition As Long
     Dim eventCount As Long
+    Dim httpStatus As Long
+    Dim readyStateValue As Long
+
     Dim startedAt As Double
+    Dim elapsedSecondsValue As Double
+    Dim nextWaitTraceAt As Double
+    Dim responseTextAvailable As Boolean
 
     Dim errorNumber As Long
     Dim errorSource As String
@@ -90,13 +98,6 @@ Public Sub SendOrcaRouterStreaming()
 
     ValidateAdvancedInputs apiKey, model, question
 
-    curlPath = FindCurlPath()
-
-    If Len(curlPath) = 0 Then
-        Err.Raise vbObjectError + 2101, "SendOrcaRouterStreaming", _
-                  "curl.exe was not found. This sample expects the curl.exe included with Windows 10/11."
-    End If
-
     'STEP 2: Build request.
     requestBody = BuildStreamingRequestJson(model, question)
 
@@ -104,175 +105,227 @@ Public Sub SendOrcaRouterStreaming()
              "Method: POST" & vbCrLf & _
              "Endpoint: " & API_ENDPOINT_ADV & vbCrLf & _
              "Authorization: Bearer " & MaskApiKey(apiKey) & vbCrLf & _
-             "Content-Type: application/json" & vbCrLf & _
+             "Content-Type: application/json; charset=utf-8" & vbCrLf & _
+             "Accept: text/event-stream" & vbCrLf & _
              "SSE: data: {...} / data: [DONE]" & vbCrLf & _
              "Body:" & vbCrLf & requestBody
 
-    'STEP 3: Send HTTP POST.
-    AddTrace ws, "STEP 3", "REQUEST", "Send Streaming POST with curl.exe", _
-             "curl.exe --config - --no-buffer --silent --show-error --include" & vbCrLf & _
-             "Connect timeout: " & STREAM_CONNECT_TIMEOUT_SECONDS & " sec" & vbCrLf & _
+    'STEP 3: Start the asynchronous Streaming request.
+    AddTrace ws, "STEP 3", "REQUEST", _
+             "Send Streaming POST with MSXML2.XMLHTTP.6.0", _
+             "Transport: VBA COM object only" & vbCrLf & _
+             "Asynchronous: True" & vbCrLf & _
+             "Polling interval: " & STREAM_POLL_INTERVAL_MS & " ms" & vbCrLf & _
              "Overall timeout: " & STREAM_MAX_TIME_SECONDS & " sec" & vbCrLf & _
-             "The API key is passed through curl stdin config, not as a command-line argument."
+             "No PowerShell, WScript.Shell, or curl.exe is used."
 
-    command = """" & curlPath & """ --config - --no-buffer --silent --show-error --include" & _
-              " --connect-timeout " & CStr(STREAM_CONNECT_TIMEOUT_SECONDS) & _
-              " --max-time " & CStr(STREAM_MAX_TIME_SECONDS)
+    Set httpRequest = CreateObject("MSXML2.XMLHTTP.6.0")
 
-    Set shell = CreateObject("WScript.Shell")
-    Set exec = shell.Exec(command)
-
-    configText = BuildCurlConfig(apiKey, requestBody)
-
-    exec.StdIn.Write configText
-    exec.StdIn.Close
+    With httpRequest
+        .Open "POST", API_ENDPOINT_ADV, True
+        .setRequestHeader "Authorization", "Bearer " & apiKey
+        .setRequestHeader "Content-Type", "application/json; charset=utf-8"
+        .setRequestHeader "Accept", "text/event-stream"
+        .Send StringToUtf8Bytes(requestBody)
+    End With
 
     startedAt = Timer
+    nextWaitTraceAt = STREAM_WAIT_TRACE_INTERVAL_SECONDS
 
-    'STEP 4: Receive response.
+    'STEP 4: Read responseText incrementally.
+    '
+    'XMLHTTP readyState:
+    '  1 = OPENED
+    '  2 = HEADERS_RECEIVED
+    '  3 = LOADING (partial responseText can be available)
+    '  4 = DONE
+    '
+    'responseText is a VBA Unicode String. Letting MSXML decode the HTTP body
+    'avoids the console-code-page mojibake that can occur when curl stdout is
+    'read through WScript.Shell.
     Do
 
-        If Not exec.StdOut.AtEndOfStream Then
+        readyStateValue = httpRequest.readyState
 
-            lineText = exec.StdOut.ReadLine
+        If readyStateValue >= 3 Then
 
-            If Left$(lineText, 5) = "HTTP/" Then
+            responseTextAvailable = TryReadXmlHttpResponseText( _
+                                        httpRequest, _
+                                        currentResponseText)
 
-                httpStatus = ParseHttpStatusLine(lineText)
-                responseHeaders = responseHeaders & lineText & vbCrLf
-                readingHeaders = True
+            If responseTextAvailable Then
 
-            ElseIf Len(lineText) = 0 Then
+                If Len(currentResponseText) > processedChars Then
 
-                readingHeaders = False
+                    newResponseText = Mid$( _
+                                        currentResponseText, _
+                                        processedChars + 1)
 
-            ElseIf Left$(lineText, 5) = "data:" Then
+                    processedChars = Len(currentResponseText)
+                    pendingText = pendingText & newResponseText
 
-                payload = Trim$(Mid$(lineText, 6))
+                    'SSE records are line based. Keep an incomplete final line
+                    'in pendingText until the next response fragment arrives.
+                    Do
 
-                If payload = "[DONE]" Then
+                        lineFeedPosition = InStr(1, pendingText, vbLf, vbBinaryCompare)
 
-                    AddTrace ws, "STEP 4", "STREAM", "SSE finished [DONE]", _
-                             "Events: " & eventCount
-
-                ElseIf Len(payload) > 0 Then
-
-                    latestJsonPayload = payload
-                    eventCount = eventCount + 1
-
-                    If eventCount <= MAX_STREAM_TRACE_EVENTS Then
-
-                        AddTrace ws, "STEP 4", "STREAM", _
-                                 "SSE data #" & eventCount, payload
-
-                    ElseIf eventCount = MAX_STREAM_TRACE_EVENTS + 1 Then
-
-                        AddTrace ws, "STEP 4", "STREAM", _
-                                 "Omit additional SSE trace entries", _
-                                 "For readability, only the first " & MAX_STREAM_TRACE_EVENTS & _
-                                 " SSE events are shown individually."
-
-                    End If
-
-                    If InStr(1, payload, """error""", vbTextCompare) > 0 Then
-                        RaiseStreamingError payload
-                    End If
-
-                    If TryExtractJsonStringProperty(payload, "content", contentPart) Then
-
-                        If Len(contentPart) > 0 Then
-                            answerText = answerText & contentPart
-                            ws.Range("B11").Value = answerText
-
-                            'Streaming can update the answer many times per
-                            'second. YieldToExcel is throttled, so the worksheet
-                            'can repaint progressively without calling DoEvents
-                            'for every single SSE chunk.
-                            YieldToExcel
+                        If lineFeedPosition = 0 Then
+                            Exit Do
                         End If
 
-                    End If
+                        lineText = Left$(pendingText, lineFeedPosition - 1)
+                        pendingText = Mid$(pendingText, lineFeedPosition + 1)
+
+                        If Right$(lineText, 1) = vbCr Then
+                            lineText = Left$(lineText, Len(lineText) - 1)
+                        End If
+
+                        ProcessStreamingSseLine _
+                            ws, _
+                            lineText, _
+                            answerText, _
+                            latestJsonPayload, _
+                            eventCount
+
+                    Loop
 
                 End If
 
-            ElseIf readingHeaders Then
-
-                responseHeaders = responseHeaders & lineText & vbCrLf
-
-            ElseIf Len(lineText) > 0 Then
-
-                nonSseOutput = nonSseOutput & lineText & vbCrLf
-
             End If
-
-        Else
-
-            YieldToExcel
 
         End If
 
-        If exec.Status <> 0 And exec.StdOut.AtEndOfStream Then
+        elapsedSecondsValue = ElapsedSeconds(startedAt)
+
+        Application.StatusBar = _
+            "Receiving OrcaRouter Streaming response - " & _
+            Format$(elapsedSecondsValue, "0") & " sec"
+
+        If elapsedSecondsValue >= nextWaitTraceAt Then
+
+            AddTrace ws, "WAIT", "WAIT", _
+                     "Receiving OrcaRouter Streaming response", _
+                     "Elapsed: " & Format$(elapsedSecondsValue, "0") & " sec" & vbCrLf & _
+                     "readyState: " & CStr(readyStateValue) & vbCrLf & _
+                     "SSE events: " & eventCount & vbCrLf & _
+                     "Answer chars: " & Len(answerText)
+
+            nextWaitTraceAt = _
+                nextWaitTraceAt + STREAM_WAIT_TRACE_INTERVAL_SECONDS
+
+        End If
+
+        If readyStateValue = 4 Then
             Exit Do
         End If
 
+        If elapsedSecondsValue >= STREAM_MAX_TIME_SECONDS Then
+
+            httpRequest.abort
+            Application.StatusBar = False
+
+            Err.Raise vbObjectError + 2101, _
+                      "SendOrcaRouterStreaming", _
+                      "Streaming timed out after " & _
+                      STREAM_MAX_TIME_SECONDS & " seconds."
+
+        End If
+
+        Sleep STREAM_POLL_INTERVAL_MS
+        YieldToExcel True
+
     Loop
 
-    If Not exec.StdErr.AtEndOfStream Then
-        stderrText = exec.StdErr.ReadAll
-    End If
+    Application.StatusBar = False
 
-    If exec.ExitCode <> 0 Then
-        Err.Raise vbObjectError + 2102, "SendOrcaRouterStreaming", _
-                  "curl.exe exited with an error. ExitCode=" & exec.ExitCode & vbCrLf & stderrText
-    End If
+    'Process an unterminated final line, if one exists.
+    If Len(pendingText) > 0 Then
 
-    If httpStatus <> 0 Then
-
-        If httpStatus < 200 Or httpStatus >= 300 Then
-            RaiseOrcaRouterHttpError httpStatus, responseHeaders, nonSseOutput
+        If Right$(pendingText, 1) = vbCr Then
+            pendingText = Left$(pendingText, Len(pendingText) - 1)
         End If
+
+        ProcessStreamingSseLine _
+            ws, _
+            pendingText, _
+            answerText, _
+            latestJsonPayload, _
+            eventCount
+
+    End If
+
+    httpStatus = httpRequest.Status
+    responseHeaders = httpRequest.getAllResponseHeaders
+
+    'A non-2xx Streaming response can be ordinary JSON rather than SSE.
+    If httpStatus < 200 Or httpStatus >= 300 Then
+
+        currentResponseText = httpRequest.responseText
+
+        DisplayRawResponse ws, _
+                           currentResponseText, _
+                           "Raw JSON - Streaming error", _
+                           httpStatus
+
+        RaiseOrcaRouterHttpError _
+            httpStatus, _
+            responseHeaders, _
+            currentResponseText
 
     End If
 
     If Len(latestJsonPayload) > 0 Then
-        DisplayRawResponse ws, latestJsonPayload, _
+
+        DisplayRawResponse ws, _
+                           latestJsonPayload, _
                            "Raw JSON - Streaming (latest SSE event)", _
                            httpStatus
-    ElseIf Len(nonSseOutput) > 0 Then
-        DisplayRawResponse ws, nonSseOutput, _
+
+    Else
+
+        DisplayRawResponse ws, _
+                           httpRequest.responseText, _
                            "Raw response - Streaming", _
                            httpStatus
+
     End If
 
-    AddTrace ws, "STEP 4", "RESPONSE", "Streaming receive completed", _
-             "HTTP Status: " & IIf(httpStatus = 0, "(unknown)", CStr(httpStatus)) & vbCrLf & _
+    AddTrace ws, "STEP 4", "RESPONSE", _
+             "Streaming receive completed", _
+             "HTTP Status: " & httpStatus & vbCrLf & _
              "Events: " & eventCount & vbCrLf & _
-             "Elapsed: " & Format$(ElapsedSeconds(startedAt), "0.000") & " sec" & vbCrLf & _
-             "Headers:" & vbCrLf & responseHeaders & vbCrLf & _
-             "Non-SSE body:" & vbCrLf & IIf(Len(nonSseOutput) = 0, "(empty)", nonSseOutput) & vbCrLf & _
-             "curl stderr: " & IIf(Len(stderrText) = 0, "(empty)", stderrText)
+             "Elapsed: " & _
+                 Format$(ElapsedSeconds(startedAt), "0.000") & " sec" & vbCrLf & _
+             "Headers:" & vbCrLf & responseHeaders
 
     'STEP 5: Parse / process result.
-    AddTrace ws, "STEP 5", "LOCAL", "Aggregate Streaming result", _
+    AddTrace ws, "STEP 5", "LOCAL", _
+             "Aggregate Streaming result", _
              "Answer length: " & Len(answerText)
 
     If Len(answerText) = 0 Then
-        Err.Raise vbObjectError + 2103, "SendOrcaRouterStreaming", _
-                  "Streaming completed but no answer text was captured. Check SSE data in the trace."
+
+        Err.Raise vbObjectError + 2102, _
+                  "SendOrcaRouterStreaming", _
+                  "Streaming completed but no answer text was captured. " & _
+                  "Check Raw JSON and the worksheet trace."
+
     End If
 
     'STEP 6: Update UI and trace.
     ws.Range("B11").Value = answerText
 
-    AddTrace ws, "STEP 6", "LOCAL", "Display answer in worksheet", _
+    AddTrace ws, "STEP 6", "LOCAL", _
+             "Display answer in worksheet", _
              "Mode: Streaming" & vbCrLf & _
              "Completed: True" & vbCrLf & _
-             "Total elapsed: " & Format$(ElapsedSeconds(startedAt), "0.000") & " sec"
+             "Total elapsed: " & _
+                 Format$(ElapsedSeconds(startedAt), "0.000") & " sec"
 
 CleanExit:
     Application.StatusBar = False
-    Set exec = Nothing
-    Set shell = Nothing
+    Set httpRequest = Nothing
     Set ws = Nothing
     Exit Sub
 
@@ -287,17 +340,19 @@ ErrorHandler:
 
         ws.Range("B11").Value = "ERROR: " & errorDescription
 
-        AddTrace ws, "ERROR", "ERROR", "Streaming error", _
+        AddTrace ws, "ERROR", "ERROR", _
+                 "Streaming error", _
                  "Err.Number: " & errorNumber & vbCrLf & _
                  "Err.Source: " & errorSource & vbCrLf & _
                  "Err.Description: " & errorDescription & vbCrLf & _
-                 "curl stderr: " & IIf(Len(stderrText) = 0, "(not available)", stderrText)
+                 "HTTP Status: " & _
+                     IIf(httpStatus = 0, "(not available)", CStr(httpStatus))
 
     End If
 
     MsgBox "An error occurred during Streaming." & vbCrLf & _
            errorDescription & vbCrLf & vbCrLf & _
-           "Check the worksheet trace for details.", _
+           "Check Raw JSON and the worksheet trace for details.", _
            vbExclamation, _
            "OrcaRouter Streaming"
 
@@ -305,6 +360,95 @@ ErrorHandler:
     GoTo CleanExit
 
 End Sub
+
+Private Sub ProcessStreamingSseLine( _
+    ByVal ws As Worksheet, _
+    ByVal lineText As String, _
+    ByRef answerText As String, _
+    ByRef latestJsonPayload As String, _
+    ByRef eventCount As Long)
+
+    Dim payload As String
+    Dim contentPart As String
+
+    If Left$(lineText, 5) <> "data:" Then
+        Exit Sub
+    End If
+
+    payload = Trim$(Mid$(lineText, 6))
+
+    If Len(payload) = 0 Then
+        Exit Sub
+    End If
+
+    If payload = "[DONE]" Then
+
+        AddTrace ws, "STEP 4", "STREAM", _
+                 "SSE finished [DONE]", _
+                 "Events: " & eventCount
+
+        Exit Sub
+
+    End If
+
+    latestJsonPayload = payload
+    eventCount = eventCount + 1
+
+    If eventCount <= MAX_STREAM_TRACE_EVENTS Then
+
+        AddTrace ws, "STEP 4", "STREAM", _
+                 "SSE data #" & eventCount, _
+                 payload
+
+    ElseIf eventCount = MAX_STREAM_TRACE_EVENTS + 1 Then
+
+        AddTrace ws, "STEP 4", "STREAM", _
+                 "Omit additional SSE trace entries", _
+                 "For readability, only the first " & _
+                 MAX_STREAM_TRACE_EVENTS & _
+                 " SSE events are shown individually."
+
+    End If
+
+    If InStr(1, payload, """error""", vbTextCompare) > 0 Then
+        RaiseStreamingError payload
+    End If
+
+    If TryExtractJsonStringProperty(payload, "content", contentPart) Then
+
+        If Len(contentPart) > 0 Then
+
+            answerText = answerText & contentPart
+            ws.Range("B11").Value = answerText
+
+            YieldToExcel
+
+        End If
+
+    End If
+
+End Sub
+
+Private Function TryReadXmlHttpResponseText( _
+    ByVal httpRequest As Object, _
+    ByRef responseText As String) As Boolean
+
+    On Error Resume Next
+
+    Err.Clear
+    responseText = httpRequest.responseText
+
+    If Err.Number = 0 Then
+        TryReadXmlHttpResponseText = True
+    Else
+        responseText = vbNullString
+        TryReadXmlHttpResponseText = False
+    End If
+
+    Err.Clear
+    On Error GoTo 0
+
+End Function
 
 Public Sub SendOrcaRouterToolCalling()
 
