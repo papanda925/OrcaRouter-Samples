@@ -995,46 +995,56 @@ $questionBox.Add_PreviewKeyDown({
 })
 
 if ($UiBindingCheck) {
-    if ($questionBox.IsReadOnly) {
-        throw 'QuestionBox must be editable.'
+    try {
+        # Binding becomes fully active when the WPF visual tree is loaded.
+        # Show the window only for this CI/self-test path; it is closed below.
+        $window.Show()
+        $window.UpdateLayout()
+
+        if ($questionBox.IsReadOnly) {
+            throw 'QuestionBox must be editable.'
+        }
+
+        if (-not $questionBox.IsEnabled) {
+            throw 'QuestionBox must be enabled.'
+        }
+
+        if (-not $questionBox.Focusable) {
+            throw 'QuestionBox must be focusable.'
+        }
+
+        $bindingExpression = $questionBox.GetBindingExpression(
+            [System.Windows.Controls.TextBox]::TextProperty
+        )
+
+        if ($null -eq $bindingExpression) {
+            throw 'QuestionBox.Text must be bound to the ViewModel.'
+        }
+
+        $viewModel.Question = 'ViewModel-to-View binding test'
+        $bindingExpression.UpdateTarget()
+        $window.Dispatcher.Invoke(
+            [System.Action]{ },
+            [System.Windows.Threading.DispatcherPriority]::DataBind
+        )
+
+        if ($questionBox.Text -ne 'ViewModel-to-View binding test') {
+            throw 'ViewModel-to-View binding failed for QuestionBox.'
+        }
+
+        $questionBox.Text = 'View-to-ViewModel binding test'
+        $bindingExpression.UpdateSource()
+        $window.Dispatcher.Invoke(
+            [System.Action]{ },
+            [System.Windows.Threading.DispatcherPriority]::DataBind
+        )
+
+        if ($viewModel.Question -ne 'View-to-ViewModel binding test') {
+            throw 'View-to-ViewModel binding failed for QuestionBox.'
+        }
     }
-
-    if (-not $questionBox.IsEnabled) {
-        throw 'QuestionBox must be enabled.'
-    }
-
-    if (-not $questionBox.Focusable) {
-        throw 'QuestionBox must be focusable.'
-    }
-
-    $bindingExpression = $questionBox.GetBindingExpression(
-        [System.Windows.Controls.TextBox]::TextProperty
-    )
-
-    if ($null -eq $bindingExpression) {
-        throw 'QuestionBox.Text must be bound to the ViewModel.'
-    }
-
-    $viewModel.Question = 'ViewModel-to-View binding test'
-    $bindingExpression.UpdateTarget()
-    $window.Dispatcher.Invoke(
-        [System.Action]{ },
-        [System.Windows.Threading.DispatcherPriority]::DataBind
-    )
-
-    if ($questionBox.Text -ne 'ViewModel-to-View binding test') {
-        throw 'ViewModel-to-View binding failed for QuestionBox.'
-    }
-
-    $questionBox.Text = 'View-to-ViewModel binding test'
-    $bindingExpression.UpdateSource()
-    $window.Dispatcher.Invoke(
-        [System.Action]{ },
-        [System.Windows.Threading.DispatcherPriority]::DataBind
-    )
-
-    if ($viewModel.Question -ne 'View-to-ViewModel binding test') {
-        throw 'View-to-ViewModel binding failed for QuestionBox.'
+    finally {
+        $window.Close()
     }
 
     exit 0
