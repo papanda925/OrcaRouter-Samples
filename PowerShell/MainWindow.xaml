@@ -38,8 +38,18 @@
         </Style>
     </Window.Resources>
 
-    <Grid Margin="24">
-        <Grid.RowDefinitions>
+    <ScrollViewer
+        x:Name="PageScrollViewer"
+        VerticalScrollBarVisibility="Auto"
+        HorizontalScrollBarVisibility="Disabled"
+        CanContentScroll="False"
+        PanningMode="VerticalOnly"
+        HorizontalContentAlignment="Stretch"
+        VerticalContentAlignment="Stretch">
+        <Grid
+            Margin="24"
+            MinHeight="900">
+            <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="2*" MinHeight="170"/>
@@ -300,5 +310,6 @@
                 Foreground="#94A3B8"
                 VerticalAlignment="Center"/>
         </Grid>
-    </Grid>
+        </Grid>
+    </ScrollViewer>
 </Window>
