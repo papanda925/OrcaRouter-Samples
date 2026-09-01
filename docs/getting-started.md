@@ -161,6 +161,20 @@ Windowsの設定によっては、ローカルの `.ps1` 実行がExecution Poli
 
 この例は、その1回のPowerShellプロセスでサンプルを起動するための指定です。システム全体の実行ポリシーを恒久的に変更する必要はありません。
 
+### 日本語が文字化けしてParserErrorになる場合
+
+Windows PowerShell 5.1は、BOMのないUTF-8スクリプトを誤った文字コードで読むことがあります。
+
+```text
+API繧ｭ繝ｼ...
+UnexpectedToken
+ParserError
+```
+
+のような表示になった場合は、まず `git pull origin main` で最新版へ更新してください。
+
+このリポジトリの `PowerShell\OrcaRouterChat.ps1` は **UTF-8 BOM付き** にしてあり、Windows PowerShell 5.1の `powershell.exe -File` でも正しく日本語を読み込めるようにしています。
+
 ## APIキー
 
 起動した画面の **API Key** に自分の完全なAPIキーを入力します。
