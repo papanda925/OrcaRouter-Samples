@@ -20,7 +20,8 @@
 #>
 
 param(
-    [switch]$SyntaxCheck
+    [switch]$SyntaxCheck,
+    [switch]$UiBindingCheck
 )
 
 if ($SyntaxCheck) {
@@ -983,6 +984,44 @@ $questionBox.Add_PreviewKeyDown({
         Invoke-OrcaRouterChat
     }
 })
+
+if ($UiBindingCheck) {
+    if ($questionBox.IsReadOnly) {
+        throw 'QuestionBox must be editable.'
+    }
+
+    if (-not $questionBox.IsEnabled) {
+        throw 'QuestionBox must be enabled.'
+    }
+
+    if (-not $questionBox.Focusable) {
+        throw 'QuestionBox must be focusable.'
+    }
+
+    $bindingExpression = $questionBox.GetBindingExpression(
+        [System.Windows.Controls.TextBox]::TextProperty
+    )
+
+    if ($null -eq $bindingExpression) {
+        throw 'QuestionBox.Text must be bound to the ViewModel.'
+    }
+
+    $viewModel.Question = 'ViewModel-to-View binding test'
+    $bindingExpression.UpdateTarget()
+
+    if ($questionBox.Text -ne 'ViewModel-to-View binding test') {
+        throw 'ViewModel-to-View binding failed for QuestionBox.'
+    }
+
+    $questionBox.Text = 'View-to-ViewModel binding test'
+    $bindingExpression.UpdateSource()
+
+    if ($viewModel.Question -ne 'View-to-ViewModel binding test') {
+        throw 'View-to-ViewModel binding failed for QuestionBox.'
+    }
+
+    exit 0
+}
 
 Add-Trace -Step 'READY' -Direction 'LOCAL' -Title 'サンプルを起動' -Data ([ordered]@{
     Endpoint = $script:ApiEndpoint
