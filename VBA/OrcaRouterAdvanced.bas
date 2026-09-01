@@ -543,10 +543,11 @@ Public Sub RunOrcaRouterAdvancedSelfTests()
     End If
 
     If ExtractAssistantContent( _
-           "{""choices"":[{""message"":{""role"":""assistant"",""content"":[{""type"":""text"",""text"":""hello array""}]}}]}") <> "hello array" Then
+           "{""choices"":[{""message"":{""role"":""assistant"",""content"":[{""type"":""text"",""text"":""hello""},{""type"":""text"",""text"":""array""}]}}]}") <> _
+       "hello" & vbCrLf & "array" Then
 
         Err.Raise vbObjectError + 3111, "RunOrcaRouterAdvancedSelfTests", _
-                  "ExtractAssistantContent failed for array content."
+                  "ExtractAssistantContent failed for multi-part array content."
     End If
 
     streamingJson = BuildStreamingRequestJson("orcarouter/free", "hello")
