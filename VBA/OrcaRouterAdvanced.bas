@@ -73,7 +73,7 @@ Public Sub SendOrcaRouterStreaming()
     ws.Range("B11").Value = vbNullString
 
     'STEP 1: Validate inputs.
-    AddTrace ws, "STEP 1", "LOCAL", "入力値を検証", _
+    AddTrace ws, "STEP 1", "LOCAL", "Validate inputs", _
              "API Key: " & MaskApiKey(apiKey) & vbCrLf & _
              "Model: " & model & vbCrLf & _
              "Mode: Streaming" & vbCrLf & _
@@ -85,13 +85,13 @@ Public Sub SendOrcaRouterStreaming()
 
     If Len(curlPath) = 0 Then
         Err.Raise vbObjectError + 2101, "SendOrcaRouterStreaming", _
-                  "curl.exe が見つかりません。Windows 10/11標準のcurl.exeが利用できる環境を想定しています。"
+                  "curl.exe was not found. This sample expects the curl.exe included with Windows 10/11."
     End If
 
     'STEP 2: Build request.
     requestBody = BuildStreamingRequestJson(model, question)
 
-    AddTrace ws, "STEP 2", "REQUEST", "Streamingリクエストを組み立て", _
+    AddTrace ws, "STEP 2", "REQUEST", "Build Streaming request", _
              "Method: POST" & vbCrLf & _
              "Endpoint: " & API_ENDPOINT_ADV & vbCrLf & _
              "Authorization: Bearer " & MaskApiKey(apiKey) & vbCrLf & _
@@ -100,9 +100,9 @@ Public Sub SendOrcaRouterStreaming()
              "Body:" & vbCrLf & requestBody
 
     'STEP 3: Send HTTP POST.
-    AddTrace ws, "STEP 3", "REQUEST", "curl.exeでStreaming POSTを送信", _
+    AddTrace ws, "STEP 3", "REQUEST", "Send Streaming POST with curl.exe", _
              "curl.exe --config - --no-buffer --silent --show-error --include" & vbCrLf & _
-             "APIキーはcurlのコマンドライン引数ではなくstdin configへ渡します。"
+             "The API key is passed through curl stdin config, not as a command-line argument."
 
     command = """" & curlPath & """ --config - --no-buffer --silent --show-error --include"
 
@@ -139,7 +139,7 @@ Public Sub SendOrcaRouterStreaming()
 
                 If payload = "[DONE]" Then
 
-                    AddTrace ws, "STEP 4", "STREAM", "SSE終了 [DONE]", _
+                    AddTrace ws, "STEP 4", "STREAM", "SSE finished [DONE]", _
                              "Events: " & eventCount
 
                 ElseIf Len(payload) > 0 Then
@@ -154,9 +154,9 @@ Public Sub SendOrcaRouterStreaming()
                     ElseIf eventCount = MAX_STREAM_TRACE_EVENTS + 1 Then
 
                         AddTrace ws, "STEP 4", "STREAM", _
-                                 "SSE Traceを省略", _
-                                 "可読性のため " & MAX_STREAM_TRACE_EVENTS & _
-                                 " 件以降の個別イベント表示を省略します。"
+                                 "Omit additional SSE trace entries", _
+                                 "For readability, only the first " & MAX_STREAM_TRACE_EVENTS & _
+                                 " SSE events are shown individually."
 
                     End If
 
@@ -204,7 +204,7 @@ Public Sub SendOrcaRouterStreaming()
 
     If exec.ExitCode <> 0 Then
         Err.Raise vbObjectError + 2102, "SendOrcaRouterStreaming", _
-                  "curl.exe がエラー終了しました。ExitCode=" & exec.ExitCode & vbCrLf & stderrText
+                  "curl.exe exited with an error. ExitCode=" & exec.ExitCode & vbCrLf & stderrText
     End If
 
     If httpStatus <> 0 Then
@@ -215,7 +215,7 @@ Public Sub SendOrcaRouterStreaming()
 
     End If
 
-    AddTrace ws, "STEP 4", "RESPONSE", "Streaming受信完了", _
+    AddTrace ws, "STEP 4", "RESPONSE", "Streaming receive completed", _
              "HTTP Status: " & IIf(httpStatus = 0, "(unknown)", CStr(httpStatus)) & vbCrLf & _
              "Events: " & eventCount & vbCrLf & _
              "Elapsed: " & Format$(ElapsedSeconds(startedAt), "0.000") & " sec" & vbCrLf & _
@@ -224,18 +224,18 @@ Public Sub SendOrcaRouterStreaming()
              "curl stderr: " & IIf(Len(stderrText) = 0, "(empty)", stderrText)
 
     'STEP 5: Parse / process result.
-    AddTrace ws, "STEP 5", "LOCAL", "Streaming結果を集約", _
+    AddTrace ws, "STEP 5", "LOCAL", "Aggregate Streaming result", _
              "Answer length: " & Len(answerText)
 
     If Len(answerText) = 0 Then
         Err.Raise vbObjectError + 2103, "SendOrcaRouterStreaming", _
-                  "Streamingは完了しましたが、回答本文を取得できませんでした。TraceのSSE dataを確認してください。"
+                  "Streaming completed but no answer text was captured. Check SSE data in the trace."
     End If
 
     'STEP 6: Update UI and trace.
     ws.Range("B11").Value = answerText
 
-    AddTrace ws, "STEP 6", "LOCAL", "画面へ回答を表示", _
+    AddTrace ws, "STEP 6", "LOCAL", "Display answer in worksheet", _
              "Mode: Streaming" & vbCrLf & _
              "Completed: True" & vbCrLf & _
              "Total elapsed: " & Format$(ElapsedSeconds(startedAt), "0.000") & " sec"
@@ -257,7 +257,7 @@ ErrorHandler:
 
         ws.Range("B11").Value = "ERROR: " & errorDescription
 
-        AddTrace ws, "ERROR", "ERROR", "Streaming処理中にエラー", _
+        AddTrace ws, "ERROR", "ERROR", "Streaming error", _
                  "Err.Number: " & errorNumber & vbCrLf & _
                  "Err.Source: " & errorSource & vbCrLf & _
                  "Err.Description: " & errorDescription & vbCrLf & _
@@ -265,9 +265,9 @@ ErrorHandler:
 
     End If
 
-    MsgBox "Streaming処理でエラーが発生しました。" & vbCrLf & _
+    MsgBox "An error occurred during Streaming." & vbCrLf & _
            errorDescription & vbCrLf & vbCrLf & _
-           "詳細はシート上のTraceを確認してください。", _
+           "Check the worksheet trace for details.", _
            vbExclamation, _
            "OrcaRouter Streaming"
 
@@ -323,7 +323,7 @@ Public Sub SendOrcaRouterToolCalling()
     ws.Range("B11").Value = vbNullString
 
     'STEP 1: Validate inputs.
-    AddTrace ws, "STEP 1", "LOCAL", "入力値を検証", _
+    AddTrace ws, "STEP 1", "LOCAL", "Validate inputs", _
              "API Key: " & MaskApiKey(apiKey) & vbCrLf & _
              "Model: " & model & vbCrLf & _
              "Mode: Tool Calling" & vbCrLf & _
@@ -337,7 +337,7 @@ Public Sub SendOrcaRouterToolCalling()
     firstRequest = BuildToolRequestJson(model, question)
 
     AddTrace ws, "STEP 2", "REQUEST", _
-             "Tool Calling 1回目のリクエストを組み立て", _
+             "Build Tool Calling request #1", _
              "Endpoint: " & API_ENDPOINT_ADV & vbCrLf & _
              "Tool: calculate_sum(a, b)" & vbCrLf & _
              "tool_choice: calculate_sum" & vbCrLf & _
@@ -350,7 +350,7 @@ Public Sub SendOrcaRouterToolCalling()
                     firstStatus, firstHeaders, firstResponse
 
     AddTrace ws, "STEP 4", "RESPONSE", _
-             "Tool Calling 1回目のレスポンスを受信", _
+             "Receive Tool Calling response #1", _
              "HTTP Status: " & firstStatus & vbCrLf & _
              "Headers:" & vbCrLf & firstHeaders & vbCrLf & _
              "Raw response:" & vbCrLf & firstResponse
@@ -364,28 +364,28 @@ Public Sub SendOrcaRouterToolCalling()
 
     If Not TryExtractJsonStringProperty(toolSection, "id", toolCallId) Then
         Err.Raise vbObjectError + 2201, "SendOrcaRouterToolCalling", _
-                  "tool_call id を取得できませんでした。"
+                  "Could not extract tool_call id."
     End If
 
     If Not TryExtractJsonStringProperty(toolSection, "name", functionName) Then
         Err.Raise vbObjectError + 2202, "SendOrcaRouterToolCalling", _
-                  "tool function name を取得できませんでした。"
+                  "Could not extract tool function name."
     End If
 
     If Not TryExtractJsonStringProperty(toolSection, "arguments", argumentsJson) Then
         Err.Raise vbObjectError + 2203, "SendOrcaRouterToolCalling", _
-                  "tool arguments を取得できませんでした。"
+                  "Could not extract tool arguments."
     End If
 
     AddTrace ws, "STEP 5A", "TOOL", _
-             "モデルからTool Callを受信", _
+             "Receive Tool Call from model", _
              "Tool Call ID: " & toolCallId & vbCrLf & _
              "Function: " & functionName & vbCrLf & _
              "Arguments: " & argumentsJson
 
     If StrComp(functionName, "calculate_sum", vbTextCompare) <> 0 Then
         Err.Raise vbObjectError + 2204, "SendOrcaRouterToolCalling", _
-                  "未対応のToolが要求されました: " & functionName
+                  "Unsupported Tool requested: " & functionName
     End If
 
     valueA = ExtractJsonNumber(argumentsJson, "a")
@@ -399,7 +399,7 @@ Public Sub SendOrcaRouterToolCalling()
 
     'STEP 5B: Execute local tool.
     AddTrace ws, "STEP 5B", "TOOL", _
-             "ローカル関数 calculate_sum を実行", _
+             "Execute local calculate_sum function", _
              "a = " & valueA & vbCrLf & _
              "b = " & valueB & vbCrLf & _
              "sum = " & sumValue & vbCrLf & _
@@ -415,7 +415,7 @@ Public Sub SendOrcaRouterToolCalling()
                         toolResultJson)
 
     AddTrace ws, "STEP 5C", "REQUEST", _
-             "Tool結果を含む2回目のリクエストを組み立て", _
+             "Build request #2 with Tool result", _
              "Body:" & vbCrLf & secondRequest
 
     Set httpRequest = CreateObject("WinHttp.WinHttpRequest.5.1")
@@ -424,7 +424,7 @@ Public Sub SendOrcaRouterToolCalling()
                     secondStatus, secondHeaders, secondResponse
 
     AddTrace ws, "STEP 4", "RESPONSE", _
-             "Tool Calling 2回目のレスポンスを受信", _
+             "Receive Tool Calling response #2", _
              "HTTP Status: " & secondStatus & vbCrLf & _
              "Headers:" & vbCrLf & secondHeaders & vbCrLf & _
              "Raw response:" & vbCrLf & secondResponse
@@ -437,13 +437,13 @@ Public Sub SendOrcaRouterToolCalling()
     assistantText = ExtractAssistantContent(secondResponse)
 
     AddTrace ws, "STEP 5", "LOCAL", _
-             "Tool Calling後の最終回答を解析", _
+             "Parse final answer after Tool Calling", _
              "Answer length: " & Len(assistantText)
 
     'STEP 6: Update UI and trace.
     ws.Range("B11").Value = assistantText
 
-    AddTrace ws, "STEP 6", "LOCAL", "画面へ回答を表示", _
+    AddTrace ws, "STEP 6", "LOCAL", "Display answer in worksheet", _
              "Mode: Tool Calling" & vbCrLf & _
              "Completed: True" & vbCrLf & _
              "Total elapsed: " & Format$(ElapsedSeconds(startedAt), "0.000") & " sec"
@@ -464,7 +464,7 @@ ErrorHandler:
 
         ws.Range("B11").Value = "ERROR: " & errorDescription
 
-        AddTrace ws, "ERROR", "ERROR", "Tool Calling処理中にエラー", _
+        AddTrace ws, "ERROR", "ERROR", "Tool Calling error", _
                  "Err.Number: " & errorNumber & vbCrLf & _
                  "Err.Source: " & errorSource & vbCrLf & _
                  "Err.Description: " & errorDescription & vbCrLf & _
@@ -473,9 +473,9 @@ ErrorHandler:
 
     End If
 
-    MsgBox "Tool Calling処理でエラーが発生しました。" & vbCrLf & _
+    MsgBox "An error occurred during Tool Calling." & vbCrLf & _
            errorDescription & vbCrLf & vbCrLf & _
-           "詳細はシート上のTraceを確認してください。", _
+           "Check the worksheet trace for details.", _
            vbExclamation, _
            "OrcaRouter Tool Calling"
 
@@ -494,18 +494,18 @@ Private Sub ValidateAdvancedInputs( _
        Left$(apiKey, 4) = "xxx-" Then
 
         Err.Raise vbObjectError + 2001, "ValidateAdvancedInputs", _
-                  "APIキーがダミー値のままです。B3セルへOrcaRouterのAPIキーを入力してください。"
+                  "The API key is still the dummy value. Enter your OrcaRouter API key in cell B3."
 
     End If
 
     If Len(model) = 0 Then
         Err.Raise vbObjectError + 2002, "ValidateAdvancedInputs", _
-                  "Modelが空です。B4セルへモデル名を入力してください。"
+                  "Model is empty. Enter a model name in cell B4."
     End If
 
     If Len(question) = 0 Then
         Err.Raise vbObjectError + 2003, "ValidateAdvancedInputs", _
-                  "質問が空です。B6セルへ質問を入力してください。"
+                  "Question is empty. Enter a question in cell B6."
     End If
 
 End Sub
@@ -629,7 +629,7 @@ Private Sub SendJsonRequest( _
     ByRef responseText As String)
 
     AddTrace ThisWorkbook.Worksheets(SAMPLE_SHEET_NAME_ADV), _
-             "STEP 3", "REQUEST", "WinHTTP POSTを送信", _
+             "STEP 3", "REQUEST", "Send WinHTTP POST", _
              "Endpoint: " & API_ENDPOINT_ADV & vbCrLf & _
              "Authorization: Bearer " & MaskApiKey(apiKey)
 
@@ -686,7 +686,7 @@ Private Function BuildHttpGuidance( _
 
         Case 401
             BuildHttpGuidance = _
-                "APIキーが無効、またはAuthorizationヘッダーが不正です。"
+                "The API key is invalid or the Authorization header is incorrect."
 
         Case 403
 
@@ -694,49 +694,49 @@ Private Function BuildHttpGuidance( _
 
                 Case "insufficient_user_quota"
                     BuildHttpGuidance = _
-                        "Workspace残高またはメンバー/エージェント予算を確認してください。"
+                        "Check workspace balance and member/agent budget."
 
                 Case "pre_consume_token_quota_failed"
                     BuildHttpGuidance = _
-                        "APIキー自身のQuota上限を確認してください。"
+                        "Check the quota limit assigned to this API key."
 
                 Case "free_quota_exhausted"
                     BuildHttpGuidance = _
-                        "無料ルーターで処理可能なモデルがありません。有料モデルを指定してください。"
+                        "No free model is currently available through the free router. Specify a paid model."
 
                 Case Else
                     BuildHttpGuidance = _
-                        "403は複数原因があります。error.codeとmessageを確認してください。"
+                        "HTTP 403 has multiple possible causes. Check error.code and message."
 
             End Select
 
         Case 425
             BuildHttpGuidance = _
-                "指定モデルはまだ利用開始前の可能性があります。"
+                "The selected model may not be available yet."
 
         Case 429
 
             If Len(retryAfter) > 0 Then
                 BuildHttpGuidance = _
-                    "Rate Limitです。Retry-After秒を待ってから再試行してください。"
+                    "Rate limit reached. Wait for Retry-After seconds before retrying."
             Else
                 BuildHttpGuidance = _
-                    "Retry-Afterのない無料枠429はPrompt長等を見直してください。"
+                    "For a free-tier 429 without Retry-After, review prompt length and request shape."
             End If
 
         Case 503
 
             If errorCode = "model_not_found" Then
                 BuildHttpGuidance = _
-                    "指定モデルが現在のアカウントで利用可能か確認してください。"
+                    "Check whether the selected model is available for the current account."
             Else
                 BuildHttpGuidance = _
-                    "サービスまたは上流Providerが一時利用不可の可能性があります。"
+                    "The service or upstream provider may be temporarily unavailable."
             End If
 
         Case Else
             BuildHttpGuidance = _
-                "error.code / error.type / HTTP StatusをTraceで確認してください。"
+                "Check error.code, error.type, and HTTP Status in the trace."
 
     End Select
 
@@ -768,7 +768,7 @@ Private Function GetToolCallsSection(ByVal responseJson As String) As String
 
     If startPosition = 0 Then
         Err.Raise vbObjectError + 2501, "GetToolCallsSection", _
-                  "tool_calls が返されませんでした。指定モデルがTool Callingに対応しているか確認してください。"
+                  "tool_calls was not returned. Check whether the selected model supports Tool Calling."
     End If
 
     GetToolCallsSection = Mid$(responseJson, startPosition)
@@ -847,7 +847,7 @@ Private Function ExtractJsonNumber( _
 
     If matches.Count = 0 Then
         Err.Raise vbObjectError + 2601, "ExtractJsonNumber", _
-                  "Tool argumentsから数値 " & propertyName & " を取得できませんでした。"
+                  "Could not extract numeric Tool argument: " & propertyName
     End If
 
     numberText = matches(0).SubMatches(0)
