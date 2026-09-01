@@ -125,6 +125,7 @@ $answerBox = $window.FindName('AnswerBox')
 $traceBox = $window.FindName('TraceBox')
 $sendButton = $window.FindName('SendButton')
 $clearTraceButton = $window.FindName('ClearTraceButton')
+$resultTabs = $window.FindName('ResultTabs')
 $statusText = $window.FindName('StatusText')
 
 # Pure PowerShell/.NET ViewModel.
@@ -311,6 +312,7 @@ function Complete-OrcaRouterWorker {
         Set-ViewModelValue -Name 'Answer' -Value "ERROR: $safeMessage"
         Set-ViewModelValue -Name 'StatusText' -Value 'Error - Trace を確認してください'
         $statusText.Foreground = '#B42318'
+        $resultTabs.SelectedIndex = 1
     }
     finally {
         try {
@@ -370,6 +372,7 @@ function Process-OrcaRouterWorkerEvents {
                 Set-ViewModelValue -Name 'Answer' -Value "ERROR: $safeMessage"
                 Set-ViewModelValue -Name 'StatusText' -Value 'Error - Trace を確認してください'
                 $statusText.Foreground = '#B42318'
+                $resultTabs.SelectedIndex = 1
                 Set-UiBusy -Busy $false
                 $script:workerFinishedInUi = $true
             }
@@ -437,6 +440,7 @@ function Invoke-OrcaRouterChat {
         return
     }
 
+    $resultTabs.SelectedIndex = 0
     Set-ViewModelValue -Name 'Answer' -Value ''
     Set-ViewModelValue -Name 'StatusText' -Value 'Processing...'
     $statusText.Foreground = '#64748B'
@@ -518,13 +522,30 @@ if ($UiBindingCheck) {
             throw "QuestionBox is too small: $($questionBox.ActualHeight)"
         }
 
-        if ($answerBox.ActualHeight -lt 80) {
-            throw "AnswerBox is too small: $($answerBox.ActualHeight)"
+        if ($null -eq $resultTabs) {
+            throw 'ResultTabs was not found.'
         }
 
-        if ($traceBox.ActualHeight -lt 100) {
-            throw "TraceBox is too small: $($traceBox.ActualHeight)"
+        if ($resultTabs.Items.Count -ne 2) {
+            throw "ResultTabs must contain Answer and Trace tabs."
         }
+
+        $resultTabs.SelectedIndex = 0
+        $window.UpdateLayout()
+
+        if ($answerBox.ActualHeight -lt 180) {
+            throw "Answer tab is too small: $($answerBox.ActualHeight)"
+        }
+
+        $resultTabs.SelectedIndex = 1
+        $window.UpdateLayout()
+
+        if ($traceBox.ActualHeight -lt 180) {
+            throw "Trace tab is too small: $($traceBox.ActualHeight)"
+        }
+
+        $resultTabs.SelectedIndex = 0
+        $window.UpdateLayout()
 
         if ($viewModel -isnot [System.ComponentModel.INotifyPropertyChanged]) {
             throw 'ViewModel must implement INotifyPropertyChanged.'
