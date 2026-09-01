@@ -10,12 +10,12 @@
 #>
 
 param(
-    [Parameter(Mandatory = $true)][string]$ApiKey,
-    [Parameter(Mandatory = $true)][string]$Model,
-    [Parameter(Mandatory = $true)][string]$Question,
-    [Parameter(Mandatory = $true)]
+    [switch]$SelfTest,
+    [string]$ApiKey = '',
+    [string]$Model = 'orcarouter/free',
+    [string]$Question = '',
     [ValidateSet('Chat', 'Streaming', 'Tool Calling')]
-    [string]$Mode,
+    [string]$Mode = 'Chat',
     [Parameter(Mandatory = $true)]
     [System.Collections.Concurrent.ConcurrentQueue[object]]$EventQueue
 )
@@ -60,6 +60,29 @@ function Add-WorkerTrace {
         Title = $Title
         Data = $Data
     }
+}
+
+
+if ($SelfTest) {
+    Add-WorkerEvent -Type 'Trace' -Values @{
+        Step = 'SELFTEST'
+        Direction = 'LOCAL'
+        Title = 'Background runspace self-test started'
+        Data = @{ ThreadId = [System.Threading.Thread]::CurrentThread.ManagedThreadId }
+    }
+
+    Start-Sleep -Milliseconds 150
+
+    Add-WorkerEvent -Type 'Answer' -Values @{
+        Text = 'Background runspace self-test answer'
+    }
+
+    Add-WorkerEvent -Type 'Completed' -Values @{
+        Answer = 'Background runspace self-test answer'
+        TotalElapsedMs = 150
+    }
+
+    return
 }
 
 function Mask-ApiKey {
