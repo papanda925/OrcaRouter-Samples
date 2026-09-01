@@ -28,6 +28,8 @@ Private Const API_KEY_PLACEHOLDER As String = "xxx-your-orcarouter-api-key-xxx"
 Private Const DEFAULT_API_KEY As String = "xxx-your-orcarouter-api-key-xxx"
 
 Private Const DEFAULT_MODEL As String = "orcarouter/free"
+Private Const REFERRAL_URL As String = "https://www.orcarouter.ai/ref/ref_5074f764e512c8dd3d9d"
+Private Const MAX_HISTORY_TURNS As Long = 10
 Private Const SAMPLE_SHEET_NAME As String = "OrcaRouter Chat"
 Private Const TRACE_HEADER_ROW As Long = 18
 Private Const TRACE_FIRST_ROW As Long = 19
@@ -50,11 +52,19 @@ Private Const HTTP_POLL_INTERVAL_MS As Long = 50
 'request has finished. This flag prevents accidental re-entry / double sends.
 Private requestInProgress As Boolean
 
+'The Chat Completions API does not keep this history for us.
+'The application stores the latest user/assistant pairs and sends them again.
+Private conversationCount As Long
+Private conversationUsers(1 To MAX_HISTORY_TURNS) As String
+Private conversationAssistants(1 To MAX_HISTORY_TURNS) As String
+
 Public Sub SetupOrcaRouterSample()
 
     Dim ws As Worksheet
     Dim sendButton As Shape
     Dim clearButton As Shape
+    Dim applyPromptButton As Shape
+    Dim newChatButton As Shape
     Dim listSeparator As String
     Dim workbookNameForOnAction As String
     Dim previousScreenUpdating As Boolean
