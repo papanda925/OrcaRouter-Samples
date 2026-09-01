@@ -222,7 +222,7 @@ Public Sub SendOrcaRouterChat()
 
     Dim httpStatus As Long
     Dim startedAt As Double
-    Dim elapsedSeconds As Double
+    Dim elapsedTimeSeconds As Double
 
     Dim errorNumber As Long
     Dim errorSource As String
@@ -302,12 +302,12 @@ Public Sub SendOrcaRouterChat()
         responseText = .ResponseText
     End With
 
-    elapsedSeconds = ElapsedSeconds(startedAt)
+    elapsedTimeSeconds = ElapsedSeconds(startedAt)
 
     'STEP 4: Receive response.
     AddTrace ws, "STEP 4", "RESPONSE", "Receive HTTP response", _
              "HTTP Status: " & httpStatus & vbCrLf & _
-             "Elapsed: " & Format$(elapsedSeconds, "0.000") & " sec" & vbCrLf & _
+             "Elapsed: " & Format$(elapsedTimeSeconds, "0.000") & " sec" & vbCrLf & _
              "Headers:" & vbCrLf & responseHeaders & vbCrLf & _
              "Raw response:" & vbCrLf & responseText
 
