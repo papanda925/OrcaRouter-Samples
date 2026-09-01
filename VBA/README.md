@@ -74,6 +74,14 @@ VBAコード内にも `STEP 1` ～ `STEP 6` の同じコメントを配置して
 
 HTTP通信には、参照設定を追加せずに使える late binding の `WinHttp.WinHttpRequest.5.1` を利用します。
 
+通常Chatでタイムアウトした場合は、まず `TestOrcaRouterConnection` マクロを実行してください。このマクロは `GET /v1/models` を短いタイムアウトで呼び出し、次を切り分けます。
+
+- 2xx: ネットワーク到達性とAPIキー認証は動作。Chat側のモデル選択・ルーティング・応答待ちを確認
+- 401 / 403: APIキー、権限、Quotaなどを確認
+- HTTP応答前のタイムアウト: WinHTTPからAPIホストまでの通信経路、プロキシ、セキュリティ製品などを確認
+
+
+
 ```text
 POST https://api.orcarouter.ai/v1/chat/completions
 Authorization: Bearer <API_KEY>
@@ -104,7 +112,8 @@ Excelセルの最大文字数と可読性を考慮し、非常に長いTraceデ�
 ## Notes
 
 - Windows版Excelを想定しています。
-- API呼び出しは同期処理です。学習しやすさを優先し、非同期化はしていません。
+- 通常ChatはWinHTTPの非同期送信 + 1秒単位の待機にしており、待機中もExcelが応答しやすいようにしています。
+- 通常Chatの総待機上限は120秒です。15秒ごとにTraceへ待機状況を記録します。
 - 本番用途ではAPIキーをワークシートへ平文保存しない設計に変更してください。
 
 
