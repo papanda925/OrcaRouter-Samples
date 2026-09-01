@@ -242,8 +242,6 @@ Public Sub SendOrcaRouterChat()
     Dim httpStatus As Long
     Dim startedAt As Double
     Dim elapsedTimeSeconds As Double
-    Dim nextWaitTraceAt As Double
-    Dim responseCompleted As Boolean
 
     Dim errorNumber As Long
     Dim errorSource As String
@@ -318,7 +316,6 @@ Public Sub SendOrcaRouterChat()
              "Total wait limit: " & CHAT_TOTAL_TIMEOUT_SECONDS & " sec"
 
     startedAt = Timer
-    nextWaitTraceAt = CHAT_WAIT_TRACE_INTERVAL_SECONDS
 
     Set httpRequest = CreateObject("WinHttp.WinHttpRequest.5.1")
 
@@ -330,35 +327,13 @@ Public Sub SendOrcaRouterChat()
         .Send StringToUtf8Bytes(requestBody)
     End With
 
-    Do
-        responseCompleted = httpRequest.WaitForResponse(1)
-
-        If responseCompleted Then
-            Exit Do
-        End If
-
-        elapsedTimeSeconds = ElapsedSeconds(startedAt)
-
-        If elapsedTimeSeconds >= nextWaitTraceAt Then
-            AddTrace ws, "STEP 3", "WAIT", "Waiting for OrcaRouter response", _
-                     "Elapsed: " & Format$(elapsedTimeSeconds, "0") & " sec" & vbCrLf & _
-                     "Excel remains responsive while waiting."
-
-            nextWaitTraceAt = nextWaitTraceAt + CHAT_WAIT_TRACE_INTERVAL_SECONDS
-        End If
-
-        YieldToExcel
-
-        If elapsedTimeSeconds >= CHAT_TOTAL_TIMEOUT_SECONDS Then
-            httpRequest.Abort
-
-            Err.Raise vbObjectError + 1004, "SendOrcaRouterChat", _
-                      "No OrcaRouter response completed within " & _
-                      CHAT_TOTAL_TIMEOUT_SECONDS & " seconds. " & _
-                      "Run TestOrcaRouterConnection to separate network/API-key issues " & _
-                      "from model routing latency."
-        End If
-    Loop
+    WaitForWinHttpResponse _
+        httpRequest, _
+        ws, _
+        "Waiting for OrcaRouter Chat response", _
+        startedAt, _
+        CHAT_TOTAL_TIMEOUT_SECONDS, _
+        CHAT_WAIT_TRACE_INTERVAL_SECONDS
 
     httpStatus = httpRequest.Status
     responseHeaders = httpRequest.GetAllResponseHeaders
@@ -496,6 +471,7 @@ Public Sub TestOrcaRouterConnection()
     End If
 
 CleanExit:
+    Application.StatusBar = False
     Set httpRequest = Nothing
     Set ws = Nothing
     Exit Sub
@@ -999,6 +975,7 @@ Public Sub WaitForWinHttpResponse( _
 
         If elapsedSecondsValue >= totalTimeoutSeconds Then
             httpRequest.Abort
+            Application.StatusBar = False
 
             Err.Raise vbObjectError + 1301, "WaitForWinHttpResponse", _
                       waitMessage & " timed out after " & _
