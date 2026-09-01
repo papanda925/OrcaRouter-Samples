@@ -648,6 +648,47 @@ $clearTraceButton.Add_Click({
     $statusText.Foreground = '#64748B'
 })
 
+$newChatButton.Add_Click({
+    Clear-ConversationHistory
+})
+
+$referralButton.Add_Click({
+    Start-Process $script:ReferralUrl
+})
+
+$apiKeyBox.Add_PasswordChanged({
+    Update-FirstRunPanel
+})
+
+$promptExampleBox.Add_SelectionChanged({
+    if ($promptExampleBox.SelectedIndex -le 0) {
+        return
+    }
+
+    $selectedText = [string](($promptExampleBox.SelectedItem).Content)
+    $blankLine = [Environment]::NewLine + [Environment]::NewLine
+
+    switch ($selectedText) {
+        '要約' {
+            $questionBox.Text = '次の文章を3行で要約してください。' + $blankLine + 'ここに文章を貼り付けてください。'
+        }
+        '初心者向け説明' {
+            $questionBox.Text = '次の内容を、専門用語を補足しながら初心者向けに説明してください。' + $blankLine + 'ここに内容を貼り付けてください。'
+        }
+        'コードレビュー' {
+            $questionBox.Text = '次のコードをレビューし、問題点・理由・改善例の順に説明してください。' + $blankLine + 'ここにコードを貼り付けてください。'
+        }
+        'JSON形式で整理' {
+            $questionBox.Text = '次の内容を整理し、JSON形式だけで返してください。' + $blankLine + 'ここに内容を貼り付けてください。'
+        }
+        '英訳' {
+            $questionBox.Text = '次の日本語を自然な英語に翻訳してください。' + $blankLine + 'ここに文章を貼り付けてください。'
+        }
+    }
+
+    [void]$questionBox.Focus()
+})
+
 $modeBox.Add_SelectionChanged({
     $mode = Get-SelectedMode
 
@@ -739,8 +780,20 @@ if ($UiBindingCheck) {
             throw 'ResultTabs was not found.'
         }
 
-        if ($resultTabs.Items.Count -ne 2) {
-            throw "ResultTabs must contain Answer and Trace tabs."
+        if ($resultTabs.Items.Count -ne 3) {
+            throw "ResultTabs must contain Answer, Developer, and Trace tabs."
+        }
+
+        if ($null -eq $developerBox) {
+            throw 'DeveloperBox was not found.'
+        }
+
+        if ($null -eq $newChatButton) {
+            throw 'NewChatButton was not found.'
+        }
+
+        if ($null -eq $promptExampleBox) {
+            throw 'PromptExampleBox was not found.'
         }
 
         $resultTabs.SelectedIndex = 0
@@ -751,6 +804,13 @@ if ($UiBindingCheck) {
         }
 
         $resultTabs.SelectedIndex = 1
+        $window.UpdateLayout()
+
+        if ($developerBox.ActualHeight -lt 180) {
+            throw "Developer tab is too small: $($developerBox.ActualHeight)"
+        }
+
+        $resultTabs.SelectedIndex = 2
         $window.UpdateLayout()
 
         if ($traceBox.ActualHeight -lt 180) {
@@ -812,6 +872,10 @@ Add-Trace -Step 'READY' -Direction 'LOCAL' -Title 'サンプルを起動' -Data 
     Async = 'Background PowerShell runspace + DispatcherTimer'
     Note = 'APIキーはダミー値です。実行前に画面上で差し替えてください。'
 }
+
+Update-FirstRunPanel
+Update-HistoryStatus
+$developerBox.Text = 'Developer Information will appear after a request.'
 
 $window.Add_ContentRendered({
     [void]$questionBox.Focus()
