@@ -74,6 +74,34 @@ VBAコード内にも `STEP 1` ～ `STEP 6` の同じコメントを配置して
 
 HTTP通信には、参照設定を追加せずに使える late binding の `WinHttp.WinHttpRequest.5.1` を利用します。
 
+### 非同期処理にしている理由
+
+通常ChatとTool Callingは、`.Open "POST", URL, True` のように **第3引数を `True` にして非同期で送信**しています。
+
+同期処理（`False`）の場合は、`.Send` の中でHTTP処理が完了するまでVBAへ制御が戻りません。その間は `DoEvents` を呼ぶこともTraceを書き換えることもできないため、API応答が遅いとExcelが「固まった」ように見えます。
+
+非同期処理（`True`）では、`.Send` のあとVBAへ制御が戻るため、WinHTTP標準の `WaitForResponse(1)` で1秒ずつ完了を確認できます。未完了ならVBA側で経過時間を表示し、Traceを追加し、`YieldToExcel` から `DoEvents` を実行してExcelへ描画・操作の機会を返します。
+
+概念的には次の流れです。
+
+```text
+.Send
+  ↓
+WaitForResponse(1)
+  ↓
+未完了
+  ↓
+Trace / StatusBar 更新
+  ↓
+YieldToExcel → DoEvents
+  ↓
+もう一度 WaitForResponse(1)
+```
+
+`WaitForResponse` は **WinHttp.WinHttpRequestの標準メソッド**、`YieldToExcel` と `WaitForWinHttpResponse` はこのサンプルで用意した補助処理です。
+
+`DoEvents` は便利ですが、呼び出し中にExcelの別イベントやボタン操作も処理されるため、どこにでも直接記述せず、`YieldToExcel` で約0.05秒間隔に抑制しています。また、待機中のSend二重実行を防ぐフラグも持たせています。
+
 通常Chatでタイムアウトした場合は、まず `TestOrcaRouterConnection` マクロを実行してください。このマクロは `GET /v1/models` を短いタイムアウトで呼び出し、次を切り分けます。
 
 - 2xx: ネットワーク到達性とAPIキー認証は動作。Chat側のモデル選択・ルーティング・応答待ちを確認
