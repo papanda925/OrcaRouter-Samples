@@ -38,6 +38,8 @@ Add-Type -AssemblyName WindowsBase
 $script:ApiEndpoint = 'https://api.orcarouter.ai/v1/chat/completions'
 $script:ApiKeyPlaceholder = 'xxx-your-orcarouter-api-key-xxx'
 $script:DefaultApiKey = 'xxx-your-orcarouter-api-key-xxx'
+$script:ReferralUrl = 'https://www.orcarouter.ai/ref/ref_5074f764e512c8dd3d9d'
+$script:MaxHistoryTurns = 10
 
 if ([System.Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') {
     throw 'WPF requires an STA thread. Start PowerShell with -STA and run this script again.'
@@ -128,6 +130,12 @@ $clearTraceButton = $window.FindName('ClearTraceButton')
 $resultTabs = $window.FindName('ResultTabs')
 $pageScrollViewer = $window.FindName('PageScrollViewer')
 $statusText = $window.FindName('StatusText')
+$historyStatusText = $window.FindName('HistoryStatusText')
+$developerBox = $window.FindName('DeveloperBox')
+$newChatButton = $window.FindName('NewChatButton')
+$promptExampleBox = $window.FindName('PromptExampleBox')
+$referralButton = $window.FindName('ReferralButton')
+$firstRunPanel = $window.FindName('FirstRunPanel')
 
 # Pure PowerShell/.NET ViewModel.
 # DataRowView implements INotifyPropertyChanged and works well with WPF Binding.
@@ -167,6 +175,8 @@ $script:workerPowerShell = $null
 $script:workerAsyncResult = $null
 $script:workerEventQueue = $null
 $script:workerFinishedInUi = $false
+$script:currentQuestion = ''
+$script:conversationHistory = [System.Collections.ArrayList]::new()
 
 $script:workerPollTimer = [System.Windows.Threading.DispatcherTimer]::new()
 $script:workerPollTimer.Interval = [TimeSpan]::FromMilliseconds(50)
