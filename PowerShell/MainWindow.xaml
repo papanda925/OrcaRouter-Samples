@@ -3,9 +3,9 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="OrcaRouter PowerShell Chat Sample"
     Width="1100"
-    Height="820"
+    Height="900"
     MinWidth="900"
-    MinHeight="700"
+    MinHeight="780"
     WindowStartupLocation="CenterScreen"
     Background="#F4F7FB"
     FontFamily="Segoe UI">
@@ -34,9 +34,9 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="2*"/>
-            <RowDefinition Height="2*"/>
             <RowDefinition Height="3*"/>
+            <RowDefinition Height="2*"/>
+            <RowDefinition Height="4*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
@@ -154,16 +154,26 @@
                 <TextBox
                     x:Name="QuestionBox"
                     Grid.Row="1"
+                    MinHeight="120"
+                    Padding="12"
+                    FontSize="15"
                     AcceptsReturn="True"
+                    AcceptsTab="True"
                     TextWrapping="Wrap"
                     VerticalScrollBarVisibility="Auto"
+                    HorizontalScrollBarVisibility="Disabled"
                     VerticalContentAlignment="Top"
                     IsReadOnly="False"
                     IsEnabled="True"
                     Focusable="True"
                     IsTabStop="True"
+                    IsUndoEnabled="True"
+                    SpellCheck.IsEnabled="False"
                     InputMethod.IsInputMethodEnabled="True"
-                    Text="{Binding Question, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                    Background="White"
+                    Foreground="#172033"
+                    CaretBrush="#172033"
+                    SelectionBrush="#B7D7FF"/>
             </Grid>
         </Border>
 
@@ -191,6 +201,7 @@
                     AcceptsReturn="True"
                     TextWrapping="Wrap"
                     VerticalScrollBarVisibility="Auto"
+                    MinHeight="90"
                     VerticalContentAlignment="Top"
                     Text="{Binding Answer, Mode=OneWay}"/>
             </Grid>

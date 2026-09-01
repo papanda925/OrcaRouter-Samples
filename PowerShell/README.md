@@ -7,7 +7,7 @@ PowerShell + WPF/XAML で OrcaRouter の Chat Completions API を呼び出し、
 - `MainWindow.xaml` - View（画面定義）
 - `OrcaRouterChat.ps1` - ViewModel、API呼び出し、トレース、エラー処理
 
-Model / Mode / Question / Answer / Status は、`INotifyPropertyChanged` を実装した `OrcaRouterViewModel` とXAMLのData Bindingで連携します。
+Model / Mode / Answer / Status は、`INotifyPropertyChanged` を実装した `OrcaRouterViewModel` とXAMLのData Bindingで連携します。Questionはユーザーが直接操作するWPF `TextBox` を入力元とし、`TextChanged` でViewModelへ同期します。
 
 ```text
 View (XAML)
@@ -17,35 +17,31 @@ ViewModel (INotifyPropertyChanged)
 OrcaRouter API処理
 ```
 
-これは **MVVMの考え方を取り入れた軽量構成**です。Send / ClearなどのイベントはPowerShell側で処理しているため、`ICommand` まで含めた厳密なフルMVVMではありません。
+これは **MVVMの考え方を取り入れた軽量構成**です。Send / ClearなどのイベントとQuestionの実入力はPowerShell/WPFコントロール側で扱うため、`ICommand` まで含めた厳密なフルMVVMではありません。
 
 API KeyはWPFの `PasswordBox.Password` が標準では通常のData Binding対象にならないため、従来どおり直接取得します。Traceも大量追記を分かりやすくするため `AppendText()` を使用します。
 
 ## Question入力欄 / MVVM
 
-Question欄は単なる表示用TextBoxではなく、次のBindingです。
-
-```xml
-Text="{Binding Question, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-```
-
-そのため、
+Question欄はWPF標準の `TextBox` をそのまま編集用コントロールとして使います。
 
 ```text
-ユーザーがTextBoxへ入力
+ユーザーが QuestionBox へ入力
         ↓
-ViewModel.Question が更新
+QuestionBox.Text
         ↓
-Send時は ViewModel.Question をAPIへ送信
+TextChanged で ViewModel.Question にも同期
+        ↓
+Send時は QuestionBox.Text をAPIへ送信
 ```
 
-となります。
+PowerShell + `XamlReader` では、主要な入力欄までData Bindingだけに依存すると環境差の切り分けが難しくなるため、**質問の実入力は見えているTextBoxそのものを正とする**実装にしています。ViewModelには状態把握用として同じ値を同期します。
 
 `QuestionBox` は明示的に `IsReadOnly="False"`、`IsEnabled="True"`、`Focusable="True"`、`InputMethod.IsInputMethodEnabled="True"` としています。
 
 また、API待機中もQuestion欄は無効化しません。応答を待ちながら次の質問を入力できます。
 
-CIではWindows PowerShell 5.1上で、QuestionBoxが編集可能であることに加えて **ViewModel → View / View → ViewModel の両方向Binding** を実際に確認します。
+CIではWindows PowerShell 5.1上で、QuestionBoxが **編集可能・有効・フォーカス可能・複数行向けの高さを持つこと**、Text変更がViewModelへ同期されることを確認します。
 
 参考: PowerShell / WPF / MVVMの考え方
 - https://papanda925.com/?p=2187

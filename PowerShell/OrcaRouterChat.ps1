@@ -339,7 +339,7 @@ $statusText = $window.FindName('StatusText')
 $viewModel = [OrcaRouterViewModel]::new()
 $viewModel.Model = 'orcarouter/free'
 $viewModel.Mode = 'Chat'
-$viewModel.Question = '日本語で「こんにちは。PowerShell版Chatのテストです。」とだけ答えてください。'
+$questionBox.Text = '日本語で「こんにちは。PowerShell版Chatのテストです。」とだけ答えてください。'
 $viewModel.Answer = 'ここに回答が表示されます。'
 $viewModel.StatusText = 'Ready'
 $window.DataContext = $viewModel
@@ -352,6 +352,12 @@ $modeBox.DataContext = $viewModel
 $questionBox.DataContext = $viewModel
 $answerBox.DataContext = $viewModel
 $statusText.DataContext = $viewModel
+
+# QuestionBox is the user's editor. Keep the WPF TextBox itself as the
+# source of truth for keyboard/IME input, then mirror it into the ViewModel.
+# This is more reliable with PowerShell + XamlReader than relying on a
+# Text binding for the primary editable field.
+$questionBox.Text = $viewModel.Question
 
 $apiKeyBox.Password = $script:DefaultApiKey
 
@@ -894,7 +900,7 @@ function Protect-LocalTraceText {
 function Invoke-OrcaRouterChat {
     $apiKey = $apiKeyBox.Password.Trim()
     $model = $viewModel.Model.Trim()
-    $question = $viewModel.Question.Trim()
+    $question = $questionBox.Text.Trim()
     $mode = Get-SelectedMode
 
     $viewModel.Answer = ''
@@ -974,14 +980,20 @@ $modeBox.Add_SelectionChanged({
     $mode = Get-SelectedMode
 
     if ($mode -eq 'Tool Calling') {
-        $viewModel.Question = 'calculate_sum ツールを使って 123 と 456 を足し、その結果を日本語で説明してください。'
+        $questionBox.Text = 'calculate_sum ツールを使って 123 と 456 を足し、その結果を日本語で説明してください。'
     }
     elseif ($mode -eq 'Streaming') {
-        $viewModel.Question = '日本語で「こんにちは。Streamingのテストです。」と短く答えてください。'
+        $questionBox.Text = '日本語で「こんにちは。Streamingのテストです。」と短く答えてください。'
     }
     elseif ($mode -eq 'Chat') {
-        $viewModel.Question = '日本語で「こんにちは。PowerShell版Chatのテストです。」とだけ答えてください。'
+        $questionBox.Text = '日本語で「こんにちは。PowerShell版Chatのテストです。」とだけ答えてください。'
     }
+})
+
+$questionBox.Add_TextChanged({
+    # Mirror the visible editor text into the ViewModel for diagnostics/state.
+    # Send itself intentionally reads QuestionBox.Text directly.
+    $viewModel.Question = $questionBox.Text
 })
 
 $questionBox.Add_PreviewKeyDown({
@@ -996,8 +1008,6 @@ $questionBox.Add_PreviewKeyDown({
 
 if ($UiBindingCheck) {
     try {
-        # Binding becomes fully active when the WPF visual tree is loaded.
-        # Show the window only for this CI/self-test path; it is closed below.
         $window.Show()
         $window.UpdateLayout()
 
@@ -1013,34 +1023,24 @@ if ($UiBindingCheck) {
             throw 'QuestionBox must be focusable.'
         }
 
-        $bindingExpression = $questionBox.GetBindingExpression(
-            [System.Windows.Controls.TextBox]::TextProperty
-        )
-
-        if ($null -eq $bindingExpression) {
-            throw 'QuestionBox.Text must be bound to the ViewModel.'
+        if ($questionBox.MinHeight -lt 100) {
+            throw 'QuestionBox is too small for a multiline question editor.'
         }
 
-        $viewModel.Question = 'ViewModel-to-View binding test'
-        $bindingExpression.UpdateTarget()
+        # Verify the visible TextBox is the input source and that TextChanged
+        # mirrors edits into the ViewModel.
+        $questionBox.Text = 'Question editor input test'
         $window.Dispatcher.Invoke(
             [System.Action]{ },
-            [System.Windows.Threading.DispatcherPriority]::DataBind
+            [System.Windows.Threading.DispatcherPriority]::Background
         )
 
-        if ($questionBox.Text -ne 'ViewModel-to-View binding test') {
-            throw 'ViewModel-to-View binding failed for QuestionBox.'
+        if ($questionBox.Text -ne 'Question editor input test') {
+            throw 'QuestionBox.Text could not be changed.'
         }
 
-        $questionBox.Text = 'View-to-ViewModel binding test'
-        $bindingExpression.UpdateSource()
-        $window.Dispatcher.Invoke(
-            [System.Action]{ },
-            [System.Windows.Threading.DispatcherPriority]::DataBind
-        )
-
-        if ($viewModel.Question -ne 'View-to-ViewModel binding test') {
-            throw 'View-to-ViewModel binding failed for QuestionBox.'
+        if ($viewModel.Question -ne 'Question editor input test') {
+            throw 'QuestionBox TextChanged did not update the ViewModel.'
         }
     }
     finally {
@@ -1049,6 +1049,8 @@ if ($UiBindingCheck) {
 
     exit 0
 }
+
+$viewModel.Question = $questionBox.Text
 
 Add-Trace -Step 'READY' -Direction 'LOCAL' -Title 'サンプルを起動' -Data ([ordered]@{
     Endpoint = $script:ApiEndpoint
