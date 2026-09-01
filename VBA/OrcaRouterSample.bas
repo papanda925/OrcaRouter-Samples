@@ -673,7 +673,7 @@ Public Sub SendOrcaRouterChat()
         GoTo CleanExit
     End If
 
-    ws.Range("B11").Value = vbNullString
+    ws.Range("B11").Value = BuildConversationDisplay(question)
     PrepareRawResponse ws, "Raw JSON Response - " & mode
 
     'STEP 1: Validate inputs.
@@ -744,6 +744,7 @@ Public Sub SendOrcaRouterChat()
         .Open "POST", API_ENDPOINT, True
         .setRequestHeader "Authorization", "Bearer " & apiKey
         .setRequestHeader "Content-Type", "application/json; charset=utf-8"
+        .setRequestHeader "X-OrcaRouter-Include-Cost", "true"
         .Send StringToUtf8Bytes(requestBody)
     End With
 
@@ -781,10 +782,19 @@ Public Sub SendOrcaRouterChat()
              "Answer length: " & Len(assistantText)
 
     'STEP 6: Update UI and trace.
-    ws.Range("B11").Value = assistantText
+    AddConversationTurn question, assistantText
+    ws.Range("B11").Value = BuildConversationDisplay()
+    UpdateVbaDeveloperInformation _
+        ws, _
+        httpStatus, _
+        elapsedTimeSeconds, _
+        model, _
+        requestBody, _
+        responseText
 
     AddTrace ws, "STEP 6", "LOCAL", "Display answer in worksheet", _
              "Completed: True" & vbCrLf & _
+             "History turns kept: " & conversationCount & " / " & MAX_HISTORY_TURNS & vbCrLf & _
              "Total elapsed: " & Format$(ElapsedSeconds(startedAt), "0.000") & " sec"
 
 CleanExit:
@@ -1027,14 +1037,34 @@ End Function
 
 Private Function BuildRequestJson(ByVal model As String, ByVal question As String) As String
 
-    BuildRequestJson = _
-        "{" & _
-        """model"":""" & JsonEscape(model) & """," & _
-        """messages"":[{" & _
-            """role"":""user""," & _
-            """content"":""" & JsonEscape(question) & """" & _
-        "}]" & _
-        "}"
+    Dim i As Long
+    Dim result As String
+
+    result = "{"
+    result = result & """model"":""" & JsonEscape(model) & ""","
+    result = result & """messages"":["
+
+    For i = 1 To conversationCount
+        If i > 1 Then
+            result = result & ","
+        End If
+
+        result = result & "{""role"":""user"",""content"":""" & _
+                 JsonEscape(conversationUsers(i)) & """},"
+        result = result & "{""role"":""assistant"",""content"":""" & _
+                 JsonEscape(conversationAssistants(i)) & """}"
+    Next i
+
+    If conversationCount > 0 Then
+        result = result & ","
+    End If
+
+    result = result & "{""role"":""user"",""content"":""" & _
+             JsonEscape(question) & """}"
+    result = result & "]"
+    result = result & "}"
+
+    BuildRequestJson = result
 
 End Function
 
