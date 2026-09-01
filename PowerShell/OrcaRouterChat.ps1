@@ -9,8 +9,8 @@
     PowerShell runspace.
 
     Model / Mode / Answer / StatusText use WPF Data Binding.
-    The ViewModel is a pure .NET ExpandoObject created from PowerShell.
-    ExpandoObject implements INotifyPropertyChanged, so no C# ViewModel is
+    The ViewModel is a pure .NET DataRowView created from PowerShell.
+    DataRowView implements INotifyPropertyChanged, so no C# ViewModel is
     compiled from embedded C# source.
 
     QuestionBox remains a direct WPF TextBox for reliable keyboard/IME input.
@@ -128,18 +128,26 @@ $clearTraceButton = $window.FindName('ClearTraceButton')
 $statusText = $window.FindName('StatusText')
 
 # Pure PowerShell/.NET ViewModel.
-# ExpandoObject already implements INotifyPropertyChanged.
-$viewModel = [System.Dynamic.ExpandoObject]::new()
-[System.Collections.Generic.IDictionary[string, object]]$viewModelValues = $viewModel
+# DataRowView implements INotifyPropertyChanged and works well with WPF Binding.
+Add-Type -AssemblyName System.Data
 
-$viewModelValues.Add('Model', 'orcarouter/free')
-$viewModelValues.Add('Mode', 'Chat')
-$viewModelValues.Add(
-    'Question',
+$viewModelTable = [System.Data.DataTable]::new('OrcaRouterViewModel')
+[void]$viewModelTable.Columns.Add('Model', [string])
+[void]$viewModelTable.Columns.Add('Mode', [string])
+[void]$viewModelTable.Columns.Add('Question', [string])
+[void]$viewModelTable.Columns.Add('Answer', [string])
+[void]$viewModelTable.Columns.Add('StatusText', [string])
+
+$viewModelRow = $viewModelTable.NewRow()
+$viewModelRow['Model'] = 'orcarouter/free'
+$viewModelRow['Mode'] = 'Chat'
+$viewModelRow['Question'] =
     '日本語で「こんにちは。PowerShell版Chatのテストです。」とだけ答えてください。'
-)
-$viewModelValues.Add('Answer', 'ここに回答が表示されます。')
-$viewModelValues.Add('StatusText', 'Ready')
+$viewModelRow['Answer'] = 'ここに回答が表示されます。'
+$viewModelRow['StatusText'] = 'Ready'
+$viewModelTable.Rows.Add($viewModelRow)
+
+$viewModel = $viewModelTable.DefaultView[0]
 
 $window.DataContext = $viewModel
 
@@ -149,7 +157,7 @@ $answerBox.DataContext = $viewModel
 $statusText.DataContext = $viewModel
 
 # Question is intentionally the actual TextBox input source.
-$questionBox.Text = [string]$viewModelValues.get_Item('Question')
+$questionBox.Text = [string]$viewModel.Row['Question']
 
 $apiKeyBox.Password = $script:DefaultApiKey
 
@@ -167,8 +175,7 @@ function Set-ViewModelValue {
         [AllowNull()]$Value
     )
 
-    # ExpandoObject raises INotifyPropertyChanged for dictionary updates.
-    $viewModelValues.set_Item($Name, $Value)
+    $viewModel.Row[$Name] = $Value
 }
 
 function Add-Trace {
@@ -211,7 +218,7 @@ function Set-UiBusy {
 }
 
 function Get-SelectedMode {
-    $mode = [string]$viewModelValues.get_Item('Mode')
+    $mode = [string]$viewModel.Row['Mode']
 
     if ([string]::IsNullOrWhiteSpace($mode)) {
         return 'Chat'
@@ -414,7 +421,7 @@ function Invoke-OrcaRouterChat {
     }
 
     $apiKey = $apiKeyBox.Password.Trim()
-    $model = [string]$viewModelValues.get_Item('Model')
+    $model = [string]$viewModel.Row['Model']
     $model = $model.Trim()
     $question = $questionBox.Text.Trim()
     $mode = Get-SelectedMode
@@ -438,7 +445,7 @@ function Invoke-OrcaRouterChat {
     Add-Trace -Step 'ASYNC' -Direction 'LOCAL' -Title 'バックグラウンドRunspaceを開始' -Data @{
         Mode = $mode
         UIThread = 'WPF Dispatcher remains responsive'
-        ViewModel = 'ExpandoObject / INotifyPropertyChanged'
+        ViewModel = 'DataRowView / INotifyPropertyChanged'
     }
 
     Start-OrcaRouterWorker -ApiKey $apiKey -Model $model -Question $question -Mode $mode
@@ -552,7 +559,7 @@ if ($UiBindingCheck) {
             [System.Windows.Threading.DispatcherPriority]::Background
         )
 
-        if ([string]$viewModelValues.get_Item('Question') -ne 'Question editor input test') {
+        if ([string]$viewModel.Row['Question'] -ne 'Question editor input test') {
             throw 'QuestionBox TextChanged did not update the ViewModel.'
         }
     }
@@ -565,9 +572,9 @@ if ($UiBindingCheck) {
 
 Add-Trace -Step 'READY' -Direction 'LOCAL' -Title 'サンプルを起動' -Data @{
     Endpoint = $script:ApiEndpoint
-    Model = [string]$viewModelValues.get_Item('Model')
+    Model = [string]$viewModel.Row['Model']
     Mode = Get-SelectedMode
-    ViewModel = 'ExpandoObject / INotifyPropertyChanged'
+    ViewModel = 'DataRowView / INotifyPropertyChanged'
     Async = 'Background PowerShell runspace + DispatcherTimer'
     Note = 'APIキーはダミー値です。実行前に画面上で差し替えてください。'
 }
