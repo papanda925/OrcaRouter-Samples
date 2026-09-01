@@ -4,7 +4,7 @@ Option Explicit
 '===============================================================================
 ' OrcaRouter API Learning Sample for Excel VBA
 '
-' Web / PowerShell / VBA で同じ6ステップにそろえています。
+' Web / PowerShell / VBA use the same six conceptual steps.
 '
 ' STEP 1 - Validate inputs
 ' STEP 2 - Build request
@@ -13,17 +13,17 @@ Option Explicit
 ' STEP 5 - Parse assistant message
 ' STEP 6 - Update UI and trace
 '
-' 学習用のため、HTTPステータス、Raw response、エラー情報などを
-' 通常のサンプルより多めにトレースします。
-' 実APIキーはトレースへ平文出力しません。
+' This learning sample records HTTP status, raw response, errors,
+' and more detail than a minimal production sample.
+' The real API key is never written to the trace in plain text.
 '===============================================================================
 
 Private Const API_ENDPOINT As String = "https://api.orcarouter.ai/v1/chat/completions"
 Private Const API_KEY_PLACEHOLDER As String = "xxx-your-orcarouter-api-key-xxx"
 
 'LOCAL TEST ONLY:
-'実APIキーをソースへ一時的に埋め込んで試す場合は、次の値だけを書き換えます。
-'公開GitHubへ実APIキーをコミットしないでください。
+'LOCAL TEST ONLY: change only the next value if you temporarily embed a key.
+'Never commit a real API key to a public GitHub repository.
 Private Const DEFAULT_API_KEY As String = "xxx-your-orcarouter-api-key-xxx"
 
 Private Const DEFAULT_MODEL As String = "orcarouter/free"
@@ -91,10 +91,10 @@ Public Sub SetupOrcaRouterSample()
     End With
 
     'Question
-    ws.Range("A6").Value = "質問"
+    ws.Range("A6").Value = "Question"
     With ws.Range("B6:H9")
         .Merge
-        .Value = "こんにちは。OrcaRouterについて一言で説明してください。"
+        .Value = "Hello. Please describe OrcaRouter in one sentence."
         .WrapText = True
         .VerticalAlignment = xlTop
         .Interior.Color = RGB(251, 253, 255)
@@ -102,10 +102,10 @@ Public Sub SetupOrcaRouterSample()
     End With
 
     'Answer
-    ws.Range("A11").Value = "回答"
+    ws.Range("A11").Value = "Answer"
     With ws.Range("B11:H15")
         .Merge
-        .Value = "ここに回答が表示されます。"
+        .Value = "The answer will appear here."
         .WrapText = True
         .VerticalAlignment = xlTop
         .Interior.Color = RGB(245, 247, 251)
@@ -113,7 +113,7 @@ Public Sub SetupOrcaRouterSample()
     End With
 
     'Trace header
-    ws.Range("A17").Value = "処理ステップ / HTTPトレース"
+    ws.Range("A17").Value = "Processing steps / HTTP trace"
     ws.Range("A17").Font.Bold = True
     ws.Range("A17").Font.Size = 14
 
@@ -155,7 +155,7 @@ Public Sub SetupOrcaRouterSample()
 
     With sendButton
         .Name = "btnSendOrcaRouter"
-        .TextFrame2.TextRange.Text = "送信"
+        .TextFrame2.TextRange.Text = "Send"
         .Fill.ForeColor.RGB = RGB(15, 23, 42)
         .Line.ForeColor.RGB = RGB(15, 23, 42)
         .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
@@ -172,18 +172,18 @@ Public Sub SetupOrcaRouterSample()
 
     With clearButton
         .Name = "btnClearOrcaRouterTrace"
-        .TextFrame2.TextRange.Text = "Traceクリア"
+        .TextFrame2.TextRange.Text = "Clear trace"
         .Fill.ForeColor.RGB = RGB(255, 255, 255)
         .Line.ForeColor.RGB = RGB(217, 225, 236)
         .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(23, 32, 51)
         .OnAction = "'" & ThisWorkbook.Name & "'!ClearOrcaRouterTrace"
     End With
 
-    AddTrace ws, "READY", "LOCAL", "サンプル画面を作成", _
+    AddTrace ws, "READY", "LOCAL", "Created sample UI", _
              "Endpoint: " & API_ENDPOINT & vbCrLf & _
              "Model: " & DEFAULT_MODEL & vbCrLf & _
              "API Key: " & MaskApiKey(DEFAULT_API_KEY) & vbCrLf & _
-             "実行前にB3セルのAPIキーを差し替えてください。"
+             "Replace the dummy API key in cell B3 before running."
 
     ws.Activate
     ws.Range("B3").Select
@@ -196,7 +196,7 @@ CleanExit:
     Exit Sub
 
 ErrorHandler:
-    MsgBox "サンプル画面の作成に失敗しました。" & vbCrLf & _
+    MsgBox "Failed to create the sample UI." & vbCrLf & _
            "Err.Number: " & Err.Number & vbCrLf & _
            "Err.Description: " & Err.Description, _
            vbExclamation, _
@@ -250,7 +250,7 @@ Public Sub SendOrcaRouterChat()
     ws.Range("B11").Value = vbNullString
 
     'STEP 1: Validate inputs.
-    AddTrace ws, "STEP 1", "LOCAL", "入力値を検証", _
+    AddTrace ws, "STEP 1", "LOCAL", "Validate inputs", _
              "API Key: " & MaskApiKey(apiKey) & vbCrLf & _
              "Model: " & model & vbCrLf & _
              "Mode: " & mode & vbCrLf & _
@@ -258,23 +258,23 @@ Public Sub SendOrcaRouterChat()
 
     If Len(apiKey) = 0 Or apiKey = API_KEY_PLACEHOLDER Or Left$(apiKey, 4) = "xxx-" Then
         Err.Raise vbObjectError + 1001, "SendOrcaRouterChat", _
-                  "APIキーがダミー値のままです。B3セルへOrcaRouterのAPIキーを入力してください。"
+                  "The API key is still the dummy value. Enter your OrcaRouter API key in cell B3."
     End If
 
     If Len(model) = 0 Then
         Err.Raise vbObjectError + 1002, "SendOrcaRouterChat", _
-                  "Modelが空です。B4セルへモデル名を入力してください。"
+                  "Model is empty. Enter a model name in cell B4."
     End If
 
     If Len(question) = 0 Then
         Err.Raise vbObjectError + 1003, "SendOrcaRouterChat", _
-                  "質問が空です。B6セルへ質問を入力してください。"
+                  "Question is empty. Enter a question in cell B6."
     End If
 
     'STEP 2: Build request.
     requestBody = BuildRequestJson(model, question)
 
-    AddTrace ws, "STEP 2", "REQUEST", "HTTPリクエストを組み立て", _
+    AddTrace ws, "STEP 2", "REQUEST", "Build HTTP request", _
              "Method: POST" & vbCrLf & _
              "Endpoint: " & API_ENDPOINT & vbCrLf & _
              "Authorization: Bearer " & MaskApiKey(apiKey) & vbCrLf & _
@@ -282,7 +282,7 @@ Public Sub SendOrcaRouterChat()
              "Body:" & vbCrLf & requestBody
 
     'STEP 3: Send HTTP POST.
-    AddTrace ws, "STEP 3", "REQUEST", "OrcaRouterへPOSTを送信", _
+    AddTrace ws, "STEP 3", "REQUEST", "Send POST to OrcaRouter", _
              "WinHttp.WinHttpRequest.5.1" & vbCrLf & _
              "Timeouts(ms): Resolve=10000, Connect=10000, Send=30000, Receive=60000"
 
@@ -305,7 +305,7 @@ Public Sub SendOrcaRouterChat()
     elapsedSeconds = ElapsedSeconds(startedAt)
 
     'STEP 4: Receive response.
-    AddTrace ws, "STEP 4", "RESPONSE", "HTTPレスポンスを受信", _
+    AddTrace ws, "STEP 4", "RESPONSE", "Receive HTTP response", _
              "HTTP Status: " & httpStatus & vbCrLf & _
              "Elapsed: " & Format$(elapsedSeconds, "0.000") & " sec" & vbCrLf & _
              "Headers:" & vbCrLf & responseHeaders & vbCrLf & _
@@ -318,13 +318,13 @@ Public Sub SendOrcaRouterChat()
     'STEP 5: Parse assistant message.
     assistantText = ExtractAssistantContent(responseText)
 
-    AddTrace ws, "STEP 5", "LOCAL", "Assistantメッセージを解析", _
+    AddTrace ws, "STEP 5", "LOCAL", "Parse assistant message", _
              "Answer length: " & Len(assistantText)
 
     'STEP 6: Update UI and trace.
     ws.Range("B11").Value = assistantText
 
-    AddTrace ws, "STEP 6", "LOCAL", "画面へ回答を表示", _
+    AddTrace ws, "STEP 6", "LOCAL", "Display answer in worksheet", _
              "Completed: True" & vbCrLf & _
              "Total elapsed: " & Format$(ElapsedSeconds(startedAt), "0.000") & " sec"
 
@@ -344,7 +344,7 @@ ErrorHandler:
 
         ws.Range("B11").Value = "ERROR: " & errorDescription
 
-        AddTrace ws, "ERROR", "ERROR", "処理中にエラーが発生", _
+        AddTrace ws, "ERROR", "ERROR", "An error occurred", _
                  "Err.Number: " & errorNumber & vbCrLf & _
                  "Err.Source: " & errorSource & vbCrLf & _
                  "Err.Description: " & errorDescription & vbCrLf & _
@@ -352,10 +352,10 @@ ErrorHandler:
                  "Raw response:" & vbCrLf & IIf(Len(responseText) = 0, "(not available)", responseText)
     End If
 
-    MsgBox "OrcaRouter APIの呼び出しでエラーが発生しました。" & vbCrLf & _
+    MsgBox "An error occurred while calling the OrcaRouter API." & vbCrLf & _
            "Err.Number: " & errorNumber & vbCrLf & _
            "Err.Description: " & errorDescription & vbCrLf & vbCrLf & _
-           "詳細はシート上のTraceを確認してください。", _
+           "Check the worksheet trace for details.", _
            vbExclamation, _
            "OrcaRouter Sample"
 
@@ -374,15 +374,15 @@ Public Sub ClearOrcaRouterTrace()
 
     ws.Range("A" & TRACE_FIRST_ROW & ":E" & ws.Rows.Count).ClearContents
 
-    AddTrace ws, "READY", "LOCAL", "Traceをクリア", _
-             "次回の送信から新しいTraceを記録します。"
+    AddTrace ws, "READY", "LOCAL", "Trace cleared", _
+             "A new trace will be recorded on the next request."
 
 CleanExit:
     Set ws = Nothing
     Exit Sub
 
 ErrorHandler:
-    MsgBox "Traceのクリアに失敗しました。" & vbCrLf & Err.Description, _
+    MsgBox "Failed to clear the trace." & vbCrLf & Err.Description, _
            vbExclamation, _
            "OrcaRouter Sample"
     Resume CleanExit
@@ -500,7 +500,7 @@ Public Function ExtractAssistantContent(ByVal responseJson As String) As String
 
     If matches.Count = 0 Then
         Err.Raise vbObjectError + 1101, "ExtractAssistantContent", _
-                  "choices[0].message.contentを取得できませんでした。TraceのRaw responseを確認してください。"
+                  "Could not extract choices[0].message.content. Check the raw response in the trace."
     End If
 
     encodedContent = matches(0).SubMatches(0)
@@ -578,7 +578,7 @@ Public Function JsonUnescape(ByVal encodedText As String) As String
 
                     If i + 5 > Len(encodedText) Then
                         Err.Raise vbObjectError + 1102, "JsonUnescape", _
-                                  "不正なUnicodeエスケープを検出しました。"
+                                  "Invalid Unicode escape sequence detected."
                     End If
 
                     hexText = Mid$(encodedText, i + 2, 4)
@@ -610,8 +610,8 @@ Public Function StringToUtf8Bytes(ByVal value As String) As Variant
 
     Dim stream As Object
 
-    'ADODB.Streamをlate bindingで使い、VBA文字列をUTF-8のbyte配列へ変換します。
-    '日本語などの非ASCII文字をJSONで安全に送るための処理です。
+    'Use ADODB.Stream via late binding to convert a VBA String to UTF-8 bytes.
+    'This keeps non-ASCII text safe when sending JSON.
     Set stream = CreateObject("ADODB.Stream")
 
     With stream
@@ -623,7 +623,7 @@ Public Function StringToUtf8Bytes(ByVal value As String) As Variant
         .Position = 0
         .Type = 1
 
-        'UTF-8 BOM (EF BB BF) はHTTP bodyには不要なので3byte読み飛ばします。
+        'Skip the 3-byte UTF-8 BOM because it is unnecessary in the HTTP body.
         .Position = 3
 
         StringToUtf8Bytes = .Read
