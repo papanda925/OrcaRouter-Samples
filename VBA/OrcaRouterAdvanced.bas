@@ -675,7 +675,6 @@ Public Sub RunOrcaRouterAdvancedSelfTests()
     Dim toolResultJson As String
     Dim extractedText As String
     Dim extractedNumber As Double
-    Dim statusCode As Long
     Dim headerValue As String
 
     'Verify the common Answer extraction shapes used by Chat/Tool Calling.
@@ -746,13 +745,6 @@ Public Sub RunOrcaRouterAdvancedSelfTests()
     If Abs(extractedNumber - 123.5) > 0.000001 Then
         Err.Raise vbObjectError + 3106, "RunOrcaRouterAdvancedSelfTests", _
                   "ExtractJsonNumber produced an unexpected value."
-    End If
-
-    statusCode = ParseHttpStatusLine("HTTP/2 200")
-
-    If statusCode <> 200 Then
-        Err.Raise vbObjectError + 3107, "RunOrcaRouterAdvancedSelfTests", _
-                  "ParseHttpStatusLine produced an unexpected value."
     End If
 
     headerValue = ExtractHeaderValue( _
@@ -997,6 +989,23 @@ Private Function BuildHttpGuidance( _
     ByVal retryAfter As String, _
     ByVal errorMessage As String) As String
 
+    'Prefer the specific OrcaRouter error.code over the HTTP status.
+    'The live API can occasionally surface quota conditions with a status that
+    'differs from older documentation. Matching the code keeps the guidance
+    'useful for both 402/403-style quota responses.
+    If StrComp(errorCode, "free_quota_exhausted", vbTextCompare) = 0 Then
+
+        BuildHttpGuidance = _
+            "The orcarouter/free allowance/capacity is unavailable for this request. " & _
+            "The Tool Calling code did not run yet because OrcaRouter rejected " & _
+            "the request before model execution. Do not retry in a loop. " & _
+            "Use a specific paid chat-capable model only after you intentionally " & _
+            "add wallet credit, or wait until free access is available again."
+
+        Exit Function
+
+    End If
+
     Select Case httpStatus
 
         Case 400
@@ -1037,6 +1046,11 @@ Private Function BuildHttpGuidance( _
             BuildHttpGuidance = _
                 "The API key is invalid or the Authorization header is incorrect."
 
+        Case 402
+            BuildHttpGuidance = _
+                "Payment or quota is required for this request. Check error.code and " & _
+                "the OrcaRouter billing/quota message before changing models."
+
         Case 403
 
             If InStr(1, errorMessage, "token cycle spend limit reached", vbTextCompare) > 0 Then
@@ -1059,10 +1073,6 @@ Private Function BuildHttpGuidance( _
                     Case "access_denied"
                         BuildHttpGuidance = _
                             "The key is valid but this request is not permitted. Check cycle limits, IP allowlist, and model access."
-
-                    Case "free_quota_exhausted"
-                        BuildHttpGuidance = _
-                            "No free model is currently available through the free router. Specify a paid model."
 
                     Case Else
                         BuildHttpGuidance = _
@@ -1262,89 +1272,6 @@ Private Function JsonNumber(ByVal value As Double) As String
     End If
 
     JsonNumber = valueText
-
-End Function
-
-Private Function FindCurlPath() As String
-
-    Dim systemRoot As String
-    Dim candidate As String
-    Dim shell As Object
-    Dim exec As Object
-    Dim outputText As String
-
-    systemRoot = Environ$("SystemRoot")
-
-    If Len(systemRoot) > 0 Then
-
-        candidate = systemRoot & "\System32\curl.exe"
-
-        If Len(Dir$(candidate)) > 0 Then
-            FindCurlPath = candidate
-            Exit Function
-        End If
-
-    End If
-
-    On Error Resume Next
-
-    Set shell = CreateObject("WScript.Shell")
-    Set exec = shell.Exec("where curl.exe")
-    outputText = Trim$(exec.StdOut.ReadLine)
-
-    On Error GoTo 0
-
-    If Len(outputText) > 0 Then
-        FindCurlPath = outputText
-    End If
-
-    Set exec = Nothing
-    Set shell = Nothing
-
-End Function
-
-
-Private Function ParseHttpStatusLine(ByVal statusLine As String) As Long
-
-    Dim parts() As String
-
-    parts = Split(Trim$(statusLine), " ")
-
-    If UBound(parts) >= 1 Then
-
-        If IsNumeric(parts(1)) Then
-            ParseHttpStatusLine = CLng(parts(1))
-        End If
-
-    End If
-
-End Function
-
-Private Function BuildCurlConfig( _
-    ByVal apiKey As String, _
-    ByVal requestBody As String) As String
-
-    BuildCurlConfig = _
-        "url = """ & EscapeCurlConfigValue(API_ENDPOINT_ADV) & """" & vbCrLf & _
-        "request = ""POST""" & vbCrLf & _
-        "header = ""Authorization: Bearer " & _
-            EscapeCurlConfigValue(apiKey) & """" & vbCrLf & _
-        "header = ""Content-Type: application/json""" & vbCrLf & _
-        "header = ""Accept: text/event-stream""" & vbCrLf & _
-        "data = """ & EscapeCurlConfigValue(requestBody) & """" & vbCrLf
-
-End Function
-
-Private Function EscapeCurlConfigValue(ByVal value As String) As String
-
-    Dim result As String
-
-    result = Replace$(value, Chr$(92), Chr$(92) & Chr$(92))
-    result = Replace$(result, Chr$(34), Chr$(92) & Chr$(34))
-    result = Replace$(result, vbCr, Chr$(92) & "r")
-    result = Replace$(result, vbLf, Chr$(92) & "n")
-
-    EscapeCurlConfigValue = result
 
 End Function
 
