@@ -37,14 +37,20 @@ Public Sub SetupOrcaRouterSample()
     Dim ws As Worksheet
     Dim sendButton As Shape
     Dim clearButton As Shape
+    Dim listSeparator As String
+    Dim previousScreenUpdating As Boolean
 
     On Error GoTo ErrorHandler
 
     Set ws = GetOrCreateSampleSheet()
 
+    previousScreenUpdating = Application.ScreenUpdating
     Application.ScreenUpdating = False
 
+    ws.Cells.UnMerge
     ws.Cells.Clear
+
+    listSeparator = Application.International(xlListSeparator)
 
     Do While ws.Shapes.Count > 0
         ws.Shapes(1).Delete
@@ -87,7 +93,10 @@ Public Sub SetupOrcaRouterSample()
         .Borders.Color = RGB(217, 225, 236)
         .Validation.Delete
         .Validation.Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, _
-                        Operator:=xlBetween, Formula1:="Chat,Streaming,Tool Calling"
+                        Operator:=xlBetween, _
+                        Formula1:="Chat" & listSeparator & _
+                                 "Streaming" & listSeparator & _
+                                 "Tool Calling"
     End With
 
     'Question
@@ -189,7 +198,7 @@ Public Sub SetupOrcaRouterSample()
     ws.Range("B3").Select
 
 CleanExit:
-    Application.ScreenUpdating = True
+    Application.ScreenUpdating = previousScreenUpdating
     Set clearButton = Nothing
     Set sendButton = Nothing
     Set ws = Nothing
