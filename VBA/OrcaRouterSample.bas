@@ -97,6 +97,19 @@ Public Sub SetupOrcaRouterSample()
         .RowHeight = 32
     End With
 
+    'First-run link. This is intentionally subtle and only explains where
+    'a first-time user can create an OrcaRouter account/API key.
+    ws.Range("A2").Value = "First run"
+    With ws.Range("B2:H2")
+        .Merge
+        .Value = "Get an OrcaRouter API key (referral link)"
+        .Font.Color = RGB(3, 105, 161)
+        .Font.Underline = xlUnderlineStyleSingle
+    End With
+    ws.Hyperlinks.Add Anchor:=ws.Range("B2"), _
+                      Address:=REFERRAL_URL, _
+                      TextToDisplay:="Get an OrcaRouter API key (referral link)"
+
     'API key
     ws.Range("A3").Value = "API Key"
     With ws.Range("B3:H3")
@@ -141,11 +154,28 @@ Public Sub SetupOrcaRouterSample()
         .Borders.Color = RGB(217, 225, 236)
     End With
 
-    'Answer
-    ws.Range("A11").Value = "Answer"
+    'Prompt example selector
+    ws.Range("A10").Value = "Prompt example"
+    With ws.Range("B10:D10")
+        .Merge
+        .Value = "Summary"
+        .Interior.Color = RGB(251, 253, 255)
+        .Borders.Color = RGB(217, 225, 236)
+        .Validation.Delete
+        .Validation.Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, _
+                        Operator:=xlBetween, _
+                        Formula1:="Summary" & listSeparator & _
+                                 "Explain" & listSeparator & _
+                                 "Code review" & listSeparator & _
+                                 "JSON" & listSeparator & _
+                                 "Translate"
+    End With
+
+    'Answer / conversation
+    ws.Range("A11").Value = "Conversation"
     With ws.Range("B11:H15")
         .Merge
-        .Value = "The answer will appear here."
+        .Value = "The conversation will appear here."
         .WrapText = True
         .VerticalAlignment = xlTop
         .Interior.Color = RGB(245, 247, 251)
@@ -171,6 +201,38 @@ Public Sub SetupOrcaRouterSample()
     With ws.Range("J3:P15")
         .Merge
         .Value = vbNullString
+        .WrapText = True
+        .VerticalAlignment = xlTop
+        .HorizontalAlignment = xlLeft
+        .Interior.Color = RGB(250, 250, 250)
+        .Borders.Color = RGB(217, 225, 236)
+        .Font.Name = "Consolas"
+        .Font.Size = 9
+        .NumberFormat = "@"
+    End With
+
+    'Developer information. Response JSON remains visible in J3:P15.
+    With ws.Range("J17:P17")
+        .Merge
+        .Value = "Developer Information"
+        .Font.Size = 14
+        .Font.Bold = True
+        .Font.Color = RGB(23, 32, 51)
+    End With
+
+    ws.Range("J18").Value = "HTTP Status"
+    ws.Range("L18").Value = "Elapsed"
+    ws.Range("N18").Value = "Model"
+    ws.Range("J19").Value = "Prompt Tokens"
+    ws.Range("L19").Value = "Completion"
+    ws.Range("N19").Value = "Total Tokens"
+    ws.Range("J20").Value = "Cost"
+    ws.Range("L20").Value = "History"
+    ws.Range("J21").Value = "Request JSON"
+
+    With ws.Range("J22:P30")
+        .Merge
+        .Value = "{}"
         .WrapText = True
         .VerticalAlignment = xlTop
         .HorizontalAlignment = xlLeft
@@ -209,8 +271,9 @@ Public Sub SetupOrcaRouterSample()
     ws.Columns("I").ColumnWidth = 2
     ws.Columns("J:P").ColumnWidth = 12
 
-    ws.Rows("3:5").RowHeight = 24
+    ws.Rows("2:5").RowHeight = 24
     ws.Rows("6:9").RowHeight = 26
+    ws.Rows("10:10").RowHeight = 28
     ws.Rows("11:15").RowHeight = 26
 
     ws.Range("A3:A17").Font.Bold = True
@@ -233,6 +296,40 @@ Public Sub SetupOrcaRouterSample()
         .OnAction = "'" & workbookNameForOnAction & "'!SendOrcaRouterChat"
     End With
 
+    'Apply prompt example button
+    Set applyPromptButton = ws.Shapes.AddShape( _
+        msoShapeRoundedRectangle, _
+        ws.Range("F10").Left, _
+        ws.Range("F10").Top, _
+        110, _
+        26)
+
+    With applyPromptButton
+        .Name = "btnApplyPromptExample"
+        .TextFrame2.TextRange.Text = "Apply prompt"
+        .Fill.ForeColor.RGB = RGB(255, 255, 255)
+        .Line.ForeColor.RGB = RGB(217, 225, 236)
+        .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(23, 32, 51)
+        .OnAction = "'" & workbookNameForOnAction & "'!ApplyOrcaRouterPromptExample"
+    End With
+
+    'New chat button
+    Set newChatButton = ws.Shapes.AddShape( _
+        msoShapeRoundedRectangle, _
+        ws.Range("G10").Left + 20, _
+        ws.Range("G10").Top, _
+        110, _
+        26)
+
+    With newChatButton
+        .Name = "btnNewOrcaRouterChat"
+        .TextFrame2.TextRange.Text = "New chat"
+        .Fill.ForeColor.RGB = RGB(255, 255, 255)
+        .Line.ForeColor.RGB = RGB(217, 225, 236)
+        .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(23, 32, 51)
+        .OnAction = "'" & workbookNameForOnAction & "'!NewOrcaRouterChat"
+    End With
+
     'Clear trace button
     Set clearButton = ws.Shapes.AddShape( _
         msoShapeRoundedRectangle, _
@@ -250,6 +347,10 @@ Public Sub SetupOrcaRouterSample()
         .OnAction = "'" & workbookNameForOnAction & "'!ClearOrcaRouterTrace"
     End With
 
+    ClearConversationHistoryState
+    UpdateVbaHistoryStatus ws
+    ResetVbaDeveloperInformation ws
+
     AddTrace ws, "READY", "LOCAL", "Created sample UI", _
              "Endpoint: " & API_ENDPOINT & vbCrLf & _
              "Model: " & DEFAULT_MODEL & vbCrLf & _
@@ -261,6 +362,8 @@ Public Sub SetupOrcaRouterSample()
 
 CleanExit:
     Application.ScreenUpdating = previousScreenUpdating
+    Set newChatButton = Nothing
+    Set applyPromptButton = Nothing
     Set clearButton = Nothing
     Set sendButton = Nothing
     Set ws = Nothing
