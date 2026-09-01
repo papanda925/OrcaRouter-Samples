@@ -689,9 +689,7 @@ function Invoke-ToolCalling {
 
     $firstBody = [ordered]@{
         model = $Model
-        messages = @(
-            [ordered]@{ role = 'user'; content = $Question }
-        )
+        messages = @(New-ConversationMessages -CurrentQuestion $Question)
         tools = $tools
         tool_choice = [ordered]@{
             type = 'function'
@@ -751,7 +749,7 @@ function Invoke-ToolCalling {
     }
 
     $secondMessages = @(
-        [ordered]@{ role = 'user'; content = $Question },
+        @(New-ConversationMessages -CurrentQuestion $Question)
         [ordered]@{
             role = 'assistant'
             content = Get-PropertyValue -Object $assistantMessage -Name 'content'
@@ -768,14 +766,35 @@ function Invoke-ToolCalling {
 
     $second = Invoke-JsonRequest -Body $secondBody -Stopwatch $Stopwatch -TraceTitle 'Tool Calling 2回目を送信'
     $answer = Get-AssistantText -ResponseJson $second.Json
-    $usage = Get-PropertyValue -Object $second.Json -Name 'usage'
+    $firstUsage = Get-PropertyValue -Object $first.Json -Name 'usage'
+    $secondUsage = Get-PropertyValue -Object $second.Json -Name 'usage'
+    $usage = Merge-Usage -FirstUsage $firstUsage -SecondUsage $secondUsage
+    $actualModel = Get-PropertyValue -Object $second.Json -Name 'model'
+
+    if ([string]::IsNullOrWhiteSpace([string]$actualModel)) {
+        $actualModel = $Model
+    }
 
     Add-WorkerTrace -Step 'STEP 5' -Direction 'LOCAL' -Title 'Tool Calling後の最終回答を解析' -Data @{
         AnswerChars = $answer.Length
+        HistoryTurns = @($History).Count
         Usage = if ($null -ne $usage) { $usage } else { '(usage not returned)' }
     }
 
-    return $answer
+    return [pscustomobject]@{
+        Answer = $answer
+        Usage = $usage
+        Request = [pscustomobject]@{
+            request_1 = $firstBody
+            request_2 = $secondBody
+        }
+        Response = [pscustomobject]@{
+            response_1 = $first.Json
+            response_2 = $second.Json
+        }
+        HttpStatus = $second.Status
+        ActualModel = [string]$actualModel
+    }
 }
 
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
