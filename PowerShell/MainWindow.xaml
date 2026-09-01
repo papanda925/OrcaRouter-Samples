@@ -99,12 +99,19 @@
 
                 <StackPanel Grid.Column="2">
                     <TextBlock Text="Model" Margin="0,0,0,6" Foreground="#64748B" FontWeight="SemiBold"/>
-                    <TextBox x:Name="ModelBox" Height="42" Text="orcarouter/free"/>
+                    <TextBox
+                        x:Name="ModelBox"
+                        Height="42"
+                        Text="{Binding Model, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                 </StackPanel>
 
                 <StackPanel Grid.Column="4">
                     <TextBlock Text="Mode" Margin="0,0,0,6" Foreground="#64748B" FontWeight="SemiBold"/>
-                    <ComboBox x:Name="ModeBox" Height="42" SelectedIndex="0">
+                    <ComboBox
+                        x:Name="ModeBox"
+                        Height="42"
+                        SelectedValuePath="Content"
+                        SelectedValue="{Binding Mode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
                         <ComboBoxItem Content="Chat"/>
                         <ComboBoxItem Content="Streaming"/>
                         <ComboBoxItem Content="Tool Calling"/>
@@ -151,7 +158,12 @@
                     TextWrapping="Wrap"
                     VerticalScrollBarVisibility="Auto"
                     VerticalContentAlignment="Top"
-                    Text="こんにちは。OrcaRouterについて一言で説明してください。"/>
+                    IsReadOnly="False"
+                    IsEnabled="True"
+                    Focusable="True"
+                    IsTabStop="True"
+                    InputMethod.IsInputMethodEnabled="True"
+                    Text="{Binding Question, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
             </Grid>
         </Border>
 
@@ -180,7 +192,7 @@
                     TextWrapping="Wrap"
                     VerticalScrollBarVisibility="Auto"
                     VerticalContentAlignment="Top"
-                    Text="ここに回答が表示されます。"/>
+                    Text="{Binding Answer, Mode=OneWay}"/>
             </Grid>
         </Border>
 
@@ -240,7 +252,7 @@
             </Grid.ColumnDefinitions>
             <TextBlock
                 x:Name="StatusText"
-                Text="Ready"
+                Text="{Binding StatusText, Mode=OneWay}"
                 Foreground="#64748B"
                 VerticalAlignment="Center"/>
             <TextBlock
