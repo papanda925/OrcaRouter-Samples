@@ -132,14 +132,12 @@ $statusText = $window.FindName('StatusText')
 $viewModel = [System.Dynamic.ExpandoObject]::new()
 $viewModelValues = [System.Collections.Generic.IDictionary[string, object]]$viewModel
 
-$viewModelValues.Add('Model', 'orcarouter/free')
-$viewModelValues.Add('Mode', 'Chat')
-$viewModelValues.Add(
-    'Question',
+$viewModelValues['Model'] = 'orcarouter/free'
+$viewModelValues['Mode'] = 'Chat'
+$viewModelValues['Question'] =
     '日本語で「こんにちは。PowerShell版Chatのテストです。」とだけ答えてください。'
-)
-$viewModelValues.Add('Answer', 'ここに回答が表示されます。')
-$viewModelValues.Add('StatusText', 'Ready')
+$viewModelValues['Answer'] = 'ここに回答が表示されます。'
+$viewModelValues['StatusText'] = 'Ready'
 
 $window.DataContext = $viewModel
 
