@@ -37,6 +37,9 @@ Private Const CHAT_WAIT_TRACE_INTERVAL_SECONDS As Long = 15
 Private Const MODELS_TEST_TIMEOUT_MS As Long = 20000
 Private Const UI_YIELD_INTERVAL_SECONDS As Double = 0.05
 
+'DoEvents allows Excel to process pending UI messages while VBA is running.
+'That also means the user can click the Send button again before the first
+'request has finished. This flag prevents accidental re-entry / double sends.
 Private requestInProgress As Boolean
 
 Public Sub SetupOrcaRouterSample()
@@ -256,6 +259,8 @@ Public Sub SendOrcaRouterChat()
         Exit Sub
     End If
 
+    'From this point until CleanExit, block another Send action.
+    'This is especially important because YieldToExcel calls DoEvents.
     requestInProgress = True
 
     Set ws = ThisWorkbook.Worksheets(SAMPLE_SHEET_NAME)
@@ -320,6 +325,18 @@ Public Sub SendOrcaRouterChat()
     Set httpRequest = CreateObject("WinHttp.WinHttpRequest.5.1")
 
     With httpRequest
+
+        'The third Open argument is the asynchronous flag.
+        '
+        'False = synchronous:
+        '        Send blocks VBA until the HTTP request finishes or times out.
+        '        While Send is blocking, VBA cannot reach DoEvents, so Excel can
+        '        look frozen and Trace rows cannot repaint.
+        '
+        'True  = asynchronous:
+        '        Send starts the request and returns control to VBA quickly.
+        '        We can then wait in short intervals, update Trace / StatusBar,
+        '        and periodically call YieldToExcel so Excel stays responsive.
         .Open "POST", API_ENDPOINT, True
         .SetTimeouts 10000, 10000, 30000, CHAT_TOTAL_TIMEOUT_SECONDS * 1000
         .SetRequestHeader "Authorization", "Bearer " & apiKey
@@ -327,6 +344,13 @@ Public Sub SendOrcaRouterChat()
         .Send StringToUtf8Bytes(requestBody)
     End With
 
+    'WaitForResponse is a standard method of WinHttp.WinHttpRequest.
+    'The helper below calls WaitForResponse in short intervals instead of
+    'blocking for the full request duration. The helper also handles:
+    '  - elapsed-time display in the Excel StatusBar
+    '  - periodic WAIT rows in the worksheet Trace
+    '  - YieldToExcel / DoEvents for UI repainting
+    '  - the overall timeout and Abort
     WaitForWinHttpResponse _
         httpRequest, _
         ws, _
@@ -918,6 +942,18 @@ End Sub
 
 Public Sub YieldToExcel(Optional ByVal force As Boolean = False)
 
+    'YieldToExcel is a small wrapper around VBA's standard DoEvents statement.
+    '
+    'Why not call DoEvents everywhere?
+    '  - Calling it too often adds overhead.
+    '  - DoEvents makes the application re-entrant: button clicks and other
+    '    queued Excel events can run while this macro is still in progress.
+    '  - A central helper makes the intended UI-yield points easy to audit.
+    '
+    'The helper therefore throttles DoEvents to about once every 0.05 seconds.
+    'That is frequent enough for screen repainting and window movement without
+    'spending every loop iteration processing the Windows message queue.
+
     Static lastYieldAt As Double
 
     Dim currentTime As Double
@@ -950,6 +986,15 @@ Public Sub WaitForWinHttpResponse( _
     Dim elapsedSecondsValue As Double
     Dim nextTraceAt As Double
 
+    'This helper expects the WinHTTP request to have been opened asynchronously.
+    '
+    'WaitForResponse is provided by WinHttp.WinHttpRequest. It waits until the
+    'asynchronous request has completed, or until the supplied number of seconds
+    'has elapsed. A return value of False means "not finished yet".
+    '
+    'We deliberately wait only one second at a time. After each short wait VBA
+    'gets control back, so the macro can update Trace / StatusBar and yield to
+    'Excel instead of disappearing into one long blocking call.
     nextTraceAt = traceIntervalSeconds
 
     Do
@@ -971,6 +1016,8 @@ Public Sub WaitForWinHttpResponse( _
             nextTraceAt = nextTraceAt + traceIntervalSeconds
         End If
 
+        'Give Excel an opportunity to repaint cells, respond to window moves,
+        'and process its normal message queue before the next one-second wait.
         YieldToExcel
 
         If elapsedSecondsValue >= totalTimeoutSeconds Then

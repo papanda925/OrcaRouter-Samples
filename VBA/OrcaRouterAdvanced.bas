@@ -176,6 +176,11 @@ Public Sub SendOrcaRouterStreaming()
                         If Len(contentPart) > 0 Then
                             answerText = answerText & contentPart
                             ws.Range("B11").Value = answerText
+
+                            'Streaming can update the answer many times per
+                            'second. YieldToExcel is throttled, so the worksheet
+                            'can repaint progressively without calling DoEvents
+                            'for every single SSE chunk.
                             YieldToExcel
                         End If
 
@@ -740,6 +745,13 @@ Private Sub SendJsonRequest( _
 
     With httpRequest
 
+        'Use asynchronous WinHTTP here for the same reason as normal Chat:
+        'a synchronous Send would hold VBA inside the COM call until the API
+        'finishes. In that state DoEvents cannot run and Excel appears frozen.
+        '
+        'With asynchronous=True, Send returns control to VBA and the shared
+        'WaitForWinHttpResponse helper performs short waits while allowing
+        'Trace updates, StatusBar progress, and YieldToExcel.
         .Open "POST", API_ENDPOINT_ADV, True
         .SetTimeouts 10000, 10000, 30000, TOOL_REQUEST_TIMEOUT_SECONDS * 1000
         .SetRequestHeader "Authorization", "Bearer " & apiKey
@@ -748,6 +760,9 @@ Private Sub SendJsonRequest( _
 
     End With
 
+    'Tool Calling can make two separate HTTP requests. Using the same
+    'responsive wait helper for both calls keeps the Excel UI usable during
+    'either wait and makes the timing behavior consistent with normal Chat.
     WaitForWinHttpResponse _
         httpRequest, _
         ws, _
