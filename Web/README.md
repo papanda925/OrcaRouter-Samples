@@ -12,10 +12,12 @@ Model欄は自由入力なので、`orcarouter/free` から利用可能な有料
 
 ## 画面
 
-1画面で次の4点を確認できます。
+1画面で次を確認できます。
 
-- 質問
-- OrcaRouterからの回答
+- 最大10往復の会話とOrcaRouterからの回答
+- Prompt example
+- Developer Information（HTTP Status / Elapsed / Token / Cost）
+- Request JSON / Response JSON
 - APIから返ったRaw JSON
 - 処理ステップとHTTPトレース
 
@@ -34,7 +36,13 @@ Raw JSON欄はVBA版と同じ考え方で、Chatではレスポンス本文全�
 
 まずローカルHTTPサーバーを起動してからブラウザで開きます。HTMLファイルを直接ダブルクリックするより、`start-server.ps1` または `python -m http.server` を使う方法を推奨します。
 
-APIキーの初期値はダミーです。
+APIキーの初期値はダミーです。APIキーが未設定の間だけ、画面上部に初回利用者向けの控えめな案内を表示します。
+
+**[OrcaRouterを初めて利用する / APIキーを作成する](https://www.orcarouter.ai/ref/ref_5074f764e512c8dd3d9d)**
+
+> 上記は本プロジェクトの紹介リンクです。紹介経由で登録されたWorkspaceの利用に応じて、開発者へ報酬が還元される場合があります。既にAPIキーを持っている場合は、そのキーをそのまま入力してください。
+
+
 
 ```text
 xxx-your-orcarouter-api-key-xxx
@@ -104,6 +112,12 @@ Tool Callingでは、モデルや無料ルーターのQuota状況によってロ
 
 3方式共通の手順とモード比較は [はじめて使うときの手順](../docs/getting-started.md) を参照してください。
 
+## Multi-turn Chat / New Chat / Developer Information
+
+通常Chatでは、API側に会話を保存させるのではなく、ブラウザ内の配列に直近10往復を保持し、次回の `messages` に user / assistant 履歴を再送します。**New chat** はこのローカル履歴だけを消します。
+
+Developer Information は折りたたみ式です。通常利用では閉じたまま使え、開くと HTTP Status、処理時間、Token数、Cost、Request JSON、Response JSON を確認できます。Costは `X-OrcaRouter-Include-Cost: true` で取得を依頼し、APIが `usage.cost_usd` を返さない場合は推測せず `(not returned)` と表示します。
+
 ## Common processing steps
 
 PowerShell版・VBA版と同じ6ステップにそろえています。
@@ -158,7 +172,8 @@ Tool Callingではローカル関数 `calculate_sum(a, b)` を公開し、モデ
 
 - Documentation: https://docs.orcarouter.ai/introduction
 - Quickstart: https://docs.orcarouter.ai/getting-started/quickstart
-- Get an API key: https://docs.orcarouter.ai/getting-started/get-api-key
+- Start OrcaRouter (project referral link): https://www.orcarouter.ai/ref/ref_5074f764e512c8dd3d9d
+- API key documentation: https://docs.orcarouter.ai/getting-started/get-api-key
 - Models: https://www.orcarouter.ai/models
 - Streaming: https://docs.orcarouter.ai/advanced/streaming
 - Tool Calling: https://docs.orcarouter.ai/advanced/tool-calling

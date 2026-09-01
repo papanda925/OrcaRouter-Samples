@@ -28,6 +28,8 @@ Private Const API_KEY_PLACEHOLDER As String = "xxx-your-orcarouter-api-key-xxx"
 Private Const DEFAULT_API_KEY As String = "xxx-your-orcarouter-api-key-xxx"
 
 Private Const DEFAULT_MODEL As String = "orcarouter/free"
+Private Const REFERRAL_URL As String = "https://www.orcarouter.ai/ref/ref_5074f764e512c8dd3d9d"
+Private Const MAX_HISTORY_TURNS As Long = 10
 Private Const SAMPLE_SHEET_NAME As String = "OrcaRouter Chat"
 Private Const TRACE_HEADER_ROW As Long = 18
 Private Const TRACE_FIRST_ROW As Long = 19
@@ -50,11 +52,19 @@ Private Const HTTP_POLL_INTERVAL_MS As Long = 50
 'request has finished. This flag prevents accidental re-entry / double sends.
 Private requestInProgress As Boolean
 
+'The Chat Completions API does not keep this history for us.
+'The application stores the latest user/assistant pairs and sends them again.
+Private conversationCount As Long
+Private conversationUsers(1 To MAX_HISTORY_TURNS) As String
+Private conversationAssistants(1 To MAX_HISTORY_TURNS) As String
+
 Public Sub SetupOrcaRouterSample()
 
     Dim ws As Worksheet
     Dim sendButton As Shape
     Dim clearButton As Shape
+    Dim applyPromptButton As Shape
+    Dim newChatButton As Shape
     Dim listSeparator As String
     Dim workbookNameForOnAction As String
     Dim previousScreenUpdating As Boolean
@@ -86,6 +96,19 @@ Public Sub SetupOrcaRouterSample()
         .Font.Color = RGB(23, 32, 51)
         .RowHeight = 32
     End With
+
+    'First-run link. This is intentionally subtle and only explains where
+    'a first-time user can create an OrcaRouter account/API key.
+    ws.Range("A2").Value = "First run"
+    With ws.Range("B2:H2")
+        .Merge
+        .Value = "Get an OrcaRouter API key (referral link)"
+        .Font.Color = RGB(3, 105, 161)
+        .Font.Underline = xlUnderlineStyleSingle
+    End With
+    ws.Hyperlinks.Add Anchor:=ws.Range("B2"), _
+                      Address:=REFERRAL_URL, _
+                      TextToDisplay:="Get an OrcaRouter API key (referral link)"
 
     'API key
     ws.Range("A3").Value = "API Key"
@@ -131,11 +154,28 @@ Public Sub SetupOrcaRouterSample()
         .Borders.Color = RGB(217, 225, 236)
     End With
 
-    'Answer
-    ws.Range("A11").Value = "Answer"
+    'Prompt example selector
+    ws.Range("A10").Value = "Prompt example"
+    With ws.Range("B10:D10")
+        .Merge
+        .Value = "Summary"
+        .Interior.Color = RGB(251, 253, 255)
+        .Borders.Color = RGB(217, 225, 236)
+        .Validation.Delete
+        .Validation.Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, _
+                        Operator:=xlBetween, _
+                        Formula1:="Summary" & listSeparator & _
+                                 "Explain" & listSeparator & _
+                                 "Code review" & listSeparator & _
+                                 "JSON" & listSeparator & _
+                                 "Translate"
+    End With
+
+    'Answer / conversation
+    ws.Range("A11").Value = "Conversation"
     With ws.Range("B11:H15")
         .Merge
-        .Value = "The answer will appear here."
+        .Value = "The conversation will appear here."
         .WrapText = True
         .VerticalAlignment = xlTop
         .Interior.Color = RGB(245, 247, 251)
@@ -161,6 +201,38 @@ Public Sub SetupOrcaRouterSample()
     With ws.Range("J3:P15")
         .Merge
         .Value = vbNullString
+        .WrapText = True
+        .VerticalAlignment = xlTop
+        .HorizontalAlignment = xlLeft
+        .Interior.Color = RGB(250, 250, 250)
+        .Borders.Color = RGB(217, 225, 236)
+        .Font.Name = "Consolas"
+        .Font.Size = 9
+        .NumberFormat = "@"
+    End With
+
+    'Developer information. Response JSON remains visible in J3:P15.
+    With ws.Range("J17:P17")
+        .Merge
+        .Value = "Developer Information"
+        .Font.Size = 14
+        .Font.Bold = True
+        .Font.Color = RGB(23, 32, 51)
+    End With
+
+    ws.Range("J18").Value = "HTTP Status"
+    ws.Range("L18").Value = "Elapsed"
+    ws.Range("N18").Value = "Model"
+    ws.Range("J19").Value = "Prompt Tokens"
+    ws.Range("L19").Value = "Completion"
+    ws.Range("N19").Value = "Total Tokens"
+    ws.Range("J20").Value = "Cost"
+    ws.Range("L20").Value = "History"
+    ws.Range("J21").Value = "Request JSON"
+
+    With ws.Range("J22:P30")
+        .Merge
+        .Value = "{}"
         .WrapText = True
         .VerticalAlignment = xlTop
         .HorizontalAlignment = xlLeft
@@ -199,12 +271,13 @@ Public Sub SetupOrcaRouterSample()
     ws.Columns("I").ColumnWidth = 2
     ws.Columns("J:P").ColumnWidth = 12
 
-    ws.Rows("3:5").RowHeight = 24
+    ws.Rows("2:5").RowHeight = 24
     ws.Rows("6:9").RowHeight = 26
+    ws.Rows("10:10").RowHeight = 28
     ws.Rows("11:15").RowHeight = 26
 
-    ws.Range("A3:A17").Font.Bold = True
-    ws.Range("A3:A17").Font.Color = RGB(71, 85, 105)
+    ws.Range("A2:A17").Font.Bold = True
+    ws.Range("A2:A17").Font.Color = RGB(71, 85, 105)
 
     'Send button
     Set sendButton = ws.Shapes.AddShape( _
@@ -221,6 +294,40 @@ Public Sub SetupOrcaRouterSample()
         .Line.ForeColor.RGB = RGB(15, 23, 42)
         .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
         .OnAction = "'" & workbookNameForOnAction & "'!SendOrcaRouterChat"
+    End With
+
+    'Apply prompt example button
+    Set applyPromptButton = ws.Shapes.AddShape( _
+        msoShapeRoundedRectangle, _
+        ws.Range("F10").Left, _
+        ws.Range("F10").Top, _
+        110, _
+        26)
+
+    With applyPromptButton
+        .Name = "btnApplyPromptExample"
+        .TextFrame2.TextRange.Text = "Apply prompt"
+        .Fill.ForeColor.RGB = RGB(255, 255, 255)
+        .Line.ForeColor.RGB = RGB(217, 225, 236)
+        .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(23, 32, 51)
+        .OnAction = "'" & workbookNameForOnAction & "'!ApplyOrcaRouterPromptExample"
+    End With
+
+    'New chat button
+    Set newChatButton = ws.Shapes.AddShape( _
+        msoShapeRoundedRectangle, _
+        ws.Range("G10").Left + 20, _
+        ws.Range("G10").Top, _
+        110, _
+        26)
+
+    With newChatButton
+        .Name = "btnNewOrcaRouterChat"
+        .TextFrame2.TextRange.Text = "New chat"
+        .Fill.ForeColor.RGB = RGB(255, 255, 255)
+        .Line.ForeColor.RGB = RGB(217, 225, 236)
+        .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(23, 32, 51)
+        .OnAction = "'" & workbookNameForOnAction & "'!NewOrcaRouterChat"
     End With
 
     'Clear trace button
@@ -240,6 +347,10 @@ Public Sub SetupOrcaRouterSample()
         .OnAction = "'" & workbookNameForOnAction & "'!ClearOrcaRouterTrace"
     End With
 
+    ClearConversationHistoryState
+    UpdateVbaHistoryStatus ws
+    ResetVbaDeveloperInformation ws
+
     AddTrace ws, "READY", "LOCAL", "Created sample UI", _
              "Endpoint: " & API_ENDPOINT & vbCrLf & _
              "Model: " & DEFAULT_MODEL & vbCrLf & _
@@ -251,6 +362,8 @@ Public Sub SetupOrcaRouterSample()
 
 CleanExit:
     Application.ScreenUpdating = previousScreenUpdating
+    Set newChatButton = Nothing
+    Set applyPromptButton = Nothing
     Set clearButton = Nothing
     Set sendButton = Nothing
     Set ws = Nothing
@@ -265,6 +378,253 @@ ErrorHandler:
     Resume CleanExit
 
 End Sub
+
+Public Sub NewOrcaRouterChat()
+
+    Dim ws As Worksheet
+
+    On Error GoTo ErrorHandler
+
+    If requestInProgress Then
+        MsgBox "A request is still running. Wait for it to finish before starting a new chat.", _
+               vbInformation, _
+               "OrcaRouter Sample"
+        Exit Sub
+    End If
+
+    Set ws = ThisWorkbook.Worksheets(SAMPLE_SHEET_NAME)
+    ClearConversationHistoryState
+    ws.Range("B11").Value = "The conversation will appear here."
+    UpdateVbaHistoryStatus ws
+
+CleanExit:
+    Set ws = Nothing
+    Exit Sub
+
+ErrorHandler:
+    MsgBox "Failed to start a new chat." & vbCrLf & Err.Description, _
+           vbExclamation, _
+           "OrcaRouter Sample"
+    Resume CleanExit
+
+End Sub
+
+Public Sub ApplyOrcaRouterPromptExample()
+
+    Dim ws As Worksheet
+    Dim exampleName As String
+    Dim promptText As String
+
+    On Error GoTo ErrorHandler
+
+    Set ws = ThisWorkbook.Worksheets(SAMPLE_SHEET_NAME)
+    exampleName = Trim$(CStr(ws.Range("B10").Value))
+
+    Select Case exampleName
+        Case "Summary"
+            promptText = "Summarize the following text in three concise bullet points:"
+        Case "Explain"
+            promptText = "Explain the following content for a beginner and define technical terms:"
+        Case "Code review"
+            promptText = "Review the following code. Explain issues, reasons, and an improved example:"
+        Case "JSON"
+            promptText = "Organize the following content and return JSON only:"
+        Case "Translate"
+            promptText = "Translate the following Japanese text into natural English:"
+        Case Else
+            promptText = "Summarize the following text in three concise bullet points:"
+    End Select
+
+    ws.Range("B6").Value = promptText & vbCrLf & vbCrLf & "Paste content here."
+
+CleanExit:
+    Set ws = Nothing
+    Exit Sub
+
+ErrorHandler:
+    MsgBox "Failed to apply the prompt example." & vbCrLf & Err.Description, _
+           vbExclamation, _
+           "OrcaRouter Sample"
+    Resume CleanExit
+
+End Sub
+
+Private Sub ClearConversationHistoryState()
+
+    Dim i As Long
+
+    conversationCount = 0
+
+    For i = 1 To MAX_HISTORY_TURNS
+        conversationUsers(i) = vbNullString
+        conversationAssistants(i) = vbNullString
+    Next i
+
+End Sub
+
+Private Sub AddConversationTurn(ByVal userText As String, ByVal assistantText As String)
+
+    Dim i As Long
+
+    If conversationCount >= MAX_HISTORY_TURNS Then
+        For i = 1 To MAX_HISTORY_TURNS - 1
+            conversationUsers(i) = conversationUsers(i + 1)
+            conversationAssistants(i) = conversationAssistants(i + 1)
+        Next i
+        conversationCount = MAX_HISTORY_TURNS - 1
+    End If
+
+    conversationCount = conversationCount + 1
+    conversationUsers(conversationCount) = userText
+    conversationAssistants(conversationCount) = assistantText
+
+End Sub
+
+Private Function BuildConversationDisplay( _
+    Optional ByVal pendingQuestion As String = "", _
+    Optional ByVal pendingAnswer As String = "") As String
+
+    Dim i As Long
+    Dim result As String
+
+    For i = 1 To conversationCount
+        result = result & "YOU" & vbCrLf
+        result = result & conversationUsers(i) & vbCrLf & vbCrLf
+        result = result & "ASSISTANT" & vbCrLf
+        result = result & conversationAssistants(i) & vbCrLf & vbCrLf
+    Next i
+
+    If Len(pendingQuestion) > 0 Then
+        result = result & "YOU" & vbCrLf
+        result = result & pendingQuestion & vbCrLf & vbCrLf
+
+        If Len(pendingAnswer) > 0 Then
+            result = result & "ASSISTANT" & vbCrLf
+            result = result & pendingAnswer & vbCrLf & vbCrLf
+        End If
+    End If
+
+    If Len(result) = 0 Then
+        result = "The conversation will appear here."
+    End If
+
+    If Len(result) > RAW_JSON_MAX_TEXT Then
+        result = "...(older display text omitted)..." & vbCrLf & _
+                 Right$(result, RAW_JSON_MAX_TEXT - 40)
+    End If
+
+    BuildConversationDisplay = result
+
+End Function
+
+Private Sub UpdateVbaHistoryStatus(ByVal ws As Worksheet)
+
+    ws.Range("M20").Value = conversationCount & " / " & MAX_HISTORY_TURNS & " turns"
+
+End Sub
+
+Private Sub ResetVbaDeveloperInformation(ByVal ws As Worksheet)
+
+    ws.Range("K18").Value = "-"
+    ws.Range("M18").Value = "-"
+    ws.Range("O18").Value = "-"
+    ws.Range("K19").Value = "-"
+    ws.Range("M19").Value = "-"
+    ws.Range("O19").Value = "-"
+    ws.Range("K20").Value = "(not returned)"
+    ws.Range("J22").Value = "{}"
+    UpdateVbaHistoryStatus ws
+
+End Sub
+
+Private Sub UpdateVbaDeveloperInformation( _
+    ByVal ws As Worksheet, _
+    ByVal httpStatus As Long, _
+    ByVal elapsedSeconds As Double, _
+    ByVal requestedModel As String, _
+    ByVal requestJson As String, _
+    ByVal responseJson As String)
+
+    Dim promptTokens As Double
+    Dim completionTokens As Double
+    Dim totalTokens As Double
+    Dim costUsd As Double
+    Dim actualModel As String
+
+    ws.Range("K18").Value = httpStatus
+    ws.Range("M18").Value = Format$(elapsedSeconds, "0.000") & " sec"
+
+    actualModel = requestedModel
+    If TryExtractAssistantStringProperty(responseJson, "model", actualModel) Then
+        ws.Range("O18").Value = actualModel
+    Else
+        ws.Range("O18").Value = requestedModel
+    End If
+
+    If TryExtractJsonNumberProperty(responseJson, "prompt_tokens", promptTokens) Then
+        ws.Range("K19").Value = promptTokens
+    Else
+        ws.Range("K19").Value = "-"
+    End If
+
+    If TryExtractJsonNumberProperty(responseJson, "completion_tokens", completionTokens) Then
+        ws.Range("M19").Value = completionTokens
+    Else
+        ws.Range("M19").Value = "-"
+    End If
+
+    If TryExtractJsonNumberProperty(responseJson, "total_tokens", totalTokens) Then
+        ws.Range("O19").Value = totalTokens
+    Else
+        ws.Range("O19").Value = "-"
+    End If
+
+    If TryExtractJsonNumberProperty(responseJson, "cost_usd", costUsd) Then
+        ws.Range("K20").Value = "$" & Format$(costUsd, "0.000000")
+    Else
+        ws.Range("K20").Value = "(not returned)"
+    End If
+
+    ws.Range("J22").Value = Left$(requestJson, RAW_JSON_MAX_TEXT)
+    UpdateVbaHistoryStatus ws
+
+End Sub
+
+Private Function TryExtractJsonNumberProperty( _
+    ByVal jsonText As String, _
+    ByVal propertyName As String, _
+    ByRef numberValue As Double) As Boolean
+
+    Dim regularExpression As Object
+    Dim matches As Object
+    Dim pattern As String
+
+    Set regularExpression = CreateObject("VBScript.RegExp")
+
+    pattern = Chr$(34) & propertyName & Chr$(34) & _
+              Chr$(92) & "s*:" & Chr$(92) & "s*" & _
+              "(-?[0-9]+(" & Chr$(92) & ".[0-9]+)?([Ee][+-]?[0-9]+)?)"
+
+    With regularExpression
+        .Global = False
+        .IgnoreCase = False
+        .MultiLine = True
+        .Pattern = pattern
+    End With
+
+    Set matches = regularExpression.Execute(jsonText)
+
+    If matches.Count = 0 Then
+        TryExtractJsonNumberProperty = False
+    Else
+        numberValue = Val(matches(0).SubMatches(0))
+        TryExtractJsonNumberProperty = True
+    End If
+
+    Set matches = Nothing
+    Set regularExpression = Nothing
+
+End Function
 
 Public Sub SendOrcaRouterChat()
 
@@ -319,7 +679,7 @@ Public Sub SendOrcaRouterChat()
         GoTo CleanExit
     End If
 
-    ws.Range("B11").Value = vbNullString
+    ws.Range("B11").Value = BuildConversationDisplay(question)
     PrepareRawResponse ws, "Raw JSON Response - " & mode
 
     'STEP 1: Validate inputs.
@@ -390,6 +750,7 @@ Public Sub SendOrcaRouterChat()
         .Open "POST", API_ENDPOINT, True
         .setRequestHeader "Authorization", "Bearer " & apiKey
         .setRequestHeader "Content-Type", "application/json; charset=utf-8"
+        .setRequestHeader "X-OrcaRouter-Include-Cost", "true"
         .Send StringToUtf8Bytes(requestBody)
     End With
 
@@ -427,10 +788,19 @@ Public Sub SendOrcaRouterChat()
              "Answer length: " & Len(assistantText)
 
     'STEP 6: Update UI and trace.
-    ws.Range("B11").Value = assistantText
+    AddConversationTurn question, assistantText
+    ws.Range("B11").Value = BuildConversationDisplay()
+    UpdateVbaDeveloperInformation _
+        ws, _
+        httpStatus, _
+        elapsedTimeSeconds, _
+        model, _
+        requestBody, _
+        responseText
 
     AddTrace ws, "STEP 6", "LOCAL", "Display answer in worksheet", _
              "Completed: True" & vbCrLf & _
+             "History turns kept: " & conversationCount & " / " & MAX_HISTORY_TURNS & vbCrLf & _
              "Total elapsed: " & Format$(ElapsedSeconds(startedAt), "0.000") & " sec"
 
 CleanExit:
@@ -589,6 +959,7 @@ Public Sub RunOrcaRouterVbaSelfTests()
                   "JsonEscape / JsonUnescape round-trip failed."
     End If
 
+    ClearConversationHistoryState
     requestJson = BuildRequestJson("orcarouter/free", "hello")
 
     If requestJson <> _
@@ -597,6 +968,19 @@ Public Sub RunOrcaRouterVbaSelfTests()
         Err.Raise vbObjectError + 3002, "RunOrcaRouterVbaSelfTests", _
                   "BuildRequestJson produced an unexpected result."
     End If
+
+    AddConversationTurn "first question", "first answer"
+    requestJson = BuildRequestJson("orcarouter/free", "second question")
+
+    If InStr(1, requestJson, """role"":""assistant""", vbBinaryCompare) = 0 Or _
+       InStr(1, requestJson, "first answer", vbBinaryCompare) = 0 Or _
+       InStr(1, requestJson, "second question", vbBinaryCompare) = 0 Then
+
+        Err.Raise vbObjectError + 3005, "RunOrcaRouterVbaSelfTests", _
+                  "Conversation history was not included in BuildRequestJson."
+    End If
+
+    ClearConversationHistoryState
 
     If MaskApiKey("1234567890") <> "1234...7890" Then
         Err.Raise vbObjectError + 3003, "RunOrcaRouterVbaSelfTests", _
@@ -673,14 +1057,34 @@ End Function
 
 Private Function BuildRequestJson(ByVal model As String, ByVal question As String) As String
 
-    BuildRequestJson = _
-        "{" & _
-        """model"":""" & JsonEscape(model) & """," & _
-        """messages"":[{" & _
-            """role"":""user""," & _
-            """content"":""" & JsonEscape(question) & """" & _
-        "}]" & _
-        "}"
+    Dim i As Long
+    Dim result As String
+
+    result = "{"
+    result = result & """model"":""" & JsonEscape(model) & ""","
+    result = result & """messages"":["
+
+    For i = 1 To conversationCount
+        If i > 1 Then
+            result = result & ","
+        End If
+
+        result = result & "{""role"":""user"",""content"":""" & _
+                 JsonEscape(conversationUsers(i)) & """},"
+        result = result & "{""role"":""assistant"",""content"":""" & _
+                 JsonEscape(conversationAssistants(i)) & """}"
+    Next i
+
+    If conversationCount > 0 Then
+        result = result & ","
+    End If
+
+    result = result & "{""role"":""user"",""content"":""" & _
+             JsonEscape(question) & """}"
+    result = result & "]"
+    result = result & "}"
+
+    BuildRequestJson = result
 
 End Function
 

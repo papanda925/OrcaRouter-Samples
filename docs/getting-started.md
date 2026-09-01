@@ -13,7 +13,17 @@
 
 ---
 
-## 1. OrcaRouter公式リンク
+## 1. APIキーをまだ持っていない場合
+
+初めてOrcaRouterを利用する場合は、次のリンクからアカウント/APIキーを準備できます。
+
+**[OrcaRouterを初めて利用する / APIキーを作成する](https://www.orcarouter.ai/ref/ref_5074f764e512c8dd3d9d)**
+
+> 上記は本プロジェクトの紹介リンクです。紹介経由で登録されたWorkspaceの利用に応じて、プロジェクト開発者へ報酬が還元される場合があります。すでにOrcaRouterのAPIキーを持っている場合は、新しく登録する必要はありません。既存キーをそのまま利用してください。
+
+現在はこのURLを仮設定しています。Built with OrcaRouter / Partner Dashboard のリポジトリ切替完了後にも紹介URLを再確認し、必要があれば更新します。
+
+## 2. OrcaRouter公式リンク
 
 - 公式サイト: https://www.orcarouter.ai/
 - 日本語サイト: https://www.orcarouter.ai/ja
@@ -39,7 +49,7 @@ POST https://api.orcarouter.ai/v1/chat/completions
 
 ---
 
-## 2. APIキーを用意する
+## 3. APIキーを用意する
 
 OrcaRouterでAPIキーを作成します。
 
@@ -63,7 +73,7 @@ OrcaRouterの画面で既存キーが一部伏せ字になっている場合、�
 
 ---
 
-## 3. まずは最新ファイルを取得する
+## 4. まずは最新ファイルを取得する
 
 既にリポジトリをclone済みなら、リポジトリのルートで次を実行します。
 
@@ -77,7 +87,7 @@ git pull origin main
 
 ---
 
-# 4. Web版
+# 5. Web版
 
 ## 起動
 
@@ -120,7 +130,11 @@ APIキーはブラウザ内で使用されます。GitHubへ保存されませ�
 
 正常時は次を確認できます。
 
-- Answer に回答が表示される
+- 会話欄にUser / Assistantが表示される
+- 2回目以降のChatでは、直近の会話履歴がRequest JSONの `messages` に入る
+- 履歴は最大10往復で、**新しいチャット** からクリアできる
+- Developer Information に HTTP Status / Elapsed / Token / Cost が表示される
+- Request JSON / Response JSON を確認できる
 - Raw JSON にAPIレスポンスが表示される
 - Trace に STEP 1 ～ STEP 6 が表示される
 - HTTP Status が 2xx になる
@@ -133,7 +147,7 @@ Web版はブラウザからOrcaRouterへ直接 `fetch()` します。
 
 ---
 
-# 5. PowerShell版
+# 6. PowerShell版
 
 ## 起動
 
@@ -181,7 +195,7 @@ ParserError
 
 Web版に入力したキーがPowerShell版へ自動的に引き継がれることはありません。
 
-## 回答とトレースの見方
+## 会話・Developer Information・トレースの見方
 
 PowerShell版は **画面全体の縦スクロール + RESULTタブ内部のスクロール** の2段構成です。
 
@@ -190,10 +204,11 @@ PageScrollViewer
   ├─ INPUT
   └─ RESULT
        ├─ 回答
+       ├─ Developer
        └─ トレース
 ```
 
-ウィンドウの高さが足りない場合は、右側にページ全体用の縦スクロールバーが自動表示され、下部まで移動できます。「回答」「トレース」はタブで切り替え、長い回答やHTTPトレースは各タブ内部のスクロールバーで内容だけを移動します。
+ウィンドウの高さが足りない場合は、右側にページ全体用の縦スクロールバーが自動表示され、下部まで移動できます。「回答」「Developer」「トレース」はタブで切り替え、長い回答やHTTPトレースは各タブ内部のスクロールバーで内容だけを移動します。
 
 送信すると「回答」タブを表示し、エラーが発生した場合は「トレース」タブへ自動で切り替わります。INPUTとRESULTの境界はマウスで上下にドラッグして高さを変更できます。
 
@@ -234,7 +249,7 @@ PowerShell\OrcaRouterWorker.ps1
 
 ---
 
-# 6. Excel VBA版
+# 7. Excel VBA版
 
 VBA版は、3方式の中で最初の準備が最も重要です。
 
@@ -279,7 +294,7 @@ VBEで次を実行します。
 SetupOrcaRouterSample
 ```
 
-これで `OrcaRouter Chat` シートと、入力欄・Answer・Raw JSON・Trace・Sendボタンが作成されます。
+これで `OrcaRouter Chat` シートと、入力欄・Conversation・Prompt example・Developer Information・Request/Response JSON・Trace・Send/New chatボタンが作成されます。
 
 **BASファイルをインポートしただけでは、操作用シートは完成しません。最初にSetupを実行してください。**
 
@@ -325,7 +340,46 @@ Modeを選択してQuestionを入力し、**Send** を押します。
 
 ---
 
-# 7. Chat / Streaming / Tool Calling の違い
+# Priority 1 の使い方
+
+## 会話履歴
+
+`/v1/chat/completions` へリセット電文を送るのではなく、アプリ側が会話を保持します。通常のChatでは次回Requestの `messages` へ、直近10往復の user / assistant を再送します。
+
+```text
+1回目: user
+2回目: user + assistant + user
+...
+最大10往復
+```
+
+**New chat / 新しいチャット** はこのローカル履歴を空にします。API KeyとModelは消しません。
+
+## Prompt example
+
+要約、初心者向け説明、コードレビュー、JSON、翻訳の例を用意しています。例をそのまま送るのではなく、必要な文章やコードへ書き換えて使います。
+
+## Developer Information
+
+通常画面を複雑にしすぎないため、Webは折りたたみ、PowerShellはDeveloperタブ、VBAは右側のDeveloper領域として分離しています。
+
+確認できる主な項目:
+
+- HTTP Status
+- Elapsed
+- Model
+- Prompt Tokens
+- Completion Tokens
+- Total Tokens
+- Cost
+- Request JSON
+- Response JSON
+
+Cost取得ではOrcaRouterの `X-OrcaRouter-Include-Cost: true` を利用します。APIが `usage.cost_usd` を返さない場合は金額を推測しません。
+
+---
+
+# 8. Chat / Streaming / Tool Calling の違い
 
 3モードは同じ「質問を送る」機能に見えますが、APIの使い方が異なります。
 
@@ -409,7 +463,7 @@ Tool Calling対応可否はモデルに依存します。
 
 ---
 
-# 8. 3方式のHTTP実装比較
+# 9. 3方式のHTTP実装比較
 
 | Sample | HTTP実装 | Streaming |
 |---|---|---|
@@ -421,7 +475,7 @@ Tool Calling対応可否はモデルに依存します。
 
 ---
 
-# 9. うまく動かないとき
+# 10. うまく動かないとき
 
 ## APIキーエラー
 
@@ -460,7 +514,7 @@ Raw JSONと `error.code` を確認してください。
 
 ---
 
-# 10. 公開前の安全確認
+# 11. 公開前の安全確認
 
 このリポジトリでは、サンプルのソースに実APIキーを保存しない方針です。
 

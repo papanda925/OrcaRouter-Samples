@@ -38,6 +38,8 @@ Add-Type -AssemblyName WindowsBase
 $script:ApiEndpoint = 'https://api.orcarouter.ai/v1/chat/completions'
 $script:ApiKeyPlaceholder = 'xxx-your-orcarouter-api-key-xxx'
 $script:DefaultApiKey = 'xxx-your-orcarouter-api-key-xxx'
+$script:ReferralUrl = 'https://www.orcarouter.ai/ref/ref_5074f764e512c8dd3d9d'
+$script:MaxHistoryTurns = 10
 
 if ([System.Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') {
     throw 'WPF requires an STA thread. Start PowerShell with -STA and run this script again.'
@@ -128,6 +130,12 @@ $clearTraceButton = $window.FindName('ClearTraceButton')
 $resultTabs = $window.FindName('ResultTabs')
 $pageScrollViewer = $window.FindName('PageScrollViewer')
 $statusText = $window.FindName('StatusText')
+$historyStatusText = $window.FindName('HistoryStatusText')
+$developerBox = $window.FindName('DeveloperBox')
+$newChatButton = $window.FindName('NewChatButton')
+$promptExampleBox = $window.FindName('PromptExampleBox')
+$referralButton = $window.FindName('ReferralButton')
+$firstRunPanel = $window.FindName('FirstRunPanel')
 
 # Pure PowerShell/.NET ViewModel.
 # DataRowView implements INotifyPropertyChanged and works well with WPF Binding.
@@ -167,6 +175,8 @@ $script:workerPowerShell = $null
 $script:workerAsyncResult = $null
 $script:workerEventQueue = $null
 $script:workerFinishedInUi = $false
+$script:currentQuestion = ''
+$script:conversationHistory = [System.Collections.ArrayList]::new()
 
 $script:workerPollTimer = [System.Windows.Threading.DispatcherTimer]::new()
 $script:workerPollTimer.Interval = [TimeSpan]::FromMilliseconds(50)
@@ -207,13 +217,175 @@ function Add-Trace {
     $traceBox.ScrollToEnd()
 }
 
+function Test-ConfiguredApiKey {
+    $value = $apiKeyBox.Password.Trim()
+
+    return (
+        -not [string]::IsNullOrWhiteSpace($value) -and
+        $value -ne $script:ApiKeyPlaceholder -and
+        -not $value.StartsWith('xxx-')
+    )
+}
+
+function Update-FirstRunPanel {
+    if (Test-ConfiguredApiKey) {
+        $firstRunPanel.Visibility = [System.Windows.Visibility]::Collapsed
+    }
+    else {
+        $firstRunPanel.Visibility = [System.Windows.Visibility]::Visible
+    }
+}
+
+function Update-HistoryStatus {
+    $count = $script:conversationHistory.Count
+    $historyStatusText.Text = "履歴 $count / $($script:MaxHistoryTurns) 往復"
+}
+
+function Get-ConversationTranscript {
+    param(
+        [string]$PendingQuestion = '',
+        [string]$PendingAnswer = ''
+    )
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+
+    foreach ($turn in $script:conversationHistory) {
+        $lines.Add('YOU')
+        $lines.Add([string]$turn.User)
+        $lines.Add('')
+        $lines.Add('ASSISTANT')
+        $lines.Add([string]$turn.Assistant)
+        $lines.Add('')
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($PendingQuestion)) {
+        $lines.Add('YOU')
+        $lines.Add($PendingQuestion)
+        $lines.Add('')
+
+        if (-not [string]::IsNullOrWhiteSpace($PendingAnswer)) {
+            $lines.Add('ASSISTANT')
+            $lines.Add($PendingAnswer)
+            $lines.Add('')
+        }
+    }
+
+    if ($lines.Count -eq 0) {
+        return 'ここに会話が表示されます。'
+    }
+
+    return ($lines -join [Environment]::NewLine).TrimEnd()
+}
+
+function Add-ConversationTurn {
+    param(
+        [Parameter(Mandatory = $true)][string]$Question,
+        [Parameter(Mandatory = $true)][string]$Assistant
+    )
+
+    [void]$script:conversationHistory.Add(
+        [pscustomobject]@{
+            User = $Question
+            Assistant = $Assistant
+        }
+    )
+
+    while ($script:conversationHistory.Count -gt $script:MaxHistoryTurns) {
+        $script:conversationHistory.RemoveAt(0)
+    }
+
+    Update-HistoryStatus
+    Set-ViewModelValue -Name 'Answer' -Value (Get-ConversationTranscript)
+}
+
+function Clear-ConversationHistory {
+    $script:conversationHistory.Clear()
+    $script:currentQuestion = ''
+    Update-HistoryStatus
+    Set-ViewModelValue -Name 'Answer' -Value (Get-ConversationTranscript)
+    Set-ViewModelValue -Name 'StatusText' -Value 'New chat - 履歴をクリアしました'
+    $statusText.Foreground = '#64748B'
+}
+
+function Get-HistorySnapshot {
+    $snapshot = @()
+
+    foreach ($turn in $script:conversationHistory) {
+        $snapshot += [pscustomobject]@{
+            User = [string]$turn.User
+            Assistant = [string]$turn.Assistant
+        }
+    }
+
+    return $snapshot
+}
+
+function Set-DeveloperInformation {
+    param($WorkerEvent)
+
+    $usage = $WorkerEvent.Usage
+    $promptTokens = '-'
+    $completionTokens = '-'
+    $totalTokens = '-'
+    $costText = '(not returned)'
+
+    if ($null -ne $usage) {
+        if ($null -ne $usage.PSObject.Properties['prompt_tokens']) {
+            $promptTokens = [string]$usage.prompt_tokens
+        }
+        if ($null -ne $usage.PSObject.Properties['completion_tokens']) {
+            $completionTokens = [string]$usage.completion_tokens
+        }
+        if ($null -ne $usage.PSObject.Properties['total_tokens']) {
+            $totalTokens = [string]$usage.total_tokens
+        }
+        if ($null -ne $usage.PSObject.Properties['cost_usd']) {
+            $costText = [string][char]36 + ([double]$usage.cost_usd).ToString(
+                '0.000000',
+                [Globalization.CultureInfo]::InvariantCulture
+            )
+        }
+    }
+
+    $requestText = '{}'
+    if ($null -ne $WorkerEvent.Request) {
+        $requestText = ConvertTo-TraceText -Data $WorkerEvent.Request
+    }
+
+    $responseText = '{}'
+    if ($null -ne $WorkerEvent.Response) {
+        $responseText = ConvertTo-TraceText -Data $WorkerEvent.Response
+    }
+
+    $developerBox.Text = @(
+        'Developer Information'
+        ('=' * 72)
+        "HTTP Status      : $($WorkerEvent.HttpStatus)"
+        "Elapsed          : $($WorkerEvent.TotalElapsedMs) ms"
+        "Model            : $($WorkerEvent.ActualModel)"
+        "Prompt Tokens    : $promptTokens"
+        "Completion Tokens: $completionTokens"
+        "Total Tokens     : $totalTokens"
+        "Cost             : $costText"
+        "History          : $($script:conversationHistory.Count) / $($script:MaxHistoryTurns) turns"
+        ''
+        '--- Request JSON ---'
+        $requestText
+        ''
+        '--- Response JSON ---'
+        $responseText
+    ) -join [Environment]::NewLine
+}
+
 function Set-UiBusy {
     param([bool]$Busy)
 
     $sendButton.IsEnabled = -not $Busy
+    $newChatButton.IsEnabled = -not $Busy
     $apiKeyBox.IsEnabled = -not $Busy
     $modelBox.IsEnabled = -not $Busy
     $modeBox.IsEnabled = -not $Busy
+    $promptExampleBox.IsEnabled = -not $Busy
 
     # The user can prepare the next question while the current request runs.
     $questionBox.IsEnabled = $true
@@ -310,10 +482,10 @@ function Complete-OrcaRouterWorker {
             Message = $safeMessage
         }
 
-        Set-ViewModelValue -Name 'Answer' -Value "ERROR: $safeMessage"
+        Set-ViewModelValue -Name 'Answer' -Value (Get-ConversationTranscript)
         Set-ViewModelValue -Name 'StatusText' -Value 'Error - Trace を確認してください'
         $statusText.Foreground = '#B42318'
-        $resultTabs.SelectedIndex = 1
+        $resultTabs.SelectedIndex = 2
     }
     finally {
         try {
@@ -350,12 +522,14 @@ function Process-OrcaRouterWorkerEvents {
             }
 
             'Answer' {
-                Set-ViewModelValue -Name 'Answer' -Value ([string]$workerEvent.Text)
+                $pendingTranscript = Get-ConversationTranscript -PendingQuestion $script:currentQuestion -PendingAnswer ([string]$workerEvent.Text)
+                Set-ViewModelValue -Name 'Answer' -Value $pendingTranscript
                 $answerBox.ScrollToEnd()
             }
 
             'Completed' {
-                Set-ViewModelValue -Name 'Answer' -Value ([string]$workerEvent.Answer)
+                Add-ConversationTurn -Question $script:currentQuestion -Assistant ([string]$workerEvent.Answer)
+                Set-DeveloperInformation -WorkerEvent $workerEvent
                 Set-ViewModelValue -Name 'StatusText' -Value 'Completed'
                 $statusText.Foreground = '#0F766E'
                 Set-UiBusy -Busy $false
@@ -370,10 +544,10 @@ function Process-OrcaRouterWorkerEvents {
                     Type = [string]$workerEvent.ExceptionType
                 }
 
-                Set-ViewModelValue -Name 'Answer' -Value "ERROR: $safeMessage"
+                Set-ViewModelValue -Name 'Answer' -Value (Get-ConversationTranscript)
                 Set-ViewModelValue -Name 'StatusText' -Value 'Error - Trace を確認してください'
                 $statusText.Foreground = '#B42318'
-                $resultTabs.SelectedIndex = 1
+                $resultTabs.SelectedIndex = 2
                 Set-UiBusy -Busy $false
                 $script:workerFinishedInUi = $true
             }
@@ -396,7 +570,8 @@ function Start-OrcaRouterWorker {
         [string]$ApiKey,
         [string]$Model,
         [string]$Question,
-        [string]$Mode
+        [string]$Mode,
+        [object[]]$History
     )
 
     Stop-OrcaRouterWorker
@@ -409,6 +584,7 @@ function Start-OrcaRouterWorker {
     [void]$script:workerPowerShell.AddParameter('Model', $Model)
     [void]$script:workerPowerShell.AddParameter('Question', $Question)
     [void]$script:workerPowerShell.AddParameter('Mode', $Mode)
+    [void]$script:workerPowerShell.AddParameter('History', $History)
     [void]$script:workerPowerShell.AddParameter('EventQueue', $script:workerEventQueue)
 
     $script:workerFinishedInUi = $false
@@ -442,7 +618,9 @@ function Invoke-OrcaRouterChat {
     }
 
     $resultTabs.SelectedIndex = 0
-    Set-ViewModelValue -Name 'Answer' -Value ''
+    $script:currentQuestion = $question
+    $pendingTranscript = Get-ConversationTranscript -PendingQuestion $question
+    Set-ViewModelValue -Name 'Answer' -Value $pendingTranscript
     Set-ViewModelValue -Name 'StatusText' -Value 'Processing...'
     $statusText.Foreground = '#64748B'
     Set-UiBusy -Busy $true
@@ -453,7 +631,7 @@ function Invoke-OrcaRouterChat {
         ViewModel = 'DataRowView / INotifyPropertyChanged'
     }
 
-    Start-OrcaRouterWorker -ApiKey $apiKey -Model $model -Question $question -Mode $mode
+    Start-OrcaRouterWorker -ApiKey $apiKey -Model $model -Question $question -Mode $mode -History (Get-HistorySnapshot)
 }
 
 $script:workerPollTimer.Add_Tick({
@@ -468,6 +646,47 @@ $clearTraceButton.Add_Click({
     $traceBox.Clear()
     Set-ViewModelValue -Name 'StatusText' -Value 'Ready'
     $statusText.Foreground = '#64748B'
+})
+
+$newChatButton.Add_Click({
+    Clear-ConversationHistory
+})
+
+$referralButton.Add_Click({
+    Start-Process $script:ReferralUrl
+})
+
+$apiKeyBox.Add_PasswordChanged({
+    Update-FirstRunPanel
+})
+
+$promptExampleBox.Add_SelectionChanged({
+    if ($promptExampleBox.SelectedIndex -le 0) {
+        return
+    }
+
+    $selectedText = [string](($promptExampleBox.SelectedItem).Content)
+    $blankLine = [Environment]::NewLine + [Environment]::NewLine
+
+    switch ($selectedText) {
+        '要約' {
+            $questionBox.Text = '次の文章を3行で要約してください。' + $blankLine + 'ここに文章を貼り付けてください。'
+        }
+        '初心者向け説明' {
+            $questionBox.Text = '次の内容を、専門用語を補足しながら初心者向けに説明してください。' + $blankLine + 'ここに内容を貼り付けてください。'
+        }
+        'コードレビュー' {
+            $questionBox.Text = '次のコードをレビューし、問題点・理由・改善例の順に説明してください。' + $blankLine + 'ここにコードを貼り付けてください。'
+        }
+        'JSON形式で整理' {
+            $questionBox.Text = '次の内容を整理し、JSON形式だけで返してください。' + $blankLine + 'ここに内容を貼り付けてください。'
+        }
+        '英訳' {
+            $questionBox.Text = '次の日本語を自然な英語に翻訳してください。' + $blankLine + 'ここに文章を貼り付けてください。'
+        }
+    }
+
+    [void]$questionBox.Focus()
 })
 
 $modeBox.Add_SelectionChanged({
@@ -561,8 +780,20 @@ if ($UiBindingCheck) {
             throw 'ResultTabs was not found.'
         }
 
-        if ($resultTabs.Items.Count -ne 2) {
-            throw "ResultTabs must contain Answer and Trace tabs."
+        if ($resultTabs.Items.Count -ne 3) {
+            throw "ResultTabs must contain Answer, Developer, and Trace tabs."
+        }
+
+        if ($null -eq $developerBox) {
+            throw 'DeveloperBox was not found.'
+        }
+
+        if ($null -eq $newChatButton) {
+            throw 'NewChatButton was not found.'
+        }
+
+        if ($null -eq $promptExampleBox) {
+            throw 'PromptExampleBox was not found.'
         }
 
         $resultTabs.SelectedIndex = 0
@@ -573,6 +804,13 @@ if ($UiBindingCheck) {
         }
 
         $resultTabs.SelectedIndex = 1
+        $window.UpdateLayout()
+
+        if ($developerBox.ActualHeight -lt 180) {
+            throw "Developer tab is too small: $($developerBox.ActualHeight)"
+        }
+
+        $resultTabs.SelectedIndex = 2
         $window.UpdateLayout()
 
         if ($traceBox.ActualHeight -lt 180) {
@@ -634,6 +872,10 @@ Add-Trace -Step 'READY' -Direction 'LOCAL' -Title 'サンプルを起動' -Data 
     Async = 'Background PowerShell runspace + DispatcherTimer'
     Note = 'APIキーはダミー値です。実行前に画面上で差し替えてください。'
 }
+
+Update-FirstRunPanel
+Update-HistoryStatus
+$developerBox.Text = 'Developer Information will appear after a request.'
 
 $window.Add_ContentRendered({
     [void]$questionBox.Focus()

@@ -16,6 +16,7 @@ param(
     [string]$Question = '',
     [ValidateSet('Chat', 'Streaming', 'Tool Calling')]
     [string]$Mode = 'Chat',
+    [object[]]$History = @(),
     [Parameter(Mandatory = $true)]
     [System.Collections.Concurrent.ConcurrentQueue[object]]$EventQueue
 )
@@ -106,6 +107,83 @@ function Get-PropertyValue {
     if ($null -eq $property) { return $null }
 
     return $property.Value
+}
+
+function New-ConversationMessages {
+    param([string]$CurrentQuestion)
+
+    $messages = @()
+
+    foreach ($turn in @($History)) {
+        if ($null -eq $turn) { continue }
+
+        $userText = Get-PropertyValue -Object $turn -Name 'User'
+        $assistantText = Get-PropertyValue -Object $turn -Name 'Assistant'
+
+        if (-not [string]::IsNullOrWhiteSpace([string]$userText)) {
+            $messages += [ordered]@{
+                role = 'user'
+                content = [string]$userText
+            }
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace([string]$assistantText)) {
+            $messages += [ordered]@{
+                role = 'assistant'
+                content = [string]$assistantText
+            }
+        }
+    }
+
+    $messages += [ordered]@{
+        role = 'user'
+        content = $CurrentQuestion
+    }
+
+    return $messages
+}
+
+function Merge-Usage {
+    param(
+        $FirstUsage,
+        $SecondUsage
+    )
+
+    if ($null -eq $FirstUsage -and $null -eq $SecondUsage) {
+        return $null
+    }
+
+    $result = [ordered]@{
+        prompt_tokens = 0
+        completion_tokens = 0
+        total_tokens = 0
+    }
+
+    $cost = 0.0
+    $hasCost = $false
+
+    foreach ($usage in @($FirstUsage, $SecondUsage)) {
+        if ($null -eq $usage) { continue }
+
+        foreach ($name in @('prompt_tokens', 'completion_tokens', 'total_tokens')) {
+            $value = Get-PropertyValue -Object $usage -Name $name
+            if ($null -ne $value) {
+                $result[$name] += [long]$value
+            }
+        }
+
+        $costValue = Get-PropertyValue -Object $usage -Name 'cost_usd'
+        if ($null -ne $costValue) {
+            $cost += [double]$costValue
+            $hasCost = $true
+        }
+    }
+
+    if ($hasCost) {
+        $result['cost_usd'] = $cost
+    }
+
+    return [pscustomobject]$result
 }
 
 function Get-ResponseHeaders {
@@ -292,6 +370,7 @@ function New-JsonRequest {
 
     $request.Headers.Authorization =
         [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $ApiKey)
+    [void]$request.Headers.TryAddWithoutValidation('X-OrcaRouter-Include-Cost', 'true')
 
     $request.Content =
         [System.Net.Http.StringContent]::new(
@@ -368,27 +447,40 @@ function Invoke-Chat {
 
     $body = [ordered]@{
         model = $Model
-        messages = @(
-            [ordered]@{ role = 'user'; content = $Question }
-        )
+        messages = @(New-ConversationMessages -CurrentQuestion $Question)
     }
 
     Add-WorkerTrace -Step 'STEP 2' -Direction 'REQUEST' -Title '通常Chatリクエストを組み立て' -Data @{
         Endpoint = $apiEndpoint
         Authorization = 'Bearer {0}' -f (Mask-ApiKey -Value $ApiKey)
+        HistoryTurns = @($History).Count
+        IncludeCost = $true
         Body = $body
     }
 
-    $result = Invoke-JsonRequest -Body $body -Stopwatch $Stopwatch -TraceTitle '通常Chat POSTを送信'
-    $answer = Get-AssistantText -ResponseJson $result.Json
-    $usage = Get-PropertyValue -Object $result.Json -Name 'usage'
+    $httpResult = Invoke-JsonRequest -Body $body -Stopwatch $Stopwatch -TraceTitle '通常Chat POSTを送信'
+    $answer = Get-AssistantText -ResponseJson $httpResult.Json
+    $usage = Get-PropertyValue -Object $httpResult.Json -Name 'usage'
+    $actualModel = Get-PropertyValue -Object $httpResult.Json -Name 'model'
+
+    if ([string]::IsNullOrWhiteSpace([string]$actualModel)) {
+        $actualModel = $Model
+    }
 
     Add-WorkerTrace -Step 'STEP 5' -Direction 'LOCAL' -Title 'Assistantメッセージを解析' -Data @{
         AnswerChars = $answer.Length
+        HistoryTurns = @($History).Count
         Usage = if ($null -ne $usage) { $usage } else { '(usage not returned)' }
     }
 
-    return $answer
+    return [pscustomobject]@{
+        Answer = $answer
+        Usage = $usage
+        Request = $body
+        Response = $httpResult.Json
+        HttpStatus = $httpResult.Status
+        ActualModel = [string]$actualModel
+    }
 }
 
 function Invoke-Streaming {
@@ -396,9 +488,7 @@ function Invoke-Streaming {
 
     $body = [ordered]@{
         model = $Model
-        messages = @(
-            [ordered]@{ role = 'user'; content = $Question }
-        )
+        messages = @(New-ConversationMessages -CurrentQuestion $Question)
         stream = $true
         stream_options = [ordered]@{ include_usage = $true }
     }
@@ -457,6 +547,7 @@ function Invoke-Streaming {
         $answer = [System.Text.StringBuilder]::new()
         $eventCount = 0
         $usage = $null
+        $latestChunk = $null
 
         while (-not $reader.EndOfStream) {
             $line = $reader.ReadLine()
@@ -477,6 +568,7 @@ function Invoke-Streaming {
 
             try {
                 $chunk = $payload | ConvertFrom-Json
+                $latestChunk = $chunk
             }
             catch {
                 Add-WorkerTrace -Step 'STEP 4' -Direction 'STREAM' -Title 'JSON化できないSSE data' -Data $payload
@@ -525,7 +617,24 @@ function Invoke-Streaming {
             Usage = if ($null -ne $usage) { $usage } else { '(usage not returned)' }
         }
 
-        return $answer.ToString()
+        $actualModel = Get-PropertyValue -Object $latestChunk -Name 'model'
+        if ([string]::IsNullOrWhiteSpace([string]$actualModel)) {
+            $actualModel = $Model
+        }
+
+        return [pscustomobject]@{
+            Answer = $answer.ToString()
+            Usage = $usage
+            Request = $body
+            Response = [pscustomobject]@{
+                stream = $true
+                latest_event = $latestChunk
+                usage = $usage
+                note = 'Streaming uses SSE; latest_event is the final parsed event observed by this sample.'
+            }
+            HttpStatus = $status
+            ActualModel = [string]$actualModel
+        }
     }
     finally {
         if ($null -ne $reader) { $reader.Dispose() }
@@ -580,9 +689,7 @@ function Invoke-ToolCalling {
 
     $firstBody = [ordered]@{
         model = $Model
-        messages = @(
-            [ordered]@{ role = 'user'; content = $Question }
-        )
+        messages = @(New-ConversationMessages -CurrentQuestion $Question)
         tools = $tools
         tool_choice = [ordered]@{
             type = 'function'
@@ -642,7 +749,7 @@ function Invoke-ToolCalling {
     }
 
     $secondMessages = @(
-        [ordered]@{ role = 'user'; content = $Question },
+        @(New-ConversationMessages -CurrentQuestion $Question)
         [ordered]@{
             role = 'assistant'
             content = Get-PropertyValue -Object $assistantMessage -Name 'content'
@@ -659,14 +766,35 @@ function Invoke-ToolCalling {
 
     $second = Invoke-JsonRequest -Body $secondBody -Stopwatch $Stopwatch -TraceTitle 'Tool Calling 2回目を送信'
     $answer = Get-AssistantText -ResponseJson $second.Json
-    $usage = Get-PropertyValue -Object $second.Json -Name 'usage'
+    $firstUsage = Get-PropertyValue -Object $first.Json -Name 'usage'
+    $secondUsage = Get-PropertyValue -Object $second.Json -Name 'usage'
+    $usage = Merge-Usage -FirstUsage $firstUsage -SecondUsage $secondUsage
+    $actualModel = Get-PropertyValue -Object $second.Json -Name 'model'
+
+    if ([string]::IsNullOrWhiteSpace([string]$actualModel)) {
+        $actualModel = $Model
+    }
 
     Add-WorkerTrace -Step 'STEP 5' -Direction 'LOCAL' -Title 'Tool Calling後の最終回答を解析' -Data @{
         AnswerChars = $answer.Length
+        HistoryTurns = @($History).Count
         Usage = if ($null -ne $usage) { $usage } else { '(usage not returned)' }
     }
 
-    return $answer
+    return [pscustomobject]@{
+        Answer = $answer
+        Usage = $usage
+        Request = [pscustomobject]@{
+            request_1 = $firstBody
+            request_2 = $secondBody
+        }
+        Response = [pscustomobject]@{
+            response_1 = $first.Json
+            response_2 = $second.Json
+        }
+        HttpStatus = $second.Status
+        ActualModel = [string]$actualModel
+    }
 }
 
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
@@ -687,24 +815,30 @@ try {
     if ([string]::IsNullOrWhiteSpace($Question)) { throw '質問を入力してください。' }
 
     if ($Mode -eq 'Streaming') {
-        $answer = Invoke-Streaming -Stopwatch $stopwatch
+        $result = Invoke-Streaming -Stopwatch $stopwatch
     }
     elseif ($Mode -eq 'Tool Calling') {
-        $answer = Invoke-ToolCalling -Stopwatch $stopwatch
+        $result = Invoke-ToolCalling -Stopwatch $stopwatch
     }
     else {
-        $answer = Invoke-Chat -Stopwatch $stopwatch
+        $result = Invoke-Chat -Stopwatch $stopwatch
     }
 
     Add-WorkerTrace -Step 'STEP 6' -Direction 'LOCAL' -Title 'バックグラウンド処理を完了' -Data @{
         Mode = $Mode
         Completed = $true
+        HistoryTurns = @($History).Count
         TotalElapsedMs = $stopwatch.ElapsedMilliseconds
     }
 
     Add-WorkerEvent -Type 'Completed' -Values @{
-        Answer = $answer
+        Answer = [string]$result.Answer
         TotalElapsedMs = $stopwatch.ElapsedMilliseconds
+        HttpStatus = $result.HttpStatus
+        Usage = $result.Usage
+        Request = $result.Request
+        Response = $result.Response
+        ActualModel = [string]$result.ActualModel
     }
 }
 catch {

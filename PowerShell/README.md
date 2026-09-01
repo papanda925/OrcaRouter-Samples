@@ -84,13 +84,14 @@ Window
        ├─ GridSplitter
        ├─ RESULT
        │    ├─ 回答 Tab
+       │    ├─ Developer Tab
        │    └─ トレース Tab
        └─ Status
 ```
 
 `PageScrollViewer` は `VerticalScrollBarVisibility="Auto"` です。最大化・元に戻す・画面解像度・Windowsの表示倍率などによって縦方向に収まらない場合だけ、**ウィンドウ右側に縦スクロールバー**が表示されます。これで下部のRESULTやStatusまで移動できます。
 
-RESULTは `TabControl` です。**回答** と **トレース** をタブで切り替えます。さらに長いAnswerやTraceは、各TextBox内部のスクロールバーで内容だけを移動できます。
+RESULTは `TabControl` です。**回答**、**Developer**、**トレース** をタブで切り替えます。さらに長いAnswerやTraceは、各TextBox内部のスクロールバーで内容だけを移動できます。
 
 つまりスクロールは役割を分けています。
 
@@ -177,6 +178,12 @@ xxx-your-orcarouter-api-key-xxx
 
 画面上で実APIキーへ差し替えてください。既定モデルは `orcarouter/free` です。
 
+APIキーがダミー値の間は、API Key欄の下に初回利用者向けリンクを表示します。
+
+**[OrcaRouterを初めて利用する / APIキーを作成する](https://www.orcarouter.ai/ref/ref_5074f764e512c8dd3d9d)**
+
+> 上記は本プロジェクトの紹介リンクです。紹介経由で登録されたWorkspaceの利用に応じて、開発者へ報酬が還元される場合があります。既にAPIキーを持っている場合は、そのキーをそのまま入力してください。
+
 **Web版やVBA版へ入力したAPIキーはPowerShell版へ自動共有されません。** 起動したWPF画面のAPI Key欄へ個別に入力してください。
 
 ローカル検証用に `OrcaRouterChat.ps1` へ一時的に埋め込む場所も明示しています。詳しくは [APIキーの設定方法](../docs/api-key-setup.md) を参照してください。
@@ -190,6 +197,14 @@ xxx-your-orcarouter-api-key-xxx
 Tool Callingはモデル対応状況やQuotaによって、ローカル関数を実行する前にAPI側から拒否される場合があります。Raw response / Trace の `HTTP Status` と `error.code` を確認してください。
 
 モードの違いと各方式の比較は [はじめて使うときの手順](../docs/getting-started.md) を参照してください。
+
+## Multi-turn Chat / New Chat / Prompt examples / Developer
+
+WPF側で直近10往復の user / assistant 履歴を保持し、Background Runspaceへスナップショットを渡して次回の `messages` に再送します。**新しいチャット** はこのローカル履歴だけをクリアし、ModelやAPI Keyは残します。
+
+Prompt exampleから要約、初心者向け説明、コードレビュー、JSON、英訳の雛形をQuestionへ入れられます。
+
+Developerタブには HTTP Status、Elapsed、Model、Prompt / Completion / Total Tokens、Cost、Request JSON、Response JSON を表示します。CostはOrcaRouterの `X-OrcaRouter-Include-Cost: true` を利用し、返らない場合は `(not returned)` と表示します。
 
 ## Common processing steps
 
@@ -244,7 +259,8 @@ HTTPエラーは `error.code`、`error.type`、`Retry-After` 等を可能な範�
 
 - Documentation: https://docs.orcarouter.ai/introduction
 - Quickstart: https://docs.orcarouter.ai/getting-started/quickstart
-- Get an API key: https://docs.orcarouter.ai/getting-started/get-api-key
+- Start OrcaRouter (project referral link): https://www.orcarouter.ai/ref/ref_5074f764e512c8dd3d9d
+- API key documentation: https://docs.orcarouter.ai/getting-started/get-api-key
 - Models: https://www.orcarouter.ai/models
 - Streaming: https://docs.orcarouter.ai/advanced/streaming
 - Tool Calling: https://docs.orcarouter.ai/advanced/tool-calling

@@ -126,6 +126,7 @@ Public Sub SendOrcaRouterStreaming()
         .setRequestHeader "Authorization", "Bearer " & apiKey
         .setRequestHeader "Content-Type", "application/json; charset=utf-8"
         .setRequestHeader "Accept", "text/event-stream"
+        .setRequestHeader "X-OrcaRouter-Include-Cost", "true"
         .Send StringToUtf8Bytes(requestBody)
     End With
 
@@ -935,6 +936,7 @@ Private Sub SendJsonRequest( _
         .Open "POST", API_ENDPOINT_ADV, True
         .setRequestHeader "Authorization", "Bearer " & apiKey
         .setRequestHeader "Content-Type", "application/json; charset=utf-8"
+        .setRequestHeader "X-OrcaRouter-Include-Cost", "true"
         .Send StringToUtf8Bytes(requestBody)
 
     End With

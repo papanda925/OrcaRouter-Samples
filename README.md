@@ -7,7 +7,7 @@
 
 OrcaRouter API を **Web / PowerShell / Excel VBA** から呼び出す、学習者向けのサンプル集です。
 
-3つの実装は、言語やUIが違っても処理を比較しやすいように、同じ6ステップ・同じ用語・同じTrace方針にそろえています。現在は **Chat / Streaming / Tool Calling** の3モードを実装しています。
+3つの実装は、言語やUIが違っても処理を比較しやすいように、同じ6ステップ・同じ用語・同じTrace方針にそろえています。現在は **Chat / Streaming / Tool Calling** の3モードに加え、初回セットアップ、複数ターンChat、最大10往復の履歴、新しいチャット、プロンプト例、Developer Information を実装しています。
 
 初めて動かす場合は、最初に **[はじめて使うときの手順](docs/getting-started.md)** を読んでください。VBAの `SetupOrcaRouterSample`、PowerShellの `-STA` / Execution Policy、Webローカルサーバー、APIキーの個別入力など、実際につまずきやすい点をまとめています。
 
@@ -18,7 +18,7 @@ OrcaRouter API を **Web / PowerShell / Excel VBA** から呼び出す、学習�
 | Cross-environment | Web / PowerShell-WPF-XAML / Excel VBA の3方式を同じ考え方で比較 |
 | OrcaRouter integration | `/v1/chat/completions` を直接利用し、既定モデルは `orcarouter/free` |
 | API features | Chat / Streaming / Tool Calling |
-| Observability | Request / Response / Raw JSON / HTTP Trace を確認可能 |
+| Observability | HTTP Status / Elapsed / Token / Cost / Request JSON / Response JSON / HTTP Trace を確認可能 |
 | PowerShell UI | Data Binding / `INotifyPropertyChanged` / Background Runspace |
 | Safety | 実APIキーをソースへ保存しない設計、CIで秘密情報・個人パスを検査 |
 | License | MIT License |
@@ -44,6 +44,29 @@ OrcaRouter API を **Web / PowerShell / Excel VBA** から呼び出す、学習�
 **APIキーは3方式で自動共有されません。** Web / PowerShell / VBA のそれぞれへ個別に入力してください。
 
 詳しい手順: [docs/getting-started.md](docs/getting-started.md)
+
+### APIキーをまだ持っていない場合
+
+初回セットアップでは、次の紹介リンクから OrcaRouter を開いてアカウント/APIキーを準備できます。
+
+**[OrcaRouterを初めて利用する / APIキーを作成する](https://www.orcarouter.ai/ref/ref_5074f764e512c8dd3d9d)**
+
+> このURLは本プロジェクトの紹介リンクです。紹介経由で登録されたWorkspaceの利用に応じて、プロジェクト開発者へ報酬が還元される場合があります。すでにOrcaRouterのAPIキーを持っている場合は、そのキーをそのまま各サンプルへ入力してください。
+
+現在はこの紹介URLを設定しています。Built with OrcaRouter / Partner Dashboard 側のリポジトリ切替後にもURLを再確認し、必要があれば差し替えます。
+
+## Priority 1 - beginner-friendly, developer-visible
+
+通常画面はできるだけ簡単に保ち、APIの内部を見たい人だけ詳細へ進める構成です。
+
+- **First run** - APIキーが未設定のときに、控えめな初回案内を表示
+- **Multi-turn Chat** - アプリ側が会話履歴を保持し、次回の `messages` に再送
+- **10-turn limit** - user + assistant を1往復として、直近10往復のみ保持
+- **New chat** - APIへリセット電文は送らず、アプリ側の履歴だけをクリア
+- **Prompt examples** - 要約、初心者向け説明、コードレビュー、JSON、翻訳
+- **Developer Information** - HTTP Status、Elapsed、Model、Prompt Tokens、Completion Tokens、Total Tokens、Cost、Request JSON、Response JSON
+
+Cost取得では OrcaRouter のChat Completions仕様にある `X-OrcaRouter-Include-Cost: true` を使用します。APIから `usage.cost_usd` が返らない場合は、推測せず `(not returned)` と表示します。
 
 ## Chat / Streaming / Tool Calling
 
@@ -74,7 +97,8 @@ Authorization: Bearer <API_KEY>
 - Japanese site: https://www.orcarouter.ai/ja
 - Documentation: https://docs.orcarouter.ai/introduction
 - Quickstart: https://docs.orcarouter.ai/getting-started/quickstart
-- Get an API key: https://docs.orcarouter.ai/getting-started/get-api-key
+- Start OrcaRouter (project referral link): https://www.orcarouter.ai/ref/ref_5074f764e512c8dd3d9d
+- API key documentation: https://docs.orcarouter.ai/getting-started/get-api-key
 - Models: https://www.orcarouter.ai/models
 - Streaming: https://docs.orcarouter.ai/advanced/streaming
 - Tool Calling: https://docs.orcarouter.ai/advanced/tool-calling
@@ -84,10 +108,12 @@ Authorization: Bearer <API_KEY>
 
 各サンプルは、同じ画面または同じ操作単位で次の内容を確認しやすいようにしています。
 
-1. **質問**
+1. **質問と最大10往復の会話履歴**
 2. **OrcaRouterからの回答**
-3. **Raw response / Raw JSON**
-4. **処理ステップ / HTTP電文のTrace**
+3. **Developer Information（HTTP Status / Elapsed / Token / Cost）**
+4. **Request JSON / Response JSON**
+5. **Raw response / Raw JSON**
+6. **処理ステップ / HTTP電文のTrace**
 
 Traceには学習用として、通常より多めのデバッグ情報を残します。
 
@@ -226,6 +252,6 @@ VBA版も学習しやすさを優先してシートからAPIキーを読み取�
 - rate-limit handling
 - structured logging
 - proxy / backend architecture
-- conversation history
+- persistent / long-term conversation storage
 - unit / integration tests
 - organization-specific security controls
