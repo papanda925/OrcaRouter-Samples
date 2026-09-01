@@ -229,7 +229,7 @@ function Get-AssistantText {
 
 $xamlPath = Join-Path $PSScriptRoot 'MainWindow.xaml'
 if (-not (Test-Path -LiteralPath $xamlPath)) {
-    throw "XAML file was not found: $xamlPath"
+    throw 'MainWindow.xaml was not found next to OrcaRouterChat.ps1.'
 }
 
 [xml]$xaml = Get-Content -LiteralPath $xamlPath -Raw -Encoding UTF8
@@ -737,6 +737,48 @@ function Invoke-ToolCallingMode {
     return $assistantText
 }
 
+function Protect-LocalTraceText {
+    param(
+        [AllowNull()]
+        [string]$Text
+    )
+
+    if ([string]::IsNullOrEmpty($Text)) {
+        return $Text
+    }
+
+    $sanitized = $Text
+
+    # Keep traces useful without exposing a local user name or repository path.
+    # Replace the most common machine-specific path roots before displaying an
+    # exception/stack trace in the sample UI.
+    $replacements = @(
+        [pscustomobject]@{
+            Value = $PSScriptRoot
+            Placeholder = '<repository-root>\PowerShell'
+        },
+        [pscustomobject]@{
+            Value = [Environment]::GetFolderPath('UserProfile')
+            Placeholder = '<USERPROFILE>'
+        },
+        [pscustomobject]@{
+            Value = $env:HOME
+            Placeholder = '<HOME>'
+        }
+    )
+
+    foreach ($replacement in $replacements) {
+        if (-not [string]::IsNullOrWhiteSpace($replacement.Value)) {
+            $sanitized = $sanitized.Replace(
+                [string]$replacement.Value,
+                [string]$replacement.Placeholder
+            )
+        }
+    }
+
+    return $sanitized
+}
+
 function Invoke-OrcaRouterChat {
     $apiKey = $apiKeyBox.Password.Trim()
     $model = $modelBox.Text.Trim()
@@ -783,15 +825,20 @@ function Invoke-OrcaRouterChat {
             $details = $exception.Data['OrcaErrorDetails']
         }
 
+        $safeMessage = Protect-LocalTraceText -Text $exception.Message
+        $safeScriptStack = Protect-LocalTraceText -Text $_.ScriptStackTrace
+        $safePosition = Protect-LocalTraceText -Text $_.InvocationInfo.PositionMessage
+
         Add-Trace -Step 'ERROR' -Direction 'ERROR' -Title '処理中にエラーが発生' -Data ([ordered]@{
-            Message = $exception.Message
+            Message = $safeMessage
             Type = $exception.GetType().FullName
             OrcaErrorDetails = $details
-            ScriptStack = $_.ScriptStackTrace
-            Position = $_.InvocationInfo.PositionMessage
+            ScriptStack = $safeScriptStack
+            Position = $safePosition
+            Privacy = 'Local user/repository path roots are replaced with placeholders.'
         })
 
-        $answerBox.Text = "ERROR: $($exception.Message)"
+        $answerBox.Text = "ERROR: $safeMessage"
         $statusText.Text = 'Error - Trace を確認してください'
         $statusText.Foreground = '#B42318'
     }

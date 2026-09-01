@@ -71,6 +71,98 @@ jobs:
           grep -q 'xxx-your-orcarouter-api-key-xxx' PowerShell/OrcaRouterChat.ps1
           grep -q 'xxx-your-orcarouter-api-key-xxx' VBA/OrcaRouterSample.bas
 
+      - name: Check for accidental secrets and personal paths
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          import subprocess
+          import sys
+
+          tracked = subprocess.check_output(
+              ["git", "ls-files"],
+              text=True,
+              encoding="utf-8",
+          ).splitlines()
+
+          real_key_re = re.compile(r"sk-orca-[A-Za-z0-9_-]{24,}")
+          windows_user_re = re.compile(
+              r"[A-Za-z]:\\Users\\([^\\/\r\n<>]+)",
+              re.I,
+          )
+          unix_home_re = re.compile(r"/home/([^/\s<>]+)")
+          email_re = re.compile(
+              r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b",
+              re.I,
+          )
+
+          allowed_dummy_users = {
+              "user",
+              "username",
+              "example-user",
+              "actual-user-name",
+          }
+
+          failed = False
+
+          for file_name in tracked:
+              path = Path(file_name)
+
+              # Do not scan this workflow source itself: it necessarily contains
+              # the regex patterns and example placeholders used by the audit.
+              if file_name == ".github/workflows/validate-samples.yml":
+                  continue
+
+              if not path.is_file():
+                  continue
+
+              try:
+                  text = path.read_text(encoding="utf-8")
+              except UnicodeDecodeError:
+                  continue
+
+              for match in real_key_re.finditer(text):
+                  print(
+                      f"{path}: real-looking OrcaRouter API key found "
+                      f"near offset {match.start()}"
+                  )
+                  failed = True
+
+              for match in windows_user_re.finditer(text):
+                  user_name = match.group(1).lower()
+                  if user_name not in allowed_dummy_users:
+                      print(
+                          f"{path}: concrete Windows user path found: "
+                          f"C:\\Users\\{match.group(1)}\\..."
+                      )
+                      failed = True
+
+              for match in unix_home_re.finditer(text):
+                  user_name = match.group(1).lower()
+                  if user_name not in allowed_dummy_users:
+                      print(
+                          f"{path}: concrete Unix home path found: "
+                          f"/home/{match.group(1)}/..."
+                      )
+                      failed = True
+
+              for match in email_re.finditer(text):
+                  address = match.group(0).lower()
+                  if not address.endswith("@example.com"):
+                      print(f"{path}: email address found: {match.group(0)}")
+                      failed = True
+
+          if failed:
+              print(
+                  "Replace secrets/personal values with placeholders such as "
+                  "<API_KEY>, <USER>, <repository-root>, or example@example.com."
+              )
+              sys.exit(1)
+
+          print("Secret/personal-path audit passed.")
+          PY
+
       - name: Check VBA advanced entry points exist
         shell: bash
         run: |

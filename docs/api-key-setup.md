@@ -8,6 +8,8 @@ xxx-your-orcarouter-api-key-xxx
 
 OrcaRouterで発行した実APIキーを使う方法は、次の2通りです。
 
+**Web / PowerShell / VBA のAPIキー入力欄は独立しています。** 1つのサンプルへ入力したキーが、別のサンプルへ自動共有されることはありません。
+
 1. **推奨:** 起動後の画面でAPIキーを入力する
 2. **ローカル検証限定:** 自分のPC上だけでソースにAPIキーを一時的に埋め込む
 
@@ -30,6 +32,21 @@ sk-orca-xxxx****xxxx
 完全なキーを手元に保存していない場合は、OrcaRouter側で新しいAPIキーを作成してください。
 
 このREADME、Issue、Chat、スクリーンショットなどへ完全なAPIキーを貼り付ける必要はありません。
+
+スクリーンショットやログを共有するときは、APIキー欄を隠すか、次のようなダミー値へ置き換えてください。
+
+```text
+xxx-your-orcarouter-api-key-xxx
+<API_KEY>
+```
+
+ローカルパスも個人のユーザー名を含む絶対パスではなく、次のように記載してください。
+
+```text
+<repository-root>
+C:\Users\<USER>\...
+/home/<USER>/...
+```
 
 ---
 
@@ -63,7 +80,7 @@ Web画面の **「キーのファイルを読込」** を押し、OrcaRouter Con
 - .env形式
 - その他、本文中に完全な `sk-orca-...` が含まれるテキストファイル
 
-読み込み時にTraceへ出すのは、ファイル名・サイズ・マスク済みキーだけです。**ファイル本文と完全なAPIキーはTraceへ出力しません。**
+読み込み時にTraceへ出すのは、ローカルファイルを選択したこと・ファイルサイズ・マスク済みキーだけです。**ファイル名、ファイル本文、完全なAPIキーはTraceへ出力しません。**
 
 この処理はブラウザ内で完結し、キーのファイル自体をGitHubやこのリポジトリへアップロードする必要はありません。
 
@@ -278,3 +295,31 @@ git grep -n -E "sk-orca-|API_KEY|DefaultApiKey|DEFAULT_API_KEY"
 このリポジトリでは、学習時にコードを追いやすくするため「画面入力」と「ローカル限定の直書き」の両方を説明しています。
 
 本番運用では、環境変数、Windows Credential Manager、CI/CD Secret、サーバー側Secret管理などへ移行してください。
+
+# 7. 個人情報・ローカルパスのダミー化
+
+README、Issue、Pull Request、Trace例、スクリーンショットへ次の情報をそのまま掲載しないでください。
+
+- 完全なAPIキー
+- 個人名
+- メールアドレス
+- 電話番号
+- PCのユーザー名
+- 個人PC固有の絶対ファイルパス
+- 秘密情報を含むRaw JSONやTrace
+
+例:
+
+```text
+NG:  C:\Users\actual-user-name\Documents\OrcaRouter-Samples
+OK:  <repository-root>
+
+NG:  /home/<USER>/OrcaRouter-Samples
+OK:  <repository-root>
+
+NG:  sk-orca-<real-secret-value>
+OK:  xxx-your-orcarouter-api-key-xxx
+```
+
+このリポジトリのGitHub Actionsでは、現在のソースに実キーらしい文字列や代表的な個人環境パスが混入していないかを自動チェックします。ただし、自動チェックだけに依存せず、公開前に `git diff` とスクリーンショットを目視確認してください。
+

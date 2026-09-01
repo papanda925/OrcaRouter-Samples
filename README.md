@@ -4,6 +4,8 @@ OrcaRouter API を **Web / PowerShell / Excel VBA** から呼び出す、学習�
 
 3つの実装は、言語やUIが違っても処理を比較しやすいように、同じ6ステップ・同じ用語・同じTrace方針にそろえています。現在は **Chat / Streaming / Tool Calling** の3モードを実装しています。
 
+初めて動かす場合は、最初に **[はじめて使うときの手順](docs/getting-started.md)** を読んでください。VBAの `SetupOrcaRouterSample`、PowerShellの `-STA` / Execution Policy、Webローカルサーバー、APIキーの個別入力など、実際につまずきやすい点をまとめています。
+
 ## Samples
 
 | Sample | UI | HTTP implementation | Status |
@@ -11,6 +13,40 @@ OrcaRouter API を **Web / PowerShell / Excel VBA** から呼び出す、学習�
 | [Web](Web/README.md) | HTML / CSS | Browser `fetch` / ReadableStream | Chat / Streaming / Tool Calling |
 | [PowerShell](PowerShell/README.md) | WPF / XAML | `System.Net.Http.HttpClient` | Chat / Streaming / Tool Calling |
 | [VBA](VBA/README.md) | Excel worksheet / cells | `MSXML2.XMLHTTP.6.0` | Chat / Streaming / Tool Calling |
+
+## First run checklist
+
+| Sample | 最初に必要なこと | APIキー入力 |
+|---|---|---|
+| Web | `Web\start-server.ps1` でローカルサーバーを起動 | Web画面へ入力 |
+| PowerShell | `-STA` で起動。必要に応じて `-ExecutionPolicy Bypass` | WPF画面へ入力 |
+| VBA | 2つのBASをimport → compile → **`SetupOrcaRouterSample` を実行** | `OrcaRouter Chat` シート B3 |
+
+**APIキーは3方式で自動共有されません。** Web / PowerShell / VBA のそれぞれへ個別に入力してください。
+
+詳しい手順: [docs/getting-started.md](docs/getting-started.md)
+
+## Chat / Streaming / Tool Calling
+
+| Mode | 内容 | API呼び出しの特徴 |
+|---|---|---|
+| Chat | 完成した回答を1つのJSONで受信 | 基本のChat Completions |
+| Streaming | SSEで回答を少しずつ受信 | `stream: true`、`delta.content` を順次処理 |
+| Tool Calling | モデルがローカルToolを要求し、その結果を使って最終回答 | 通常2回のAPI呼び出し |
+
+Tool CallingのサンプルToolは `calculate_sum(a, b)` です。モデルや無料ルーターの状況によっては、Tool実行前にQuotaやモデル対応の理由でAPI側から拒否されることがあります。
+
+## Official OrcaRouter links
+
+- Official site: https://www.orcarouter.ai/
+- Japanese site: https://www.orcarouter.ai/ja
+- Documentation: https://docs.orcarouter.ai/introduction
+- Quickstart: https://docs.orcarouter.ai/getting-started/quickstart
+- Get an API key: https://docs.orcarouter.ai/getting-started/get-api-key
+- Models: https://www.orcarouter.ai/models
+- Streaming: https://docs.orcarouter.ai/advanced/streaming
+- Tool Calling: https://docs.orcarouter.ai/advanced/tool-calling
+- Errors: https://docs.orcarouter.ai/operations/errors
 
 ## What you can see
 
@@ -100,6 +136,7 @@ orcarouter/free
 ```text
 OrcaRouter-Samples/
 ├─ docs/
+│  ├─ getting-started.md
 │  ├─ processing-flow.md
 │  ├─ advanced-features.md
 │  └─ api-key-setup.md
@@ -137,7 +174,7 @@ OrcaRouter-Samples/
 
 ## Security notes
 
-このリポジトリに実APIキーをコミットしないでください。
+このリポジトリに実APIキーをコミットしないでください。APIキー、個人名、メールアドレス、PC固有の絶対パスなどを README / Issue / Trace の例へ貼る場合も、`<API_KEY>`、`<USER>`、`<repository-root>` などへダミー化してください。
 
 特にWeb版は、学習のためブラウザからAPIを直接呼び出す構成です。ブラウザへ渡した秘密情報は利用者から参照できるため、実APIキーを埋め込んだ状態で公開してはいけません。本番WebアプリではAPIキーをサーバー側へ置いてください。
 

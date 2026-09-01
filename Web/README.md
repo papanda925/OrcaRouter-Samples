@@ -32,6 +32,8 @@ Raw JSON欄はVBA版と同じ考え方で、Chatではレスポンス本文全�
 
 ## Quick start
 
+まずローカルHTTPサーバーを起動してからブラウザで開きます。HTMLファイルを直接ダブルクリックするより、`start-server.ps1` または `python -m http.server` を使う方法を推奨します。
+
 APIキーの初期値はダミーです。
 
 ```text
@@ -40,7 +42,9 @@ xxx-your-orcarouter-api-key-xxx
 
 OrcaRouterで発行したAPIキーへ画面上で差し替えてください。
 
-OrcaRouter Console からAPIキーのファイルをダウンロードした場合は、Web画面の **「キーのファイルを読込」** を押して、そのファイルを選択できます。ブラウザがファイルをローカルで読み取り、`sk-orca-...` 形式の完全なキーをAPI Key欄へ設定します。ファイル本文や完全なキーはTraceへ出力しません。
+**PowerShell版やVBA版へ入力したAPIキーはWeb版へ自動共有されません。** Web画面へ個別に入力してください。
+
+OrcaRouter Console からAPIキーのファイルをダウンロードした場合は、Web画面の **「キーのファイルを読込」** を押して、そのファイルを選択できます。ブラウザがファイルをローカルで読み取り、`sk-orca-...` 形式の完全なキーをAPI Key欄へ設定します。**ファイル名、ファイル本文、完全なキーはTraceへ出力しません。** Traceにはローカルファイルが選択されたこと、サイズ、マスク済みキーだけを表示します。
 
 ローカル検証用に `Web/app.js` へ一時的に埋め込む方法も用意しています。詳しくは [APIキーの設定方法](../docs/api-key-setup.md) を参照してください。
 
@@ -81,6 +85,24 @@ python -m http.server 8000
 ブラウザに渡した秘密情報は利用者から参照できます。本番用途では、APIキーをサーバー側で保管し、ブラウザからは自分のバックエンドを呼び出す構成にしてください。
 
 また、API側のCORS設定によってはブラウザからの直接呼び出しが拒否されることがあります。その場合も本番向けにはサーバー側プロキシ方式を利用してください。
+
+## 初回テストのおすすめ順
+
+1. `Chat` で短い固定回答を確認
+2. `Streaming` で回答が逐次表示されることを確認
+3. `Tool Calling` で `calculate_sum(123, 456)` を確認
+
+Chatの初期質問は、モデル知識に依存しない短い動作確認用です。
+
+```text
+日本語で「こんにちは。Web版Chatのテストです。」とだけ答えてください。
+```
+
+StreamingではAnswerが少しずつ増え、Raw JSONには最新のSSE JSONイベントが表示されます。
+
+Tool Callingでは、モデルや無料ルーターのQuota状況によってローカル関数実行前にAPI側から拒否されることがあります。その場合はRaw JSON / Trace の `HTTP Status` と `error.code` を確認してください。
+
+3方式共通の手順とモード比較は [はじめて使うときの手順](../docs/getting-started.md) を参照してください。
 
 ## Common processing steps
 
@@ -131,3 +153,13 @@ Tool Callingではローカル関数 `calculate_sum(a, b)` を公開し、モデ
 通常Chat / Tool Callingの待機上限は120秒、Streamingは90秒です。
 
 詳細: [Advanced API tests](../docs/advanced-features.md)
+
+## Official OrcaRouter links
+
+- Documentation: https://docs.orcarouter.ai/introduction
+- Quickstart: https://docs.orcarouter.ai/getting-started/quickstart
+- Get an API key: https://docs.orcarouter.ai/getting-started/get-api-key
+- Models: https://www.orcarouter.ai/models
+- Streaming: https://docs.orcarouter.ai/advanced/streaming
+- Tool Calling: https://docs.orcarouter.ai/advanced/tool-calling
+- Errors: https://docs.orcarouter.ai/operations/errors

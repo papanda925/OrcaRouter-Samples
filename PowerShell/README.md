@@ -31,6 +31,8 @@ Model欄は自由入力なので、無料ルーターと有料モデルで同じ
 
 Windows PowerShell 5.1 または Windows 上の PowerShell 7 で実行します。
 
+このサンプルはWPF/XAMLを使うため、**`-STA` 付きで起動**してください。PowerShellの実行ポリシーで `.ps1` が止められる環境では、Windows PowerShell 5.1 の例のように、そのプロセスだけ `-ExecutionPolicy Bypass` を指定します。システム全体の実行ポリシーを恒久変更する必要はありません。
+
 ```powershell
 cd PowerShell
 powershell.exe -STA -ExecutionPolicy Bypass -File .\OrcaRouterChat.ps1
@@ -50,7 +52,19 @@ xxx-your-orcarouter-api-key-xxx
 
 画面上で実APIキーへ差し替えてください。既定モデルは `orcarouter/free` です。
 
+**Web版やVBA版へ入力したAPIキーはPowerShell版へ自動共有されません。** 起動したWPF画面のAPI Key欄へ個別に入力してください。
+
 ローカル検証用に `OrcaRouterChat.ps1` へ一時的に埋め込む場所も明示しています。詳しくは [APIキーの設定方法](../docs/api-key-setup.md) を参照してください。
+
+## 初回テストのおすすめ順
+
+1. `Chat` で短い固定回答を試す
+2. `Streaming` で回答が少しずつ表示されることを確認する
+3. `Tool Calling` で `calculate_sum(123, 456)` を試す
+
+Tool Callingはモデル対応状況やQuotaによって、ローカル関数を実行する前にAPI側から拒否される場合があります。Raw response / Trace の `HTTP Status` と `error.code` を確認してください。
+
+モードの違いと各方式の比較は [はじめて使うときの手順](../docs/getting-started.md) を参照してください。
 
 ## Common processing steps
 
@@ -79,10 +93,10 @@ Web版・VBA版と同じ6ステップにそろえています。
 - raw response body
 - elapsed time
 - exception type
-- PowerShell script stack
-- invocation position
+- PowerShell script stack（ローカルのユーザー/リポジトリパスをプレースホルダー化）
+- invocation position（ローカルのユーザー/リポジトリパスをプレースホルダー化）
 
-実APIキーそのものはトレースに出力しません。
+実APIキーそのものはトレースに出力しません。エラーのStack/Positionにローカルパスが含まれる場合は、`<repository-root>` / `<USERPROFILE>` などへ置換してから画面へ表示します。
 
 ## API
 
@@ -100,3 +114,14 @@ Streamingでは `data:` SSE行を順に処理し、`choices[0].delta.content` �
 HTTPエラーは `error.code`、`error.type`、`Retry-After` 等を可能な範囲で診断します。
 
 詳細: [Advanced API tests](../docs/advanced-features.md)
+
+## Official OrcaRouter links
+
+- Documentation: https://docs.orcarouter.ai/introduction
+- Quickstart: https://docs.orcarouter.ai/getting-started/quickstart
+- Get an API key: https://docs.orcarouter.ai/getting-started/get-api-key
+- Models: https://www.orcarouter.ai/models
+- Streaming: https://docs.orcarouter.ai/advanced/streaming
+- Tool Calling: https://docs.orcarouter.ai/advanced/tool-calling
+- Errors: https://docs.orcarouter.ai/operations/errors
+
