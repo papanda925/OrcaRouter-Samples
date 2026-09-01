@@ -815,24 +815,30 @@ try {
     if ([string]::IsNullOrWhiteSpace($Question)) { throw '質問を入力してください。' }
 
     if ($Mode -eq 'Streaming') {
-        $answer = Invoke-Streaming -Stopwatch $stopwatch
+        $result = Invoke-Streaming -Stopwatch $stopwatch
     }
     elseif ($Mode -eq 'Tool Calling') {
-        $answer = Invoke-ToolCalling -Stopwatch $stopwatch
+        $result = Invoke-ToolCalling -Stopwatch $stopwatch
     }
     else {
-        $answer = Invoke-Chat -Stopwatch $stopwatch
+        $result = Invoke-Chat -Stopwatch $stopwatch
     }
 
     Add-WorkerTrace -Step 'STEP 6' -Direction 'LOCAL' -Title 'バックグラウンド処理を完了' -Data @{
         Mode = $Mode
         Completed = $true
+        HistoryTurns = @($History).Count
         TotalElapsedMs = $stopwatch.ElapsedMilliseconds
     }
 
     Add-WorkerEvent -Type 'Completed' -Values @{
-        Answer = $answer
+        Answer = [string]$result.Answer
         TotalElapsedMs = $stopwatch.ElapsedMilliseconds
+        HttpStatus = $result.HttpStatus
+        Usage = $result.Usage
+        Request = $result.Request
+        Response = $result.Response
+        ActualModel = [string]$result.ActualModel
     }
 }
 catch {
