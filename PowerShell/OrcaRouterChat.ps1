@@ -482,10 +482,10 @@ function Complete-OrcaRouterWorker {
             Message = $safeMessage
         }
 
-        Set-ViewModelValue -Name 'Answer' -Value "ERROR: $safeMessage"
+        Set-ViewModelValue -Name 'Answer' -Value (Get-ConversationTranscript)
         Set-ViewModelValue -Name 'StatusText' -Value 'Error - Trace を確認してください'
         $statusText.Foreground = '#B42318'
-        $resultTabs.SelectedIndex = 1
+        $resultTabs.SelectedIndex = 2
     }
     finally {
         try {
@@ -522,12 +522,14 @@ function Process-OrcaRouterWorkerEvents {
             }
 
             'Answer' {
-                Set-ViewModelValue -Name 'Answer' -Value ([string]$workerEvent.Text)
+                $pendingTranscript = Get-ConversationTranscript -PendingQuestion $script:currentQuestion -PendingAnswer ([string]$workerEvent.Text)
+                Set-ViewModelValue -Name 'Answer' -Value $pendingTranscript
                 $answerBox.ScrollToEnd()
             }
 
             'Completed' {
-                Set-ViewModelValue -Name 'Answer' -Value ([string]$workerEvent.Answer)
+                Add-ConversationTurn -Question $script:currentQuestion -Assistant ([string]$workerEvent.Answer)
+                Set-DeveloperInformation -WorkerEvent $workerEvent
                 Set-ViewModelValue -Name 'StatusText' -Value 'Completed'
                 $statusText.Foreground = '#0F766E'
                 Set-UiBusy -Busy $false
@@ -542,10 +544,10 @@ function Process-OrcaRouterWorkerEvents {
                     Type = [string]$workerEvent.ExceptionType
                 }
 
-                Set-ViewModelValue -Name 'Answer' -Value "ERROR: $safeMessage"
+                Set-ViewModelValue -Name 'Answer' -Value (Get-ConversationTranscript)
                 Set-ViewModelValue -Name 'StatusText' -Value 'Error - Trace を確認してください'
                 $statusText.Foreground = '#B42318'
-                $resultTabs.SelectedIndex = 1
+                $resultTabs.SelectedIndex = 2
                 Set-UiBusy -Busy $false
                 $script:workerFinishedInUi = $true
             }
@@ -568,7 +570,8 @@ function Start-OrcaRouterWorker {
         [string]$ApiKey,
         [string]$Model,
         [string]$Question,
-        [string]$Mode
+        [string]$Mode,
+        [object[]]$History
     )
 
     Stop-OrcaRouterWorker
@@ -581,6 +584,7 @@ function Start-OrcaRouterWorker {
     [void]$script:workerPowerShell.AddParameter('Model', $Model)
     [void]$script:workerPowerShell.AddParameter('Question', $Question)
     [void]$script:workerPowerShell.AddParameter('Mode', $Mode)
+    [void]$script:workerPowerShell.AddParameter('History', $History)
     [void]$script:workerPowerShell.AddParameter('EventQueue', $script:workerEventQueue)
 
     $script:workerFinishedInUi = $false
@@ -614,7 +618,9 @@ function Invoke-OrcaRouterChat {
     }
 
     $resultTabs.SelectedIndex = 0
-    Set-ViewModelValue -Name 'Answer' -Value ''
+    $script:currentQuestion = $question
+    $pendingTranscript = Get-ConversationTranscript -PendingQuestion $question
+    Set-ViewModelValue -Name 'Answer' -Value $pendingTranscript
     Set-ViewModelValue -Name 'StatusText' -Value 'Processing...'
     $statusText.Foreground = '#64748B'
     Set-UiBusy -Busy $true
@@ -625,7 +631,7 @@ function Invoke-OrcaRouterChat {
         ViewModel = 'DataRowView / INotifyPropertyChanged'
     }
 
-    Start-OrcaRouterWorker -ApiKey $apiKey -Model $model -Question $question -Mode $mode
+    Start-OrcaRouterWorker -ApiKey $apiKey -Model $model -Question $question -Mode $mode -History (Get-HistorySnapshot)
 }
 
 $script:workerPollTimer.Add_Tick({
