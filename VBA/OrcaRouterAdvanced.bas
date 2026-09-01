@@ -531,40 +531,45 @@ Private Function BuildToolRequestJson( _
     ByVal model As String, _
     ByVal question As String) As String
 
-    BuildToolRequestJson = _
-        "{" & _
-        """model"":""" & JsonEscape(model) & """," & _
-        """messages"":[" & _
-            "{" & _
-                """role"":""system""," & _
-                """content"":""This is a Tool Calling learning demo. Call calculate_sum. If the user did not provide two numbers, use 123 and 456.""" & _
-            "}," & _
-            "{" & _
-                """role"":""user""," & _
-                """content"":""" & JsonEscape(question) & """" & _
-            "}" & _
-        "]," & _
-        """tools"":[{" & _
-            """type"":""function""," & _
-            """function"":{" & _
-                """name"":""calculate_sum""," & _
-                """description"":""Add two numbers and return the sum.""," & _
-                """parameters"":{" & _
-                    """type"":""object""," & _
-                    """properties"":{" & _
-                        """a"":{""type"":""number"",""description"":""First number""}," & _
-                        """b"":{""type"":""number"",""description"":""Second number""}" & _
-                    "}," & _
-                    """required"":[""a"",""b""]," & _
-                    """additionalProperties"":false" & _
-                "}" & _
-            "}" & _
-        "}]," & _
-        """tool_choice"":{" & _
-            """type"":""function""," & _
-            """function"":{""name"":""calculate_sum""}" & _
-        "}" & _
-        "}"
+    Dim result As String
+
+    'Keep each VBA statement short. VBA allows at most 24 line-continuation
+    'characters in a single logical statement.
+    result = "{"
+    result = result & """model"":""" & JsonEscape(model) & ""","
+    result = result & """messages"":["
+    result = result & "{"
+    result = result & """role"":""system"","
+    result = result & """content"":""This is a Tool Calling learning demo. Call calculate_sum. If the user did not provide two numbers, use 123 and 456."""
+    result = result & "},"
+    result = result & "{"
+    result = result & """role"":""user"","
+    result = result & """content"":""" & JsonEscape(question) & """"
+    result = result & "}"
+    result = result & "],"
+    result = result & """tools"":[{"
+    result = result & """type"":""function"","
+    result = result & """function"":{"
+    result = result & """name"":""calculate_sum"","
+    result = result & """description"":""Add two numbers and return the sum."","
+    result = result & """parameters"":{"
+    result = result & """type"":""object"","
+    result = result & """properties"":{"
+    result = result & """a"":{""type"":""number"",""description"":""First number""},"
+    result = result & """b"":{""type"":""number"",""description"":""Second number""}"
+    result = result & "},"
+    result = result & """required"":[""a"",""b""],"
+    result = result & """additionalProperties"":false"
+    result = result & "}"
+    result = result & "}"
+    result = result & "}],"
+    result = result & """tool_choice"":{"
+    result = result & """type"":""function"","
+    result = result & """function"":{""name"":""calculate_sum""}"
+    result = result & "}"
+    result = result & "}"
+
+    BuildToolRequestJson = result
 
 End Function
 
@@ -576,37 +581,42 @@ Private Function BuildToolResultRequestJson( _
     ByVal argumentsJson As String, _
     ByVal toolResultJson As String) As String
 
-    BuildToolResultRequestJson = _
-        "{" & _
-        """model"":""" & JsonEscape(model) & """," & _
-        """messages"":[" & _
-            "{" & _
-                """role"":""system""," & _
-                """content"":""This is a Tool Calling learning demo. Call calculate_sum. If the user did not provide two numbers, use 123 and 456.""" & _
-            "}," & _
-            "{" & _
-                """role"":""user""," & _
-                """content"":""" & JsonEscape(question) & """" & _
-            "}," & _
-            "{" & _
-                """role"":""assistant""," & _
-                """content"":null," & _
-                """tool_calls"":[{" & _
-                    """id"":""" & JsonEscape(toolCallId) & """," & _
-                    """type"":""function""," & _
-                    """function"":{" & _
-                        """name"":""" & JsonEscape(functionName) & """," & _
-                        """arguments"":""" & JsonEscape(argumentsJson) & """" & _
-                    "}" & _
-                "}]" & _
-            "}," & _
-            "{" & _
-                """role"":""tool""," & _
-                """tool_call_id"":""" & JsonEscape(toolCallId) & """," & _
-                """content"":""" & JsonEscape(toolResultJson) & """" & _
-            "}" & _
-        "]" & _
-        "}"
+    Dim result As String
+
+    'Build the JSON in multiple statements so the source stays within
+    'VBA's line-continuation limit.
+    result = "{"
+    result = result & """model"":""" & JsonEscape(model) & ""","
+    result = result & """messages"":["
+    result = result & "{"
+    result = result & """role"":""system"","
+    result = result & """content"":""This is a Tool Calling learning demo. Call calculate_sum. If the user did not provide two numbers, use 123 and 456."""
+    result = result & "},"
+    result = result & "{"
+    result = result & """role"":""user"","
+    result = result & """content"":""" & JsonEscape(question) & """"
+    result = result & "},"
+    result = result & "{"
+    result = result & """role"":""assistant"","
+    result = result & """content"":null,"
+    result = result & """tool_calls"":[{"
+    result = result & """id"":""" & JsonEscape(toolCallId) & ""","
+    result = result & """type"":""function"","
+    result = result & """function"":{"
+    result = result & """name"":""" & JsonEscape(functionName) & ""","
+    result = result & """arguments"":""" & JsonEscape(argumentsJson) & """"
+    result = result & "}"
+    result = result & "}]"
+    result = result & "},"
+    result = result & "{"
+    result = result & """role"":""tool"","
+    result = result & """tool_call_id"":""" & JsonEscape(toolCallId) & ""","
+    result = result & """content"":""" & JsonEscape(toolResultJson) & """"
+    result = result & "}"
+    result = result & "]"
+    result = result & "}"
+
+    BuildToolResultRequestJson = result
 
 End Function
 
