@@ -19,6 +19,7 @@ Option Explicit
 '===============================================================================
 
 Private Const API_ENDPOINT As String = "https://api.orcarouter.ai/v1/chat/completions"
+Private Const MODELS_ENDPOINT As String = "https://api.orcarouter.ai/v1/models"
 Private Const API_KEY_PLACEHOLDER As String = "xxx-your-orcarouter-api-key-xxx"
 
 'LOCAL TEST ONLY:
@@ -31,6 +32,9 @@ Private Const SAMPLE_SHEET_NAME As String = "OrcaRouter Chat"
 Private Const TRACE_HEADER_ROW As Long = 18
 Private Const TRACE_FIRST_ROW As Long = 19
 Private Const MAX_TRACE_TEXT As Long = 30000
+Private Const CHAT_TOTAL_TIMEOUT_SECONDS As Long = 120
+Private Const CHAT_WAIT_TRACE_INTERVAL_SECONDS As Long = 15
+Private Const MODELS_TEST_TIMEOUT_MS As Long = 20000
 
 Public Sub SetupOrcaRouterSample()
 
@@ -235,6 +239,8 @@ Public Sub SendOrcaRouterChat()
     Dim httpStatus As Long
     Dim startedAt As Double
     Dim elapsedTimeSeconds As Double
+    Dim nextWaitTraceAt As Double
+    Dim responseCompleted As Boolean
 
     Dim errorNumber As Long
     Dim errorSource As String
@@ -295,24 +301,56 @@ Public Sub SendOrcaRouterChat()
 
     'STEP 3: Send HTTP POST.
     AddTrace ws, "STEP 3", "REQUEST", "Send POST to OrcaRouter", _
-             "WinHttp.WinHttpRequest.5.1" & vbCrLf & _
-             "Timeouts(ms): Resolve=10000, Connect=10000, Send=30000, Receive=60000"
+             "WinHttp.WinHttpRequest.5.1 (asynchronous wait)" & vbCrLf & _
+             "Connect timeout: 10 sec" & vbCrLf & _
+             "Total wait limit: " & CHAT_TOTAL_TIMEOUT_SECONDS & " sec"
 
     startedAt = Timer
+    nextWaitTraceAt = CHAT_WAIT_TRACE_INTERVAL_SECONDS
 
     Set httpRequest = CreateObject("WinHttp.WinHttpRequest.5.1")
 
     With httpRequest
-        .Open "POST", API_ENDPOINT, False
-        .SetTimeouts 10000, 10000, 30000, 60000
+        .Open "POST", API_ENDPOINT, True
+        .SetTimeouts 10000, 10000, 30000, CHAT_TOTAL_TIMEOUT_SECONDS * 1000
         .SetRequestHeader "Authorization", "Bearer " & apiKey
         .SetRequestHeader "Content-Type", "application/json; charset=utf-8"
         .Send StringToUtf8Bytes(requestBody)
-
-        httpStatus = .Status
-        responseHeaders = .GetAllResponseHeaders
-        responseText = .ResponseText
     End With
+
+    Do
+        responseCompleted = httpRequest.WaitForResponse(1)
+
+        If responseCompleted Then
+            Exit Do
+        End If
+
+        elapsedTimeSeconds = ElapsedSeconds(startedAt)
+
+        If elapsedTimeSeconds >= nextWaitTraceAt Then
+            AddTrace ws, "STEP 3", "WAIT", "Waiting for OrcaRouter response", _
+                     "Elapsed: " & Format$(elapsedTimeSeconds, "0") & " sec" & vbCrLf & _
+                     "Excel remains responsive while waiting."
+
+            nextWaitTraceAt = nextWaitTraceAt + CHAT_WAIT_TRACE_INTERVAL_SECONDS
+        End If
+
+        DoEvents
+
+        If elapsedTimeSeconds >= CHAT_TOTAL_TIMEOUT_SECONDS Then
+            httpRequest.Abort
+
+            Err.Raise vbObjectError + 1004, "SendOrcaRouterChat", _
+                      "No OrcaRouter response completed within " & _
+                      CHAT_TOTAL_TIMEOUT_SECONDS & " seconds. " & _
+                      "Run TestOrcaRouterConnection to separate network/API-key issues " & _
+                      "from model routing latency."
+        End If
+    Loop
+
+    httpStatus = httpRequest.Status
+    responseHeaders = httpRequest.GetAllResponseHeaders
+    responseText = httpRequest.ResponseText
 
     elapsedTimeSeconds = ElapsedSeconds(startedAt)
 
@@ -370,6 +408,96 @@ ErrorHandler:
            "Check the worksheet trace for details.", _
            vbExclamation, _
            "OrcaRouter Sample"
+
+    On Error GoTo 0
+    GoTo CleanExit
+
+End Sub
+
+Public Sub TestOrcaRouterConnection()
+
+    Dim ws As Worksheet
+    Dim httpRequest As Object
+
+    Dim apiKey As String
+    Dim responseText As String
+    Dim responseHeaders As String
+    Dim httpStatus As Long
+    Dim startedAt As Double
+
+    Dim errorNumber As Long
+    Dim errorSource As String
+    Dim errorDescription As String
+
+    On Error GoTo ErrorHandler
+
+    Set ws = ThisWorkbook.Worksheets(SAMPLE_SHEET_NAME)
+    apiKey = Trim$(CStr(ws.Range("B3").Value))
+
+    If Len(apiKey) = 0 Or apiKey = API_KEY_PLACEHOLDER Or Left$(apiKey, 4) = "xxx-" Then
+        Err.Raise vbObjectError + 1201, "TestOrcaRouterConnection", _
+                  "Enter the OrcaRouter API key in cell B3 first."
+    End If
+
+    AddTrace ws, "TEST", "REQUEST", "Test OrcaRouter API connectivity", _
+             "GET " & MODELS_ENDPOINT & vbCrLf & _
+             "Authorization: Bearer " & MaskApiKey(apiKey) & vbCrLf & _
+             "Timeout: " & MODELS_TEST_TIMEOUT_MS / 1000 & " sec"
+
+    startedAt = Timer
+    Set httpRequest = CreateObject("WinHttp.WinHttpRequest.5.1")
+
+    With httpRequest
+        .Open "GET", MODELS_ENDPOINT, False
+        .SetTimeouts 10000, 10000, 10000, MODELS_TEST_TIMEOUT_MS
+        .SetRequestHeader "Authorization", "Bearer " & apiKey
+        .Send
+
+        httpStatus = .Status
+        responseHeaders = .GetAllResponseHeaders
+        responseText = .ResponseText
+    End With
+
+    AddTrace ws, "TEST", "RESPONSE", "Connectivity test response", _
+             "HTTP Status: " & httpStatus & vbCrLf & _
+             "Elapsed: " & Format$(ElapsedSeconds(startedAt), "0.000") & " sec" & vbCrLf & _
+             "Headers:" & vbCrLf & responseHeaders & vbCrLf & _
+             "Body preview:" & vbCrLf & Left$(responseText, 2000)
+
+    If httpStatus >= 200 And httpStatus < 300 Then
+        MsgBox "OrcaRouter connectivity and API-key authentication are working." & vbCrLf & _
+               "The earlier Chat timeout is therefore more likely to be model/routing latency.", _
+               vbInformation, _
+               "OrcaRouter Connection Test"
+    Else
+        RaiseOrcaRouterHttpError httpStatus, responseHeaders, responseText
+    End If
+
+CleanExit:
+    Set httpRequest = Nothing
+    Set ws = Nothing
+    Exit Sub
+
+ErrorHandler:
+    errorNumber = Err.Number
+    errorSource = Err.Source
+    errorDescription = Err.Description
+
+    On Error Resume Next
+
+    If Not ws Is Nothing Then
+        AddTrace ws, "TEST", "ERROR", "Connectivity test failed", _
+                 "Err.Number: " & errorNumber & vbCrLf & _
+                 "Err.Source: " & errorSource & vbCrLf & _
+                 "Err.Description: " & errorDescription
+    End If
+
+    MsgBox "OrcaRouter connection test failed." & vbCrLf & _
+           "Err.Number: " & errorNumber & vbCrLf & _
+           "Err.Description: " & errorDescription & vbCrLf & vbCrLf & _
+           "Check the worksheet trace for details.", _
+           vbExclamation, _
+           "OrcaRouter Connection Test"
 
     On Error GoTo 0
     GoTo CleanExit
