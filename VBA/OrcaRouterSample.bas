@@ -36,6 +36,13 @@ Private Const CHAT_TOTAL_TIMEOUT_SECONDS As Long = 120
 Private Const CHAT_WAIT_TRACE_INTERVAL_SECONDS As Long = 15
 Private Const MODELS_TEST_TIMEOUT_MS As Long = 20000
 Private Const UI_YIELD_INTERVAL_SECONDS As Double = 0.05
+Private Const HTTP_POLL_INTERVAL_MS As Long = 50
+
+#If VBA7 Then
+    Private Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+#Else
+    Private Declare Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+#End If
 
 'DoEvents allows Excel to process pending UI messages while VBA is running.
 'That also means the user can click the Send button again before the first
@@ -316,13 +323,23 @@ Public Sub SendOrcaRouterChat()
 
     'STEP 3: Send HTTP POST.
     AddTrace ws, "STEP 3", "REQUEST", "Send POST to OrcaRouter", _
-             "WinHttp.WinHttpRequest.5.1 (asynchronous wait)" & vbCrLf & _
-             "Connect timeout: 10 sec" & vbCrLf & _
+             "MSXML2.XMLHTTP.6.0 (asynchronous)" & vbCrLf & _
+             "Polling interval: " & HTTP_POLL_INTERVAL_MS & " ms" & vbCrLf & _
              "Total wait limit: " & CHAT_TOTAL_TIMEOUT_SECONDS & " sec"
 
     startedAt = Timer
 
-    Set httpRequest = CreateObject("WinHttp.WinHttpRequest.5.1")
+    'Use MSXML2.XMLHTTP.6.0 for normal desktop Excel requests.
+    '
+    'Why XMLHTTP here instead of WinHttp.WinHttpRequest?
+    '  - PowerShell/.NET HttpClient was responding much faster on the same PC.
+    '  - WinHTTP uses the machine-level WinHTTP networking/proxy stack.
+    '  - XMLHTTP is intended for interactive desktop applications and follows
+    '    the current-user networking/proxy settings more closely.
+    '
+    'This does not guarantee that every network will be faster, but it removes
+    'the WinHTTP-specific path that was stalling before any HTTP status arrived.
+    Set httpRequest = CreateObject("MSXML2.XMLHTTP.6.0")
 
     With httpRequest
 
@@ -335,23 +352,15 @@ Public Sub SendOrcaRouterChat()
         '
         'True  = asynchronous:
         '        Send starts the request and returns control to VBA quickly.
-        '        We can then wait in short intervals, update Trace / StatusBar,
-        '        and periodically call YieldToExcel so Excel stays responsive.
+        '        We then poll readyState, update Trace / StatusBar, and call
+        '        YieldToExcel so Excel stays responsive while the request runs.
         .Open "POST", API_ENDPOINT, True
-        .SetTimeouts 10000, 10000, 30000, CHAT_TOTAL_TIMEOUT_SECONDS * 1000
-        .SetRequestHeader "Authorization", "Bearer " & apiKey
-        .SetRequestHeader "Content-Type", "application/json; charset=utf-8"
+        .setRequestHeader "Authorization", "Bearer " & apiKey
+        .setRequestHeader "Content-Type", "application/json; charset=utf-8"
         .Send StringToUtf8Bytes(requestBody)
     End With
 
-    'WaitForResponse is a standard method of WinHttp.WinHttpRequest.
-    'The helper below calls WaitForResponse in short intervals instead of
-    'blocking for the full request duration. The helper also handles:
-    '  - elapsed-time display in the Excel StatusBar
-    '  - periodic WAIT rows in the worksheet Trace
-    '  - YieldToExcel / DoEvents for UI repainting
-    '  - the overall timeout and Abort
-    WaitForWinHttpResponse _
+    WaitForXmlHttpResponse _
         httpRequest, _
         ws, _
         "Waiting for OrcaRouter Chat response", _
@@ -360,8 +369,8 @@ Public Sub SendOrcaRouterChat()
         CHAT_WAIT_TRACE_INTERVAL_SECONDS
 
     httpStatus = httpRequest.Status
-    responseHeaders = httpRequest.GetAllResponseHeaders
-    responseText = httpRequest.ResponseText
+    responseHeaders = httpRequest.getAllResponseHeaders
+    responseText = httpRequest.responseText
 
     elapsedTimeSeconds = ElapsedSeconds(startedAt)
 
@@ -458,16 +467,15 @@ Public Sub TestOrcaRouterConnection()
              "Timeout: " & MODELS_TEST_TIMEOUT_MS / 1000 & " sec"
 
     startedAt = Timer
-    Set httpRequest = CreateObject("WinHttp.WinHttpRequest.5.1")
+    Set httpRequest = CreateObject("MSXML2.XMLHTTP.6.0")
 
     With httpRequest
         .Open "GET", MODELS_ENDPOINT, True
-        .SetTimeouts 10000, 10000, 10000, MODELS_TEST_TIMEOUT_MS
-        .SetRequestHeader "Authorization", "Bearer " & apiKey
+        .setRequestHeader "Authorization", "Bearer " & apiKey
         .Send
     End With
 
-    WaitForWinHttpResponse _
+    WaitForXmlHttpResponse _
         httpRequest, _
         ws, _
         "Waiting for OrcaRouter connectivity test", _
@@ -476,8 +484,8 @@ Public Sub TestOrcaRouterConnection()
         5
 
     httpStatus = httpRequest.Status
-    responseHeaders = httpRequest.GetAllResponseHeaders
-    responseText = httpRequest.ResponseText
+    responseHeaders = httpRequest.getAllResponseHeaders
+    responseText = httpRequest.responseText
 
     AddTrace ws, "TEST", "RESPONSE", "Connectivity test response", _
              "HTTP Status: " & httpStatus & vbCrLf & _
@@ -974,7 +982,7 @@ Public Sub YieldToExcel(Optional ByVal force As Boolean = False)
 
 End Sub
 
-Public Sub WaitForWinHttpResponse( _
+Public Sub WaitForXmlHttpResponse( _
     ByVal httpRequest As Object, _
     ByVal ws As Worksheet, _
     ByVal waitMessage As String, _
@@ -982,27 +990,21 @@ Public Sub WaitForWinHttpResponse( _
     ByVal totalTimeoutSeconds As Double, _
     Optional ByVal traceIntervalSeconds As Double = 15)
 
-    Dim responseCompleted As Boolean
     Dim elapsedSecondsValue As Double
     Dim nextTraceAt As Double
 
-    'This helper expects the WinHTTP request to have been opened asynchronously.
+    'MSXML2.XMLHTTP uses readyState to report asynchronous progress.
     '
-    'WaitForResponse is provided by WinHttp.WinHttpRequest. It waits until the
-    'asynchronous request has completed, or until the supplied number of seconds
-    'has elapsed. A return value of False means "not finished yet".
+    'readyState = 4 means the HTTP operation is complete.
+    'Unlike WinHttp.WinHttpRequest, XMLHTTP does not expose WaitForResponse,
+    'so this helper polls readyState at a small interval.
     '
-    'We deliberately wait only one second at a time. After each short wait VBA
-    'gets control back, so the macro can update Trace / StatusBar and yield to
-    'Excel instead of disappearing into one long blocking call.
+    'The short Sleep prevents a tight CPU-burning loop. After each short pause
+    'YieldToExcel calls DoEvents, which lets Excel repaint the Trace, move its
+    'window, and remain responsive while the request is still running.
     nextTraceAt = traceIntervalSeconds
 
-    Do
-        responseCompleted = httpRequest.WaitForResponse(1)
-
-        If responseCompleted Then
-            Exit Do
-        End If
+    Do While httpRequest.readyState <> 4
 
         elapsedSecondsValue = ElapsedSeconds(startedAt)
 
@@ -1011,23 +1013,24 @@ Public Sub WaitForWinHttpResponse( _
 
         If elapsedSecondsValue >= nextTraceAt Then
             AddTrace ws, "WAIT", "WAIT", waitMessage, _
-                     "Elapsed: " & Format$(elapsedSecondsValue, "0") & " sec"
+                     "Elapsed: " & Format$(elapsedSecondsValue, "0") & " sec" & vbCrLf & _
+                     "readyState: " & CStr(httpRequest.readyState)
 
             nextTraceAt = nextTraceAt + traceIntervalSeconds
         End If
 
-        'Give Excel an opportunity to repaint cells, respond to window moves,
-        'and process its normal message queue before the next one-second wait.
-        YieldToExcel
-
         If elapsedSecondsValue >= totalTimeoutSeconds Then
-            httpRequest.Abort
+            httpRequest.abort
             Application.StatusBar = False
 
-            Err.Raise vbObjectError + 1301, "WaitForWinHttpResponse", _
+            Err.Raise vbObjectError + 1301, "WaitForXmlHttpResponse", _
                       waitMessage & " timed out after " & _
                       Format$(totalTimeoutSeconds, "0") & " seconds."
         End If
+
+        Sleep HTTP_POLL_INTERVAL_MS
+        YieldToExcel True
+
     Loop
 
     Application.StatusBar = False
