@@ -1,10 +1,29 @@
 # OrcaRouter Samples
 
+**Learning-focused OrcaRouter API samples for Web, PowerShell/WPF, and Excel VBA — including Chat, Streaming, Tool Calling, request/response tracing, and error handling.**
+
+[![Validate samples](https://github.com/papanda925/OrcaRouter-Samples/actions/workflows/validate-samples.yml/badge.svg)](https://github.com/papanda925/OrcaRouter-Samples/actions/workflows/validate-samples.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 OrcaRouter API を **Web / PowerShell / Excel VBA** から呼び出す、学習者向けのサンプル集です。
 
 3つの実装は、言語やUIが違っても処理を比較しやすいように、同じ6ステップ・同じ用語・同じTrace方針にそろえています。現在は **Chat / Streaming / Tool Calling** の3モードを実装しています。
 
 初めて動かす場合は、最初に **[はじめて使うときの手順](docs/getting-started.md)** を読んでください。VBAの `SetupOrcaRouterSample`、PowerShellの `-STA` / Execution Policy、Webローカルサーバー、APIキーの個別入力など、実際につまずきやすい点をまとめています。
+
+## Project highlights
+
+| 項目 | 内容 |
+|---|---|
+| Cross-environment | Web / PowerShell-WPF-XAML / Excel VBA の3方式を同じ考え方で比較 |
+| OrcaRouter integration | `/v1/chat/completions` を直接利用し、既定モデルは `orcarouter/free` |
+| API features | Chat / Streaming / Tool Calling |
+| Observability | Request / Response / Raw JSON / HTTP Trace を確認可能 |
+| PowerShell UI | Data Binding / `INotifyPropertyChanged` / Background Runspace |
+| Safety | 実APIキーをソースへ保存しない設計、CIで秘密情報・個人パスを検査 |
+| License | MIT License |
+
+このリポジトリは、特定のフレームワークに隠さず、**OrcaRouter APIへ何を送信し、何が返り、各環境でどう処理するかを追えること**を重視しています。
 
 ## Samples
 
@@ -35,6 +54,19 @@ OrcaRouter API を **Web / PowerShell / Excel VBA** から呼び出す、学習�
 | Tool Calling | モデルがローカルToolを要求し、その結果を使って最終回答 | 通常2回のAPI呼び出し |
 
 Tool CallingのサンプルToolは `calculate_sum(a, b)` です。モデルや無料ルーターの状況によっては、Tool実行前にQuotaやモデル対応の理由でAPI側から拒否されることがあります。
+
+## OrcaRouter integration
+
+このリポジトリでは、Web / PowerShell / VBA の各サンプルから OrcaRouter のChat Completions APIを直接呼び出します。
+
+```text
+POST https://api.orcarouter.ai/v1/chat/completions
+Authorization: Bearer <API_KEY>
+```
+
+既定では `orcarouter/free` を使い、Model欄を変更して利用可能な別モデルでも検証できます。無料モデルだけでなく、同じOpenAI互換形式でStreamingやTool Calling、エラー処理を比較できることを目的としています。
+
+このプロジェクトは **papanda925 が開発・保守する独立したオープンソースの学習用サンプル**です。
 
 ## Official OrcaRouter links
 
