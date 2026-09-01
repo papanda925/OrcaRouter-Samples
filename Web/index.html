@@ -14,7 +14,7 @@
         <p class="eyebrow">ORCAROUTER API LEARNING SAMPLE</p>
         <h1>Web Chat</h1>
         <p class="lead">
-          質問・回答・HTTP電文の流れを同じ画面で確認できる、学習者向けの最小サンプルです。
+          Chat / Streaming / Tool Calling を切り替えながら、質問・回答・HTTP電文を同じ画面で確認できます。
         </p>
       </div>
       <a class="docs-link" href="../docs/processing-flow.md">Common flow</a>
@@ -34,6 +34,14 @@
       <div class="field">
         <label for="model">Model</label>
         <input id="model" type="text" value="orcarouter/free">
+      </div>
+      <div class="field">
+        <label for="mode">Mode</label>
+        <select id="mode">
+          <option value="chat">Chat</option>
+          <option value="stream">Streaming (SSE)</option>
+          <option value="tools">Tool Calling (calculate_sum)</option>
+        </select>
       </div>
     </section>
 

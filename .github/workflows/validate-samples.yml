@@ -1,0 +1,79 @@
+name: Validate samples
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "feature/**"
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    name: Web syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check JavaScript syntax
+        run: node --check Web/app.js
+
+  powershell:
+    name: PowerShell and XAML
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse PowerShell and load XAML
+        shell: powershell
+        run: |
+          $tokens = $null
+          $errors = $null
+          $scriptText = Get-Content 'PowerShell/OrcaRouterChat.ps1' -Raw -Encoding UTF8
+          [System.Management.Automation.Language.Parser]::ParseInput(
+            $scriptText,
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object {
+              Write-Error ("Line {0}: {1}" -f $_.Extent.StartLineNumber, $_.Message)
+            }
+            exit 1
+          }
+
+          Add-Type -AssemblyName PresentationFramework
+          [xml]$xaml = Get-Content 'PowerShell/MainWindow.xaml' -Raw -Encoding UTF8
+          $reader = New-Object System.Xml.XmlNodeReader $xaml
+          $window = [Windows.Markup.XamlReader]::Load($reader)
+
+          if ($null -eq $window.FindName('ModeBox')) {
+            throw 'ModeBox was not found in MainWindow.xaml'
+          }
+
+  safety:
+    name: Source safety checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure real-looking OrcaRouter keys are not in source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -R -n -E 'sk-orca-[A-Za-z0-9_-]+' Web PowerShell VBA; then
+            echo "A real-looking OrcaRouter API key was found in source files."
+            exit 1
+          fi
+
+          grep -q 'xxx-your-orcarouter-api-key-xxx' Web/app.js
+          grep -q 'xxx-your-orcarouter-api-key-xxx' PowerShell/OrcaRouterChat.ps1
+          grep -q 'xxx-your-orcarouter-api-key-xxx' VBA/OrcaRouterSample.bas
+
+      - name: Check VBA advanced entry points exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'Public Sub SendOrcaRouterStreaming' VBA/OrcaRouterAdvanced.bas
+          grep -q 'Public Sub SendOrcaRouterToolCalling' VBA/OrcaRouterAdvanced.bas
+          grep -q 'RaiseOrcaRouterHttpError' VBA/OrcaRouterAdvanced.bas

@@ -120,7 +120,7 @@ h2 {
   margin-bottom: 18px;
   padding: 18px;
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(240px, 0.8fr);
+  grid-template-columns: minmax(0, 1.5fr) minmax(220px, 0.8fr) minmax(220px, 0.8fr);
   gap: 16px;
 }
 
@@ -136,6 +136,7 @@ h2 {
 }
 
 .field input,
+.field select,
 textarea {
   width: 100%;
   border: 1px solid var(--line);
@@ -145,7 +146,8 @@ textarea {
   outline: none;
 }
 
-.field input {
+.field input,
+.field select {
   min-height: 44px;
   padding: 0 12px;
 }
@@ -158,6 +160,7 @@ textarea {
 }
 
 .field input:focus,
+.field select:focus,
 textarea:focus {
   border-color: #5eead4;
   box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.14);

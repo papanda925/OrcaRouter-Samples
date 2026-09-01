@@ -4,15 +4,17 @@
     OrcaRouter API learning sample using PowerShell + WPF/XAML.
 
 .DESCRIPTION
-    The Web, PowerShell, and VBA samples intentionally follow the same
-    six processing steps so learners can compare the implementations.
+    Chat / Streaming / Tool Calling are implemented with the same learning flow:
 
     STEP 1 - Validate inputs
     STEP 2 - Build request
     STEP 3 - Send HTTP POST
     STEP 4 - Receive response
-    STEP 5 - Parse assistant message
+    STEP 5 - Parse / process result
     STEP 6 - Update UI and trace
+
+    Streaming follows the OpenAI-compatible SSE format.
+    Tool Calling demonstrates a local calculate_sum function.
 
     A real API key is never written to the trace.
 #>
@@ -34,55 +36,51 @@ $script:ApiKeyPlaceholder = 'xxx-your-orcarouter-api-key-xxx'
 $script:DefaultApiKey = 'xxx-your-orcarouter-api-key-xxx'
 
 $script:RequestTimeoutSeconds = 60
+$script:MaxStreamTraceEvents = 50
 
 if ([System.Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') {
     throw 'WPF requires an STA thread. Start PowerShell with -STA and run this script again.'
 }
 
 function Mask-ApiKey {
-    param(
-        [Parameter(Mandatory = $false)]
-        [string]$ApiKey
-    )
+    param([string]$ApiKey)
 
-    if ([string]::IsNullOrWhiteSpace($ApiKey)) {
-        return '(empty)'
-    }
-
-    if ($ApiKey.Length -le 8) {
-        return '********'
-    }
+    if ([string]::IsNullOrWhiteSpace($ApiKey)) { return '(empty)' }
+    if ($ApiKey.Length -le 8) { return '********' }
 
     return '{0}...{1}' -f $ApiKey.Substring(0, 4), $ApiKey.Substring($ApiKey.Length - 4)
 }
 
 function ConvertTo-TraceText {
-    param(
-        [Parameter(Mandatory = $false)]
-        $Data
-    )
+    param($Data)
 
-    if ($null -eq $Data) {
-        return ''
-    }
-
-    if ($Data -is [string]) {
-        return $Data
-    }
+    if ($null -eq $Data) { return '' }
+    if ($Data -is [string]) { return $Data }
 
     try {
-        return ($Data | ConvertTo-Json -Depth 20)
+        return ($Data | ConvertTo-Json -Depth 30)
     }
     catch {
         return [string]$Data
     }
 }
 
-function Get-ResponseHeaders {
+function Get-PropertyValue {
     param(
-        [Parameter(Mandatory = $true)]
-        [System.Net.Http.HttpResponseMessage]$Response
+        [Parameter(Mandatory = $true)]$Object,
+        [Parameter(Mandatory = $true)][string]$Name
     )
+
+    if ($null -eq $Object) { return $null }
+
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property) { return $null }
+
+    return $property.Value
+}
+
+function Get-ResponseHeaders {
+    param([System.Net.Http.HttpResponseMessage]$Response)
 
     $headers = [ordered]@{}
 
@@ -97,58 +95,127 @@ function Get-ResponseHeaders {
     return $headers
 }
 
-function Get-AssistantText {
-    param(
-        [Parameter(Mandatory = $true)]
-        $ResponseJson
-    )
+function Get-HeaderValue {
+    param($Headers, [string]$Name)
 
-    $choicesProperty = $ResponseJson.PSObject.Properties['choices']
-
-    if ($null -eq $choicesProperty) {
-        throw 'choices が見つかりません。Trace の Raw response を確認してください。'
+    foreach ($key in $Headers.Keys) {
+        if ([string]::Equals([string]$key, $Name, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return [string]$Headers[$key]
+        }
     }
 
-    $choices = @($choicesProperty.Value)
+    return $null
+}
 
-    if ($choices.Count -lt 1) {
+function Get-OrcaErrorDetails {
+    param(
+        [int]$HttpStatus,
+        [string]$HttpStatusText,
+        $Headers,
+        [string]$RawBody
+    )
+
+    $errorType = ''
+    $errorCode = ''
+    $errorMessage = $RawBody
+    $metadata = $null
+
+    if (-not [string]::IsNullOrWhiteSpace($RawBody)) {
+        try {
+            $parsed = $RawBody | ConvertFrom-Json
+            $errorObject = Get-PropertyValue -Object $parsed -Name 'error'
+
+            if ($null -ne $errorObject) {
+                $value = Get-PropertyValue -Object $errorObject -Name 'type'
+                if ($null -ne $value) { $errorType = [string]$value }
+
+                $value = Get-PropertyValue -Object $errorObject -Name 'code'
+                if ($null -ne $value) { $errorCode = [string]$value }
+
+                $value = Get-PropertyValue -Object $errorObject -Name 'message'
+                if ($null -ne $value) { $errorMessage = [string]$value }
+
+                $metadata = Get-PropertyValue -Object $errorObject -Name 'metadata'
+            }
+        }
+        catch {
+            # Keep raw body when the response is not JSON.
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($errorMessage)) {
+        $errorMessage = $HttpStatusText
+    }
+
+    $retryAfter = Get-HeaderValue -Headers $Headers -Name 'Retry-After'
+    $guidance = 'error.code / error.type / HTTP Status をTraceで確認してください。'
+
+    if ($HttpStatus -eq 401) {
+        $guidance = 'APIキーが無効、またはAuthorizationヘッダーが不正です。'
+    }
+    elseif ($HttpStatus -eq 403 -and $errorCode -eq 'insufficient_user_quota') {
+        $guidance = 'Workspace残高またはメンバー/エージェント予算を確認してください。'
+    }
+    elseif ($HttpStatus -eq 403 -and $errorCode -eq 'pre_consume_token_quota_failed') {
+        $guidance = 'APIキー自身のQuota上限を確認してください。'
+    }
+    elseif ($HttpStatus -eq 403 -and $errorCode -eq 'free_quota_exhausted') {
+        $guidance = '無料ルーターで処理可能なモデルがありません。有料モデルを指定してください。'
+    }
+    elseif ($HttpStatus -eq 429 -and -not [string]::IsNullOrWhiteSpace($retryAfter)) {
+        $guidance = "Rate Limitです。Retry-After=$retryAfter 秒を待ってから再試行してください。"
+    }
+    elseif ($HttpStatus -eq 429) {
+        $guidance = 'Retry-Afterのない無料枠429は、同じPromptを待って再送しても改善しない場合があります。'
+    }
+    elseif ($HttpStatus -eq 425) {
+        $guidance = '指定モデルはまだ利用開始前の可能性があります。error.metadataも確認してください。'
+    }
+    elseif ($HttpStatus -eq 503 -and $errorCode -eq 'model_not_found') {
+        $guidance = '指定モデルが現在のアカウントで利用可能か確認してください。'
+    }
+
+    return [pscustomobject]@{
+        HttpStatus     = $HttpStatus
+        HttpStatusText = $HttpStatusText
+        ErrorType      = $errorType
+        ErrorCode      = $errorCode
+        ErrorMessage   = $errorMessage
+        RetryAfter     = $retryAfter
+        Metadata       = $metadata
+        Guidance       = $guidance
+    }
+}
+
+function Get-AssistantText {
+    param($ResponseJson)
+
+    $choices = @(Get-PropertyValue -Object $ResponseJson -Name 'choices')
+
+    if ($choices.Count -lt 1 -or $null -eq $choices[0]) {
         throw 'choices[0] が見つかりません。Trace の Raw response を確認してください。'
     }
 
-    $messageProperty = $choices[0].PSObject.Properties['message']
-
-    if ($null -eq $messageProperty) {
+    $message = Get-PropertyValue -Object $choices[0] -Name 'message'
+    if ($null -eq $message) {
         throw 'choices[0].message が見つかりません。Trace の Raw response を確認してください。'
     }
 
-    $contentProperty = $messageProperty.Value.PSObject.Properties['content']
+    $content = Get-PropertyValue -Object $message -Name 'content'
 
-    if ($null -eq $contentProperty) {
-        throw 'choices[0].message.content が見つかりません。Trace の Raw response を確認してください。'
-    }
-
-    $content = $contentProperty.Value
-
-    if ($content -is [string]) {
-        return $content
-    }
+    if ($content -is [string]) { return $content }
 
     if ($content -is [System.Collections.IEnumerable]) {
         $parts = @()
 
         foreach ($part in $content) {
-            if ($null -eq $part) {
-                continue
-            }
+            if ($null -eq $part) { continue }
 
-            $typeProperty = $part.PSObject.Properties['type']
-            $textProperty = $part.PSObject.Properties['text']
+            $typeValue = Get-PropertyValue -Object $part -Name 'type'
+            $textValue = Get-PropertyValue -Object $part -Name 'text'
 
-            if ($null -ne $typeProperty -and
-                $null -ne $textProperty -and
-                $typeProperty.Value -eq 'text' -and
-                $textProperty.Value) {
-                $parts += [string]$textProperty.Value
+            if ($typeValue -eq 'text' -and $null -ne $textValue) {
+                $parts += [string]$textValue
             }
         }
 
@@ -161,7 +228,6 @@ function Get-AssistantText {
 }
 
 $xamlPath = Join-Path $PSScriptRoot 'MainWindow.xaml'
-
 if (-not (Test-Path -LiteralPath $xamlPath)) {
     throw "XAML file was not found: $xamlPath"
 }
@@ -172,6 +238,7 @@ $window = [Windows.Markup.XamlReader]::Load($reader)
 
 $apiKeyBox = $window.FindName('ApiKeyBox')
 $modelBox = $window.FindName('ModelBox')
+$modeBox = $window.FindName('ModeBox')
 $questionBox = $window.FindName('QuestionBox')
 $answerBox = $window.FindName('AnswerBox')
 $traceBox = $window.FindName('TraceBox')
@@ -183,16 +250,9 @@ $apiKeyBox.Password = $script:DefaultApiKey
 
 function Add-Trace {
     param(
-        [Parameter(Mandatory = $true)]
         [string]$Step,
-
-        [Parameter(Mandatory = $true)]
         [string]$Direction,
-
-        [Parameter(Mandatory = $true)]
         [string]$Title,
-
-        [Parameter(Mandatory = $false)]
         $Data
     )
 
@@ -216,21 +276,472 @@ function Add-Trace {
 }
 
 function Set-UiBusy {
-    param(
-        [Parameter(Mandatory = $true)]
-        [bool]$Busy
-    )
+    param([bool]$Busy)
 
     $sendButton.IsEnabled = -not $Busy
     $apiKeyBox.IsEnabled = -not $Busy
     $modelBox.IsEnabled = -not $Busy
+    $modeBox.IsEnabled = -not $Busy
     $questionBox.IsEnabled = -not $Busy
+}
+
+function Refresh-Ui {
+    $window.Dispatcher.Invoke(
+        [System.Action]{ },
+        [System.Windows.Threading.DispatcherPriority]::Background
+    )
+}
+
+function Get-SelectedMode {
+    $selected = $modeBox.SelectedItem
+    if ($null -eq $selected) { return 'Chat' }
+    return [string]$selected.Content
+}
+
+function Assert-Inputs {
+    param(
+        [string]$ApiKey,
+        [string]$Model,
+        [string]$Question,
+        [string]$Mode
+    )
+
+    Add-Trace -Step 'STEP 1' -Direction 'LOCAL' -Title '入力値を検証' -Data ([ordered]@{
+        ApiKeyMasked = Mask-ApiKey -ApiKey $ApiKey
+        Model = $Model
+        Mode = $Mode
+        QuestionChars = $Question.Length
+    })
+
+    if ([string]::IsNullOrWhiteSpace($ApiKey) -or
+        $ApiKey -eq $script:ApiKeyPlaceholder -or
+        $ApiKey.StartsWith('xxx-')) {
+        throw 'APIキーがダミー値のままです。OrcaRouterで発行したAPIキーを入力してください。'
+    }
+
+    if ([string]::IsNullOrWhiteSpace($Model)) { throw 'Model を入力してください。' }
+    if ([string]::IsNullOrWhiteSpace($Question)) { throw '質問を入力してください。' }
+}
+
+function New-HttpClient {
+    $client = [System.Net.Http.HttpClient]::new()
+    $client.Timeout = [TimeSpan]::FromSeconds($script:RequestTimeoutSeconds)
+    return $client
+}
+
+function New-JsonRequest {
+    param([string]$ApiKey, [string]$Json)
+
+    $request = [System.Net.Http.HttpRequestMessage]::new(
+        [System.Net.Http.HttpMethod]::Post,
+        [string]$script:ApiEndpoint
+    )
+
+    $request.Headers.Authorization =
+        [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $ApiKey)
+
+    $request.Content =
+        [System.Net.Http.StringContent]::new(
+            $Json,
+            [System.Text.Encoding]::UTF8,
+            'application/json'
+        )
+
+    return $request
+}
+
+function Invoke-OrcaJsonRequest {
+    param(
+        [string]$ApiKey,
+        $Body,
+        [System.Diagnostics.Stopwatch]$Stopwatch,
+        [string]$TraceTitle
+    )
+
+    $client = $null
+    $request = $null
+    $response = $null
+
+    try {
+        $requestJson = $Body | ConvertTo-Json -Depth 30 -Compress
+
+        Add-Trace -Step 'STEP 3' -Direction 'REQUEST' -Title $TraceTitle -Data ([ordered]@{
+            TimeoutSeconds = $script:RequestTimeoutSeconds
+        })
+
+        $client = New-HttpClient
+        $request = New-JsonRequest -ApiKey $ApiKey -Json $requestJson
+        $response = $client.SendAsync($request).GetAwaiter().GetResult()
+
+        $rawResponse = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+        $headers = Get-ResponseHeaders -Response $response
+        $status = [int]$response.StatusCode
+
+        Add-Trace -Step 'STEP 4' -Direction 'RESPONSE' -Title 'HTTPレスポンスを受信' -Data ([ordered]@{
+            Status = $status
+            StatusText = $response.ReasonPhrase
+            ElapsedMs = $Stopwatch.ElapsedMilliseconds
+            Headers = $headers
+            RawBody = $rawResponse
+        })
+
+        if (-not $response.IsSuccessStatusCode) {
+            $details = Get-OrcaErrorDetails -HttpStatus $status -HttpStatusText $response.ReasonPhrase -Headers $headers -RawBody $rawResponse
+            $exception = [System.Exception]::new("HTTP ${status}: $($details.ErrorMessage) $($details.Guidance)")
+            $exception.Data['OrcaErrorDetails'] = (ConvertTo-TraceText $details)
+            throw $exception
+        }
+
+        try {
+            $json = $rawResponse | ConvertFrom-Json
+        }
+        catch {
+            throw "レスポンスJSONの解析に失敗しました: $($_.Exception.Message)"
+        }
+
+        return [pscustomobject]@{
+            Json = $json
+            RawBody = $rawResponse
+            Headers = $headers
+            Status = $status
+        }
+    }
+    finally {
+        if ($null -ne $response) { $response.Dispose() }
+        if ($null -ne $request) { $request.Dispose() }
+        if ($null -ne $client) { $client.Dispose() }
+    }
+}
+
+function Invoke-ChatMode {
+    param(
+        [string]$ApiKey,
+        [string]$Model,
+        [string]$Question,
+        [System.Diagnostics.Stopwatch]$Stopwatch
+    )
+
+    $body = [ordered]@{
+        model = $Model
+        messages = @(
+            [ordered]@{ role = 'user'; content = $Question }
+        )
+    }
+
+    Add-Trace -Step 'STEP 2' -Direction 'REQUEST' -Title '通常Chatリクエストを組み立て' -Data ([ordered]@{
+        Endpoint = $script:ApiEndpoint
+        Authorization = 'Bearer {0}' -f (Mask-ApiKey -ApiKey $ApiKey)
+        Body = $body
+    })
+
+    $result = Invoke-OrcaJsonRequest -ApiKey $ApiKey -Body $body -Stopwatch $Stopwatch -TraceTitle '通常Chat POSTを送信'
+    $assistantText = Get-AssistantText -ResponseJson $result.Json
+    $usage = Get-PropertyValue -Object $result.Json -Name 'usage'
+
+    Add-Trace -Step 'STEP 5' -Direction 'LOCAL' -Title 'Assistantメッセージを解析' -Data ([ordered]@{
+        AnswerChars = $assistantText.Length
+        Usage = if ($null -ne $usage) { $usage } else { '(usage not returned)' }
+    })
+
+    return $assistantText
+}
+
+function Invoke-StreamingMode {
+    param(
+        [string]$ApiKey,
+        [string]$Model,
+        [string]$Question,
+        [System.Diagnostics.Stopwatch]$Stopwatch
+    )
+
+    $body = [ordered]@{
+        model = $Model
+        messages = @(
+            [ordered]@{ role = 'user'; content = $Question }
+        )
+        stream = $true
+        stream_options = [ordered]@{ include_usage = $true }
+    }
+
+    Add-Trace -Step 'STEP 2' -Direction 'REQUEST' -Title 'Streamingリクエストを組み立て' -Data ([ordered]@{
+        Endpoint = $script:ApiEndpoint
+        Body = $body
+        SSE = 'data: {...}, terminal data: [DONE]'
+    })
+
+    $client = $null
+    $request = $null
+    $response = $null
+    $stream = $null
+    $streamReader = $null
+
+    try {
+        Add-Trace -Step 'STEP 3' -Direction 'REQUEST' -Title 'Streaming POSTを送信' -Data ([ordered]@{
+            TimeoutSeconds = $script:RequestTimeoutSeconds
+        })
+
+        $requestJson = $body | ConvertTo-Json -Depth 30 -Compress
+        $client = New-HttpClient
+        $request = New-JsonRequest -ApiKey $ApiKey -Json $requestJson
+
+        $response = $client.SendAsync(
+            $request,
+            [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead
+        ).GetAwaiter().GetResult()
+
+        $headers = Get-ResponseHeaders -Response $response
+        $status = [int]$response.StatusCode
+
+        if (-not $response.IsSuccessStatusCode) {
+            $rawResponse = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+
+            Add-Trace -Step 'STEP 4' -Direction 'RESPONSE' -Title 'Streaming開始前にHTTPエラー' -Data ([ordered]@{
+                Status = $status
+                Headers = $headers
+                RawBody = $rawResponse
+            })
+
+            $details = Get-OrcaErrorDetails -HttpStatus $status -HttpStatusText $response.ReasonPhrase -Headers $headers -RawBody $rawResponse
+            throw "HTTP ${status}: $($details.ErrorMessage) $($details.Guidance)"
+        }
+
+        Add-Trace -Step 'STEP 4' -Direction 'RESPONSE' -Title 'SSEストリームを開始' -Data ([ordered]@{
+            Status = $status
+            ContentType = Get-HeaderValue -Headers $headers -Name 'Content-Type'
+            ElapsedMs = $Stopwatch.ElapsedMilliseconds
+        })
+
+        $stream = $response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
+        $streamReader = [System.IO.StreamReader]::new($stream, [System.Text.Encoding]::UTF8)
+
+        $answer = [System.Text.StringBuilder]::new()
+        $eventCount = 0
+        $usage = $null
+
+        while (-not $streamReader.EndOfStream) {
+            $line = $streamReader.ReadLine()
+
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            if (-not $line.StartsWith('data:')) { continue }
+
+            $payload = $line.Substring(5).Trim()
+
+            if ($payload -eq '[DONE]') {
+                Add-Trace -Step 'STEP 4' -Direction 'STREAM' -Title 'SSE終了 [DONE]' -Data ([ordered]@{
+                    Events = $eventCount
+                })
+                continue
+            }
+
+            if ([string]::IsNullOrWhiteSpace($payload)) { continue }
+
+            try {
+                $chunk = $payload | ConvertFrom-Json
+            }
+            catch {
+                Add-Trace -Step 'STEP 4' -Direction 'STREAM' -Title 'JSON化できないSSE data' -Data $payload
+                continue
+            }
+
+            $eventCount += 1
+
+            if ($eventCount -le $script:MaxStreamTraceEvents) {
+                Add-Trace -Step 'STEP 4' -Direction 'STREAM' -Title "SSE data #$eventCount" -Data $chunk
+            }
+            elseif ($eventCount -eq ($script:MaxStreamTraceEvents + 1)) {
+                Add-Trace -Step 'STEP 4' -Direction 'STREAM' -Title 'SSE Traceを省略' -Data "可読性のため $($script:MaxStreamTraceEvents) 件以降の個別イベント表示を省略します。"
+            }
+
+            $streamError = Get-PropertyValue -Object $chunk -Name 'error'
+
+            if ($null -ne $streamError) {
+                $streamMessage = Get-PropertyValue -Object $streamError -Name 'message'
+                $streamType = Get-PropertyValue -Object $streamError -Name 'type'
+                $streamCode = Get-PropertyValue -Object $streamError -Name 'code'
+                throw "Streaming error: $streamMessage (type=$streamType, code=$streamCode)"
+            }
+
+            $choices = @(Get-PropertyValue -Object $chunk -Name 'choices')
+
+            if ($choices.Count -gt 0 -and $null -ne $choices[0]) {
+                $delta = Get-PropertyValue -Object $choices[0] -Name 'delta'
+
+                if ($null -ne $delta) {
+                    $contentPart = Get-PropertyValue -Object $delta -Name 'content'
+
+                    if ($contentPart -is [string] -and $contentPart.Length -gt 0) {
+                        [void]$answer.Append($contentPart)
+                        $answerBox.Text = $answer.ToString()
+                        $answerBox.ScrollToEnd()
+                        Refresh-Ui
+                    }
+                }
+            }
+
+            $usageValue = Get-PropertyValue -Object $chunk -Name 'usage'
+            if ($null -ne $usageValue) { $usage = $usageValue }
+        }
+
+        Add-Trace -Step 'STEP 5' -Direction 'LOCAL' -Title 'Streaming結果を集約' -Data ([ordered]@{
+            AnswerChars = $answer.Length
+            Usage = if ($null -ne $usage) { $usage } else { '(usage not returned)' }
+        })
+
+        return $answer.ToString()
+    }
+    finally {
+        if ($null -ne $streamReader) { $streamReader.Dispose() }
+        if ($null -ne $stream) { $stream.Dispose() }
+        if ($null -ne $response) { $response.Dispose() }
+        if ($null -ne $request) { $request.Dispose() }
+        if ($null -ne $client) { $client.Dispose() }
+    }
+}
+
+function Invoke-CalculateSumTool {
+    param($ArgumentsObject)
+
+    $aValue = Get-PropertyValue -Object $ArgumentsObject -Name 'a'
+    $bValue = Get-PropertyValue -Object $ArgumentsObject -Name 'b'
+
+    if ($null -eq $aValue -or $null -eq $bValue) {
+        throw 'calculate_sum の a / b が不足しています。'
+    }
+
+    $a = [double]$aValue
+    $b = [double]$bValue
+
+    return [ordered]@{
+        a = $a
+        b = $b
+        sum = $a + $b
+    }
+}
+
+function Invoke-ToolCallingMode {
+    param(
+        [string]$ApiKey,
+        [string]$Model,
+        [string]$Question,
+        [System.Diagnostics.Stopwatch]$Stopwatch
+    )
+
+    $tools = @(
+        [ordered]@{
+            type = 'function'
+            function = [ordered]@{
+                name = 'calculate_sum'
+                description = 'Add two numbers and return the sum.'
+                parameters = [ordered]@{
+                    type = 'object'
+                    properties = [ordered]@{
+                        a = [ordered]@{ type = 'number'; description = 'First number' }
+                        b = [ordered]@{ type = 'number'; description = 'Second number' }
+                    }
+                    required = @('a', 'b')
+                    additionalProperties = $false
+                }
+            }
+        }
+    )
+
+    $firstBody = [ordered]@{
+        model = $Model
+        messages = @(
+            [ordered]@{ role = 'user'; content = $Question }
+        )
+        tools = $tools
+        tool_choice = [ordered]@{
+            type = 'function'
+            function = [ordered]@{ name = 'calculate_sum' }
+        }
+    }
+
+    Add-Trace -Step 'STEP 2' -Direction 'REQUEST' -Title 'Tool Calling 1回目のリクエストを組み立て' -Data $firstBody
+
+    $first = Invoke-OrcaJsonRequest -ApiKey $ApiKey -Body $firstBody -Stopwatch $Stopwatch -TraceTitle 'Tool Calling 1回目を送信'
+
+    $choices = @(Get-PropertyValue -Object $first.Json -Name 'choices')
+    if ($choices.Count -lt 1 -or $null -eq $choices[0]) { throw 'choices[0] がありません。' }
+
+    $assistantMessage = Get-PropertyValue -Object $choices[0] -Name 'message'
+    if ($null -eq $assistantMessage) { throw 'choices[0].message がありません。' }
+
+    $toolCalls = @(Get-PropertyValue -Object $assistantMessage -Name 'tool_calls')
+    if ($toolCalls.Count -lt 1 -or $null -eq $toolCalls[0]) {
+        throw 'tool_calls が返されませんでした。指定モデルがTool Callingに対応しているか確認してください。'
+    }
+
+    Add-Trace -Step 'STEP 5A' -Direction 'TOOL' -Title 'モデルからTool Callを受信' -Data $toolCalls
+
+    $toolMessages = @()
+
+    foreach ($toolCall in $toolCalls) {
+        $toolCallId = [string](Get-PropertyValue -Object $toolCall -Name 'id')
+        $functionObject = Get-PropertyValue -Object $toolCall -Name 'function'
+        $functionName = [string](Get-PropertyValue -Object $functionObject -Name 'name')
+        $argumentsJson = [string](Get-PropertyValue -Object $functionObject -Name 'arguments')
+
+        if ($functionName -ne 'calculate_sum') {
+            throw "未対応のToolが要求されました: $functionName"
+        }
+
+        try {
+            $argumentsObject = $argumentsJson | ConvertFrom-Json
+        }
+        catch {
+            throw "Tool arguments JSONを解析できません: $argumentsJson"
+        }
+
+        $toolResult = Invoke-CalculateSumTool -ArgumentsObject $argumentsObject
+
+        Add-Trace -Step 'STEP 5B' -Direction 'TOOL' -Title 'ローカル関数 calculate_sum を実行' -Data ([ordered]@{
+            ToolCallId = $toolCallId
+            Arguments = $argumentsObject
+            Result = $toolResult
+        })
+
+        $toolMessages += [ordered]@{
+            role = 'tool'
+            tool_call_id = $toolCallId
+            content = ($toolResult | ConvertTo-Json -Depth 10 -Compress)
+        }
+    }
+
+    $secondMessages = @(
+        [ordered]@{ role = 'user'; content = $Question },
+        [ordered]@{
+            role = 'assistant'
+            content = Get-PropertyValue -Object $assistantMessage -Name 'content'
+            tool_calls = $toolCalls
+        }
+    ) + $toolMessages
+
+    $secondBody = [ordered]@{
+        model = $Model
+        messages = $secondMessages
+    }
+
+    Add-Trace -Step 'STEP 5C' -Direction 'REQUEST' -Title 'Tool結果を含む2回目のリクエストを組み立て' -Data $secondBody
+
+    $second = Invoke-OrcaJsonRequest -ApiKey $ApiKey -Body $secondBody -Stopwatch $Stopwatch -TraceTitle 'Tool Calling 2回目を送信'
+
+    $assistantText = Get-AssistantText -ResponseJson $second.Json
+    $usage = Get-PropertyValue -Object $second.Json -Name 'usage'
+
+    Add-Trace -Step 'STEP 5' -Direction 'LOCAL' -Title 'Tool Calling後の最終回答を解析' -Data ([ordered]@{
+        AnswerChars = $assistantText.Length
+        Usage = if ($null -ne $usage) { $usage } else { '(usage not returned)' }
+    })
+
+    return $assistantText
 }
 
 function Invoke-OrcaRouterChat {
     $apiKey = $apiKeyBox.Password.Trim()
     $model = $modelBox.Text.Trim()
     $question = $questionBox.Text.Trim()
+    $mode = Get-SelectedMode
 
     $answerBox.Text = ''
     $statusText.Text = 'Processing...'
@@ -238,120 +749,26 @@ function Invoke-OrcaRouterChat {
     Set-UiBusy -Busy $true
 
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    $client = $null
-    $request = $null
-    $response = $null
-    $rawResponse = ''
-    $httpStatus = '(no HTTP response)'
 
     try {
-        # STEP 1: Validate inputs.
-        Add-Trace -Step 'STEP 1' -Direction 'LOCAL' -Title '入力値を検証' -Data ([ordered]@{
-            ApiKeyMasked  = Mask-ApiKey -ApiKey $apiKey
-            Model         = $model
-            QuestionChars = $question.Length
-        })
+        Assert-Inputs -ApiKey $apiKey -Model $model -Question $question -Mode $mode
 
-        if ([string]::IsNullOrWhiteSpace($apiKey) -or
-            $apiKey -eq $script:ApiKeyPlaceholder -or
-            $apiKey.StartsWith('xxx-')) {
-            throw 'APIキーがダミー値のままです。OrcaRouterで発行したAPIキーを入力してください。'
+        if ($mode -eq 'Streaming') {
+            $assistantText = Invoke-StreamingMode -ApiKey $apiKey -Model $model -Question $question -Stopwatch $stopwatch
         }
-
-        if ([string]::IsNullOrWhiteSpace($model)) {
-            throw 'Model を入力してください。'
+        elseif ($mode -eq 'Tool Calling') {
+            $assistantText = Invoke-ToolCallingMode -ApiKey $apiKey -Model $model -Question $question -Stopwatch $stopwatch
         }
-
-        if ([string]::IsNullOrWhiteSpace($question)) {
-            throw '質問を入力してください。'
+        else {
+            $assistantText = Invoke-ChatMode -ApiKey $apiKey -Model $model -Question $question -Stopwatch $stopwatch
         }
-
-        # STEP 2: Build request.
-        $requestObject = [ordered]@{
-            model = $model
-            messages = @(
-                [ordered]@{
-                    role = 'user'
-                    content = $question
-                }
-            )
-        }
-
-        $requestJson = $requestObject | ConvertTo-Json -Depth 10 -Compress
-
-        Add-Trace -Step 'STEP 2' -Direction 'REQUEST' -Title 'HTTPリクエストを組み立て' -Data ([ordered]@{
-            Method   = 'POST'
-            Endpoint = $script:ApiEndpoint
-            Headers  = [ordered]@{
-                Authorization = 'Bearer {0}' -f (Mask-ApiKey -ApiKey $apiKey)
-                'Content-Type' = 'application/json'
-            }
-            Body = $requestObject
-        })
-
-        # STEP 3: Send HTTP POST.
-        Add-Trace -Step 'STEP 3' -Direction 'REQUEST' -Title 'OrcaRouterへPOSTを送信' -Data ([ordered]@{
-            TimeoutSeconds = $script:RequestTimeoutSeconds
-        })
-
-        $client = [System.Net.Http.HttpClient]::new()
-        $client.Timeout = [TimeSpan]::FromSeconds($script:RequestTimeoutSeconds)
-
-        $request = [System.Net.Http.HttpRequestMessage]::new(
-            [System.Net.Http.HttpMethod]::Post,
-            [string]$script:ApiEndpoint
-        )
-
-        $request.Headers.Authorization =
-            [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $apiKey)
-
-        $request.Content =
-            [System.Net.Http.StringContent]::new(
-                $requestJson,
-                [System.Text.Encoding]::UTF8,
-                'application/json'
-            )
-
-        $response = $client.SendAsync($request).GetAwaiter().GetResult()
-
-        # STEP 4: Receive response.
-        $httpStatus = '{0} {1}' -f [int]$response.StatusCode, $response.ReasonPhrase
-        $rawResponse = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
-        $responseHeaders = Get-ResponseHeaders -Response $response
-
-        Add-Trace -Step 'STEP 4' -Direction 'RESPONSE' -Title 'HTTPレスポンスを受信' -Data ([ordered]@{
-            Status    = $httpStatus
-            ElapsedMs = $stopwatch.ElapsedMilliseconds
-            Headers   = $responseHeaders
-            RawBody   = $rawResponse
-        })
-
-        if (-not $response.IsSuccessStatusCode) {
-            throw ('HTTP request failed: {0}{1}{2}' -f $httpStatus, [Environment]::NewLine, $rawResponse)
-        }
-
-        # STEP 5: Parse assistant message.
-        try {
-            $responseJson = $rawResponse | ConvertFrom-Json
-        }
-        catch {
-            throw "レスポンスJSONの解析に失敗しました: $($_.Exception.Message)"
-        }
-
-        $assistantText = Get-AssistantText -ResponseJson $responseJson
-
-        $usageProperty = $responseJson.PSObject.Properties['usage']
-
-        Add-Trace -Step 'STEP 5' -Direction 'LOCAL' -Title 'Assistantメッセージを解析' -Data ([ordered]@{
-            AnswerChars = $assistantText.Length
-            Usage       = if ($null -ne $usageProperty) { $usageProperty.Value } else { '(usage not returned)' }
-        })
 
         # STEP 6: Update UI and trace.
         $answerBox.Text = $assistantText
 
         Add-Trace -Step 'STEP 6' -Direction 'LOCAL' -Title '画面へ回答を表示' -Data ([ordered]@{
-            Completed      = $true
+            Mode = $mode
+            Completed = $true
             TotalElapsedMs = $stopwatch.ElapsedMilliseconds
         })
 
@@ -361,13 +778,17 @@ function Invoke-OrcaRouterChat {
     catch {
         $exception = $_.Exception
 
+        $details = $null
+        if ($exception.Data.Contains('OrcaErrorDetails')) {
+            $details = $exception.Data['OrcaErrorDetails']
+        }
+
         Add-Trace -Step 'ERROR' -Direction 'ERROR' -Title '処理中にエラーが発生' -Data ([ordered]@{
-            Message      = $exception.Message
-            Type         = $exception.GetType().FullName
-            HttpStatus   = $httpStatus
-            RawResponse  = if ($rawResponse) { $rawResponse } else { '(not available)' }
-            ScriptStack  = $_.ScriptStackTrace
-            Position     = $_.InvocationInfo.PositionMessage
+            Message = $exception.Message
+            Type = $exception.GetType().FullName
+            OrcaErrorDetails = $details
+            ScriptStack = $_.ScriptStackTrace
+            Position = $_.InvocationInfo.PositionMessage
         })
 
         $answerBox.Text = "ERROR: $($exception.Message)"
@@ -376,19 +797,6 @@ function Invoke-OrcaRouterChat {
     }
     finally {
         $stopwatch.Stop()
-
-        if ($null -ne $response) {
-            $response.Dispose()
-        }
-
-        if ($null -ne $request) {
-            $request.Dispose()
-        }
-
-        if ($null -ne $client) {
-            $client.Dispose()
-        }
-
         Set-UiBusy -Busy $false
     }
 }
@@ -403,6 +811,17 @@ $clearTraceButton.Add_Click({
     $statusText.Foreground = '#64748B'
 })
 
+$modeBox.Add_SelectionChanged({
+    $mode = Get-SelectedMode
+
+    if ($mode -eq 'Tool Calling') {
+        $questionBox.Text = 'calculate_sum ツールを使って 123 と 456 を足し、その結果を日本語で説明してください。'
+    }
+    elseif ($mode -eq 'Streaming') {
+        $questionBox.Text = 'Streamingの動作確認です。OrcaRouterの特徴を3つ、短い箇条書きで説明してください。'
+    }
+})
+
 $questionBox.Add_PreviewKeyDown({
     param($sender, $eventArgs)
 
@@ -415,8 +834,9 @@ $questionBox.Add_PreviewKeyDown({
 
 Add-Trace -Step 'READY' -Direction 'LOCAL' -Title 'サンプルを起動' -Data ([ordered]@{
     Endpoint = $script:ApiEndpoint
-    Model    = $modelBox.Text
-    Note     = 'APIキーはダミー値です。実行前に画面上で差し替えてください。'
+    Model = $modelBox.Text
+    Mode = Get-SelectedMode
+    Note = 'APIキーはダミー値です。実行前に画面上で差し替えてください。'
 })
 
 $null = $window.ShowDialog()
