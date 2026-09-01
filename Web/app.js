@@ -244,7 +244,7 @@ async function postJson(
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json; charset=utf-8",
-        Accept: "text/event-stream"
+        Accept: "application/json"
       },
       body: JSON.stringify(body),
       signal: controller.signal
@@ -354,7 +354,8 @@ async function runStreaming(apiKey, model, question, startedAt) {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json; charset=utf-8"
+        "Content-Type": "application/json; charset=utf-8",
+        Accept: "text/event-stream"
       },
       body: JSON.stringify(requestBody),
       signal: controller.signal
