@@ -10,6 +10,7 @@ const CHAT_TOOL_TIMEOUT_MS = 120000;
 const STREAM_TIMEOUT_MS = 90000;
 const MAX_STREAM_TRACE_EVENTS = 50;
 const MAX_RAW_JSON_CHARS = 30000;
+const MAX_HISTORY_TURNS = 10;
 
 const apiKeyInput = document.getElementById("apiKey");
 const apiKeyFileInput = document.getElementById("apiKeyFile");
@@ -25,8 +26,190 @@ const sendButton = document.getElementById("sendButton");
 const clearTraceButton = document.getElementById("clearTraceButton");
 const statusText = document.getElementById("statusText");
 const traceItemTemplate = document.getElementById("traceItemTemplate");
+const newChatButton = document.getElementById("newChatButton");
+const promptExampleInput = document.getElementById("promptExample");
+const historyStatus = document.getElementById("historyStatus");
+const firstRunHelp = document.getElementById("firstRunHelp");
+const devHttpStatus = document.getElementById("devHttpStatus");
+const devElapsed = document.getElementById("devElapsed");
+const devModel = document.getElementById("devModel");
+const devPromptTokens = document.getElementById("devPromptTokens");
+const devCompletionTokens = document.getElementById("devCompletionTokens");
+const devTotalTokens = document.getElementById("devTotalTokens");
+const devCost = document.getElementById("devCost");
+const devHistory = document.getElementById("devHistory");
+const devRequestJson = document.getElementById("devRequestJson");
+const devResponseJson = document.getElementById("devResponseJson");
+
+const conversationHistory = [];
 
 apiKeyInput.value = DEFAULT_API_KEY;
+
+const PROMPT_EXAMPLES = {
+  summary: "次の文章を3行で要約してください。\n\nここに文章を貼り付けてください。",
+  explain: "次の内容を、専門用語を補足しながら初心者向けに説明してください。\n\nここに内容を貼り付けてください。",
+  review: "次のコードをレビューし、問題点・理由・改善例の順に説明してください。\n\nここにコードを貼り付けてください。",
+  json: "次の内容を整理し、JSON形式だけで返してください。\n\nここに内容を貼り付けてください。",
+  translate: "次の日本語を自然な英語に翻訳してください。\n\nここに文章を貼り付けてください。"
+};
+
+function hasConfiguredApiKey() {
+  const value = apiKeyInput.value.trim();
+  return Boolean(value) &&
+    value !== API_KEY_PLACEHOLDER &&
+    !value.startsWith("xxx-");
+}
+
+function updateFirstRunHelp() {
+  firstRunHelp.hidden = hasConfiguredApiKey();
+}
+
+function getConversationMessages(question) {
+  const messages = [];
+
+  for (const turn of conversationHistory) {
+    messages.push({ role: "user", content: turn.user });
+    messages.push({ role: "assistant", content: turn.assistant });
+  }
+
+  messages.push({ role: "user", content: question });
+  return messages;
+}
+
+function trimConversationHistory() {
+  while (conversationHistory.length > MAX_HISTORY_TURNS) {
+    conversationHistory.shift();
+  }
+}
+
+function updateHistoryStatus() {
+  const count = conversationHistory.length;
+  historyStatus.textContent = `履歴 ${count} / ${MAX_HISTORY_TURNS} 往復`;
+  devHistory.textContent = `${count} / ${MAX_HISTORY_TURNS} turns`;
+}
+
+function renderConversation(pendingQuestion = "", pendingAssistant = "") {
+  answerBox.innerHTML = "";
+
+  const messages = [];
+  for (const turn of conversationHistory) {
+    messages.push({ role: "user", content: turn.user });
+    messages.push({ role: "assistant", content: turn.assistant });
+  }
+
+  if (pendingQuestion) {
+    messages.push({ role: "user", content: pendingQuestion });
+    if (pendingAssistant) {
+      messages.push({ role: "assistant", content: pendingAssistant });
+    }
+  }
+
+  if (messages.length === 0) {
+    answerBox.textContent = "ここに会話が表示されます。";
+    return;
+  }
+
+  for (const message of messages) {
+    const item = document.createElement("div");
+    item.className = `conversation-message ${message.role}`;
+
+    const role = document.createElement("span");
+    role.className = "conversation-role";
+    role.textContent = message.role === "user" ? "YOU" : "ASSISTANT";
+
+    const body = document.createElement("div");
+    body.textContent = message.content;
+
+    item.append(role, body);
+    answerBox.appendChild(item);
+  }
+
+  answerBox.scrollTop = answerBox.scrollHeight;
+}
+
+function addConversationTurn(question, assistant) {
+  conversationHistory.push({ user: question, assistant });
+  trimConversationHistory();
+  updateHistoryStatus();
+  renderConversation();
+}
+
+function startNewChat() {
+  conversationHistory.length = 0;
+  updateHistoryStatus();
+  renderConversation();
+  setStatus("New chat - 履歴をクリアしました");
+}
+
+function combineUsage(...items) {
+  const result = {
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+    cost_usd: 0
+  };
+  let hasAny = false;
+  let hasCost = false;
+
+  for (const usage of items) {
+    if (!usage || typeof usage !== "object") continue;
+    hasAny = true;
+
+    for (const key of ["prompt_tokens", "completion_tokens", "total_tokens"]) {
+      const value = Number(usage[key]);
+      if (Number.isFinite(value)) result[key] += value;
+    }
+
+    const cost = Number(usage.cost_usd);
+    if (Number.isFinite(cost)) {
+      result.cost_usd += cost;
+      hasCost = true;
+    }
+  }
+
+  if (!hasAny) return null;
+  if (!hasCost) delete result.cost_usd;
+  return result;
+}
+
+function updateDeveloperRequest(value) {
+  devRequestJson.textContent = JSON.stringify(value ?? {}, null, 2);
+}
+
+function updateDeveloperResponse(value) {
+  if (typeof value === "string") {
+    devResponseJson.textContent = limitRawText(value);
+    return;
+  }
+  devResponseJson.textContent = JSON.stringify(value ?? {}, null, 2);
+}
+
+function updateDeveloperInfo({ status, elapsedMs, model, usage, request, response }) {
+  devHttpStatus.textContent = status ? String(status) : "-";
+  devElapsed.textContent = Number.isFinite(elapsedMs) ? `${Math.round(elapsedMs)} ms` : "-";
+  devModel.textContent = model || "-";
+  devPromptTokens.textContent = usage?.prompt_tokens ?? "-";
+  devCompletionTokens.textContent = usage?.completion_tokens ?? "-";
+  devTotalTokens.textContent = usage?.total_tokens ?? "-";
+  devCost.textContent =
+    typeof usage?.cost_usd === "number"
+      ? `${usage.cost_usd.toFixed(6)}`
+      : "(not returned)";
+  updateDeveloperRequest(request);
+  updateDeveloperResponse(response);
+  updateHistoryStatus();
+}
+
+function resetDeveloperInfo() {
+  updateDeveloperInfo({
+    status: null,
+    elapsedMs: NaN,
+    model: modelInput.value.trim(),
+    usage: null,
+    request: {},
+    response: {}
+  });
+}
 
 function setStatus(message, isError = false) {
   statusText.textContent = message;
@@ -74,6 +257,7 @@ async function loadApiKeyFromFile(file) {
   });
 
   setStatus("API Key loaded from local file");
+  updateFirstRunHelp();
 }
 
 function limitRawText(value) {
@@ -271,7 +455,8 @@ async function postJson(
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json; charset=utf-8",
-        Accept: "application/json"
+        Accept: "application/json",
+        "X-OrcaRouter-Include-Cost": "true"
       },
       body: JSON.stringify(body),
       signal: controller.signal
@@ -316,19 +501,23 @@ async function postJson(
 }
 
 async function runChat(apiKey, model, question, startedAt) {
-  // STEP 2: Build request.
+  // STEP 2: Build request. The application owns the conversation history.
   const requestBody = {
     model,
-    messages: [{ role: "user", content: question }]
+    messages: getConversationMessages(question)
   };
+
+  updateDeveloperRequest(requestBody);
 
   addTrace("STEP 2", "REQUEST", "通常Chatリクエストを組み立て", {
     method: "POST",
     endpoint: API_ENDPOINT,
     headers: {
       Authorization: `Bearer ${maskApiKey(apiKey)}`,
-      "Content-Type": "application/json; charset=utf-8"
+      "Content-Type": "application/json; charset=utf-8",
+      "X-OrcaRouter-Include-Cost": "true"
     },
+    historyTurns: conversationHistory.length,
     body: requestBody
   });
 
@@ -340,34 +529,44 @@ async function runChat(apiKey, model, question, startedAt) {
     "Raw JSON - Chat"
   );
 
-  // STEP 5: Parse assistant message.
   const assistantText = extractAssistantText(result.json);
+  const usage = result.json.usage ?? null;
 
   addTrace("STEP 5", "LOCAL", "Assistantメッセージを解析", {
     answerLength: assistantText.length,
-    usage: result.json.usage ?? "(usage not returned)"
+    historyTurnsSent: conversationHistory.length,
+    usage: usage ?? "(usage not returned)"
   });
 
-  return assistantText;
+  return {
+    assistantText,
+    usage,
+    request: requestBody,
+    response: result.json,
+    status: result.response.status,
+    actualModel: result.json.model ?? model
+  };
 }
 
 async function runStreaming(apiKey, model, question, startedAt) {
   // STEP 2: Build request.
   const requestBody = {
     model,
-    messages: [{ role: "user", content: question }],
+    messages: getConversationMessages(question),
     stream: true,
     stream_options: { include_usage: true }
   };
 
+  updateDeveloperRequest(requestBody);
+
   addTrace("STEP 2", "REQUEST", "Streamingリクエストを組み立て", {
     method: "POST",
     endpoint: API_ENDPOINT,
+    historyTurns: conversationHistory.length,
     body: requestBody,
     note: "OpenAI-compatible SSE: data: {...}, terminal data: [DONE]"
   });
 
-  // STEP 3: Send HTTP POST.
   addTrace("STEP 3", "REQUEST", "Streaming POSTを送信", {
     timeoutMs: STREAM_TIMEOUT_MS,
     transport: "Browser fetch + ReadableStream",
@@ -382,7 +581,8 @@ async function runStreaming(apiKey, model, question, startedAt) {
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json; charset=utf-8",
-        Accept: "text/event-stream"
+        Accept: "text/event-stream",
+        "X-OrcaRouter-Include-Cost": "true"
       },
       body: JSON.stringify(requestBody),
       signal: controller.signal
@@ -393,6 +593,7 @@ async function runStreaming(apiKey, model, question, startedAt) {
     if (!response.ok) {
       const rawBody = await response.text();
       displayRawResponse(rawBody, "Raw JSON - Streaming error", response.status);
+      updateDeveloperResponse(rawBody);
       addTrace("STEP 4", "RESPONSE", "Streaming開始前にHTTPエラー", {
         status: response.status,
         headers,
@@ -428,6 +629,7 @@ async function runStreaming(apiKey, model, question, startedAt) {
     let eventCount = 0;
     let usage = null;
     let latestPayload = "";
+    let latestChunk = null;
 
     rawJsonTitle.textContent = "Raw JSON - Streaming (latest SSE event)";
     rawJsonStatus.textContent = `HTTP Status: ${response.status} / Streaming`;
@@ -464,7 +666,8 @@ async function runStreaming(apiKey, model, question, startedAt) {
 
         try {
           chunk = JSON.parse(payload);
-        } catch (error) {
+          latestChunk = chunk;
+        } catch {
           addTrace("STEP 4", "STREAM", "JSON化できないSSE data", payload);
           continue;
         }
@@ -498,7 +701,7 @@ async function runStreaming(apiKey, model, question, startedAt) {
 
         if (typeof delta === "string" && delta.length > 0) {
           answer += delta;
-          answerBox.textContent = answer;
+          renderConversation(question, answer);
         }
 
         if (chunk.usage) {
@@ -523,10 +726,11 @@ async function runStreaming(apiKey, model, question, startedAt) {
 
           try {
             const chunk = JSON.parse(payload);
+            latestChunk = chunk;
             const delta = chunk?.choices?.[0]?.delta?.content;
             if (typeof delta === "string" && delta.length > 0) {
               answer += delta;
-              answerBox.textContent = answer;
+              renderConversation(question, answer);
             }
             if (chunk.usage) usage = chunk.usage;
           } catch {
@@ -542,13 +746,25 @@ async function runStreaming(apiKey, model, question, startedAt) {
       );
     }
 
-    // STEP 5: Parse assistant message.
     addTrace("STEP 5", "LOCAL", "Streaming結果を集約", {
       answerLength: answer.length,
+      historyTurnsSent: conversationHistory.length,
       usage: usage ?? "(usage not returned)"
     });
 
-    return answer;
+    return {
+      assistantText: answer,
+      usage,
+      request: requestBody,
+      response: {
+        stream: true,
+        latest_event: latestChunk,
+        usage,
+        note: "Streaming responses are SSE; latest_event is the final parsed event observed by this sample."
+      },
+      status: response.status,
+      actualModel: latestChunk?.model ?? model
+    };
   } finally {
     window.clearTimeout(timeoutId);
   }
@@ -589,10 +805,9 @@ async function runToolCalling(apiKey, model, question, startedAt) {
     }
   ];
 
-  // STEP 2: Build request.
   const firstRequest = {
     model,
-    messages: [{ role: "user", content: question }],
+    messages: getConversationMessages(question),
     tools,
     tool_choice: {
       type: "function",
@@ -600,8 +815,11 @@ async function runToolCalling(apiKey, model, question, startedAt) {
     }
   };
 
+  updateDeveloperRequest({ request_1: firstRequest });
+
   addTrace("STEP 2", "REQUEST", "Tool Calling 1回目のリクエストを組み立て", {
     endpoint: API_ENDPOINT,
+    historyTurns: conversationHistory.length,
     body: firstRequest
   });
 
@@ -635,7 +853,7 @@ async function runToolCalling(apiKey, model, question, startedAt) {
 
     try {
       args = JSON.parse(toolCall.function.arguments || "{}");
-    } catch (error) {
+    } catch {
       throw new Error(
         `Tool arguments JSONを解析できません: ${toolCall.function.arguments}`
       );
@@ -659,7 +877,7 @@ async function runToolCalling(apiKey, model, question, startedAt) {
   const secondRequest = {
     model,
     messages: [
-      { role: "user", content: question },
+      ...getConversationMessages(question),
       {
         role: "assistant",
         content: assistantMessage.content ?? null,
@@ -668,6 +886,11 @@ async function runToolCalling(apiKey, model, question, startedAt) {
       ...toolMessages
     ]
   };
+
+  updateDeveloperRequest({
+    request_1: firstRequest,
+    request_2: secondRequest
+  });
 
   addTrace("STEP 5C", "REQUEST", "Tool結果を含む2回目のリクエストを組み立て", {
     body: secondRequest
@@ -682,13 +905,28 @@ async function runToolCalling(apiKey, model, question, startedAt) {
   );
 
   const assistantText = extractAssistantText(second.json);
+  const usage = combineUsage(first.json.usage, second.json.usage);
 
   addTrace("STEP 5", "LOCAL", "Tool Calling後の最終回答を解析", {
     answerLength: assistantText.length,
-    usage: second.json.usage ?? "(usage not returned)"
+    historyTurnsSent: conversationHistory.length,
+    usage: usage ?? "(usage not returned)"
   });
 
-  return assistantText;
+  return {
+    assistantText,
+    usage,
+    request: {
+      request_1: firstRequest,
+      request_2: secondRequest
+    },
+    response: {
+      response_1: first.json,
+      response_2: second.json
+    },
+    status: second.response.status,
+    actualModel: second.json.model ?? model
+  };
 }
 
 async function sendChat() {
@@ -698,7 +936,6 @@ async function sendChat() {
   const mode = modeInput.value;
 
   clearTracePlaceholder();
-  answerBox.textContent = "";
   prepareRawResponse(
     mode === "stream"
       ? "Raw JSON - Streaming"
@@ -708,29 +945,42 @@ async function sendChat() {
   );
   setStatus("Processing...");
   sendButton.disabled = true;
+  newChatButton.disabled = true;
 
   const startedAt = performance.now();
 
   try {
     validateInputs(apiKey, model, question, mode);
+    renderConversation(question, "");
 
-    let assistantText;
+    let result;
 
     if (mode === "stream") {
-      assistantText = await runStreaming(apiKey, model, question, startedAt);
+      result = await runStreaming(apiKey, model, question, startedAt);
     } else if (mode === "tools") {
-      assistantText = await runToolCalling(apiKey, model, question, startedAt);
+      result = await runToolCalling(apiKey, model, question, startedAt);
     } else {
-      assistantText = await runChat(apiKey, model, question, startedAt);
+      result = await runChat(apiKey, model, question, startedAt);
     }
 
-    // STEP 6: Update UI and trace.
-    answerBox.textContent = assistantText;
+    addConversationTurn(question, result.assistantText);
+
+    const elapsedMs = performance.now() - startedAt;
+    updateDeveloperInfo({
+      status: result.status,
+      elapsedMs,
+      model: result.actualModel || model,
+      usage: result.usage,
+      request: result.request,
+      response: result.response
+    });
 
     addTrace("STEP 6", "LOCAL", "画面へ回答を表示", {
       mode,
       completed: true,
-      totalElapsedMs: Math.round(performance.now() - startedAt)
+      historyTurnsKept: conversationHistory.length,
+      historyLimit: MAX_HISTORY_TURNS,
+      totalElapsedMs: Math.round(elapsedMs)
     });
 
     setStatus("Completed");
@@ -748,10 +998,27 @@ async function sendChat() {
       stack: error?.stack ?? "(stack not available)"
     });
 
-    answerBox.textContent = `ERROR: ${message}`;
+    renderConversation();
+    let requestForDisplay = {};
+    try {
+      requestForDisplay = JSON.parse(devRequestJson.textContent || "{}");
+    } catch {
+      requestForDisplay = { note: "Request JSON could not be parsed for display." };
+    }
+
+    updateDeveloperInfo({
+      status: error?.details?.httpStatus ?? null,
+      elapsedMs: performance.now() - startedAt,
+      model,
+      usage: null,
+      request: requestForDisplay,
+      response: error?.details ?? { error: message }
+    });
+
     setStatus("Error - Trace を確認してください", true);
   } finally {
     sendButton.disabled = false;
+    newChatButton.disabled = false;
   }
 }
 
@@ -767,6 +1034,18 @@ modeInput.addEventListener("change", () => {
       "日本語で「こんにちは。Web版Chatのテストです。」とだけ答えてください。";
   }
 });
+
+apiKeyInput.addEventListener("input", updateFirstRunHelp);
+
+promptExampleInput.addEventListener("change", () => {
+  const prompt = PROMPT_EXAMPLES[promptExampleInput.value];
+  if (prompt) {
+    questionInput.value = prompt;
+    questionInput.focus();
+  }
+});
+
+newChatButton.addEventListener("click", startNewChat);
 
 apiKeyFileInput.addEventListener("change", async () => {
   const file = apiKeyFileInput.files?.[0];
@@ -802,3 +1081,7 @@ questionInput.addEventListener("keydown", (event) => {
 });
 
 clearTrace();
+updateFirstRunHelp();
+updateHistoryStatus();
+renderConversation();
+resetDeveloperInfo();
