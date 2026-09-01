@@ -72,43 +72,49 @@ VBAコード内にも `STEP 1` ～ `STEP 6` の同じコメントを配置して
 
 ## HTTP implementation
 
-HTTP通信には、参照設定を追加せずに使える late binding の `WinHttp.WinHttpRequest.5.1` を利用します。
+通常ChatとTool Callingでは、参照設定を追加せずに使える late binding の `MSXML2.XMLHTTP.6.0` を利用します。
+
+### XMLHTTPへ変更した理由
+
+PowerShell版は .NET の `HttpClient` で比較的すぐ応答する一方、VBA版の `WinHttp.WinHttpRequest.5.1` では、HTTP Statusを受け取る前の待機が長くなる実測がありました。
+
+`WinHttp.WinHttpRequest` はWindowsのWinHTTPスタックを使い、主にマシン単位のネットワーク／プロキシ設定を参照します。一方、`MSXML2.XMLHTTP.6.0` はデスクトップアプリケーション向けで、現在のユーザー環境のネットワーク／プロキシ設定に近い経路を使います。
+
+そのため、このExcel VBAサンプルでは通常ChatとTool Callingを `XMLHTTP` に切り替えています。PowerShellの `HttpClient` と完全に同じ実装ではありませんが、少なくともWinHTTP固有の通信経路を外して比較できるようにしています。
 
 ### 非同期処理にしている理由
 
-通常ChatとTool Callingは、`.Open "POST", URL, True` のように **第3引数を `True` にして非同期で送信**しています。
+`.Open "POST", URL, True` のように **第3引数を `True` にして非同期送信**します。
 
-同期処理（`False`）の場合は、`.Send` の中でHTTP処理が完了するまでVBAへ制御が戻りません。その間は `DoEvents` を呼ぶこともTraceを書き換えることもできないため、API応答が遅いとExcelが「固まった」ように見えます。
+同期処理（`False`）では、`.Send` の中でHTTP処理が完了するまでVBAへ制御が戻りません。その間は `DoEvents` やTrace更新が実行できないため、API応答が遅いとExcelが固まったように見えます。
 
-非同期処理（`True`）では、`.Send` のあとVBAへ制御が戻るため、WinHTTP標準の `WaitForResponse(1)` で1秒ずつ完了を確認できます。未完了ならVBA側で経過時間を表示し、Traceを追加し、`YieldToExcel` から `DoEvents` を実行してExcelへ描画・操作の機会を返します。
-
-概念的には次の流れです。
+非同期処理（`True`）では、`.Send` のあとVBAへ制御が戻ります。XMLHTTPにはWinHTTPの `WaitForResponse` はないため、`readyState` を確認します。
 
 ```text
 .Send
   ↓
-WaitForResponse(1)
+readyState を確認
   ↓
-未完了
+4 ではない
   ↓
 Trace / StatusBar 更新
   ↓
+50ms待機
+  ↓
 YieldToExcel → DoEvents
   ↓
-もう一度 WaitForResponse(1)
+もう一度 readyState を確認
 ```
 
-`WaitForResponse` は **WinHttp.WinHttpRequestの標準メソッド**、`YieldToExcel` と `WaitForWinHttpResponse` はこのサンプルで用意した補助処理です。
+`readyState = 4` になればレスポンス完了です。
 
-`DoEvents` は便利ですが、呼び出し中にExcelの別イベントやボタン操作も処理されるため、どこにでも直接記述せず、`YieldToExcel` で約0.05秒間隔に抑制しています。また、待機中のSend二重実行を防ぐフラグも持たせています。
+`YieldToExcel` と `WaitForXmlHttpResponse` はこのサンプルで用意した補助処理です。`DoEvents` を毎ループ無制限に呼ばず、Excelの再描画やウィンドウ操作に必要な範囲で利用します。また、待機中のSend二重実行を防ぐフラグも持たせています。
 
-通常Chatでタイムアウトした場合は、まず `TestOrcaRouterConnection` マクロを実行してください。このマクロは `GET /v1/models` を短いタイムアウトで呼び出し、次を切り分けます。
+通常Chatでタイムアウトした場合は、まず `TestOrcaRouterConnection` マクロを実行してください。このマクロも `MSXML2.XMLHTTP.6.0` で `GET /v1/models` を呼び出し、次を切り分けます。
 
 - 2xx: ネットワーク到達性とAPIキー認証は動作。Chat側のモデル選択・ルーティング・応答待ちを確認
 - 401 / 403: APIキー、権限、Quotaなどを確認
-- HTTP応答前のタイムアウト: WinHTTPからAPIホストまでの通信経路、プロキシ、セキュリティ製品などを確認
-
-
+- HTTP応答前のタイムアウト: ユーザー側ネットワーク、プロキシ、セキュリティ製品などを確認
 
 ```text
 POST https://api.orcarouter.ai/v1/chat/completions
@@ -140,7 +146,7 @@ Excelセルの最大文字数と可読性を考慮し、非常に長いTraceデ�
 ## Notes
 
 - Windows版Excelを想定しています。
-- 通常ChatとTool CallingはWinHTTPの非同期送信 + 1秒単位の待機にしており、待機中もExcelが応答しやすいようにしています。
+- 通常ChatとTool Callingは `MSXML2.XMLHTTP.6.0` の非同期送信を使い、`readyState` を短い間隔で確認します。
 - 待機ループ、Streamingの逐次更新、Trace描画では `DoEvents` を直接ばらまかず、`YieldToExcel` を通して約0.05秒間隔に抑制しています。
 - 待機中はExcelのステータスバーへ経過秒数を表示し、一定間隔でTraceにも `WAIT` 行を追加します。
 - 通常Chatの総待機上限は120秒です。
@@ -151,7 +157,7 @@ Excelセルの最大文字数と可読性を考慮し、非常に長いTraceデ�
 
 B5セルのドロップダウンで選択します。
 
-- `Chat` - `WinHttp.WinHttpRequest.5.1` による通常Chat
+- `Chat` - `MSXML2.XMLHTTP.6.0` による非同期Chat
 - `Streaming` - Windows標準 `curl.exe` をVBAから起動し、SSEを標準出力から逐次読取
 - `Tool Calling` - `calculate_sum(a, b)` のTool Callをローカル実行し、Tool結果を含む2回目のAPI呼び出しまで実施
 

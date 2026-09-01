@@ -19,11 +19,15 @@ Option Explicit
 ' STEP 5 - Parse / process result
 ' STEP 6 - Update UI and trace
 '
-' Streaming note:
-' WinHttp.WinHttpRequest is intentionally kept for ordinary requests.
-' For a dependency-light VBA streaming demo, Windows curl.exe is started and
-' its SSE stdout is read line-by-line. The API key is passed through curl's
-' stdin config, not on the process command line.
+' Transport note:
+' Normal Chat and Tool Calling use asynchronous MSXML2.XMLHTTP.6.0 because this
+' is an interactive desktop Excel sample and XMLHTTP follows current-user
+' networking/proxy settings more closely than the machine-level WinHTTP stack.
+'
+' Streaming still uses Windows curl.exe in this version because XMLHTTP does
+' not provide a simple late-bound incremental SSE callback. curl stdout is read
+' line-by-line, and the API key is passed through stdin config rather than on
+' the process command line.
 '===============================================================================
 
 Private Const API_ENDPOINT_ADV As String = "https://api.orcarouter.ai/v1/chat/completions"
@@ -357,7 +361,7 @@ Public Sub SendOrcaRouterToolCalling()
              "Body:" & vbCrLf & firstRequest
 
     'STEP 3 / STEP 4: First HTTP request.
-    Set httpRequest = CreateObject("WinHttp.WinHttpRequest.5.1")
+    Set httpRequest = CreateObject("MSXML2.XMLHTTP.6.0")
 
     SendJsonRequest httpRequest, apiKey, firstRequest, _
                     firstStatus, firstHeaders, firstResponse
@@ -431,7 +435,7 @@ Public Sub SendOrcaRouterToolCalling()
              "Build request #2 with Tool result", _
              "Body:" & vbCrLf & secondRequest
 
-    Set httpRequest = CreateObject("WinHttp.WinHttpRequest.5.1")
+    Set httpRequest = CreateObject("MSXML2.XMLHTTP.6.0")
 
     SendJsonRequest httpRequest, apiKey, secondRequest, _
                     secondStatus, secondHeaders, secondResponse
@@ -736,34 +740,32 @@ Private Sub SendJsonRequest( _
     Set ws = ThisWorkbook.Worksheets(SAMPLE_SHEET_NAME_ADV)
 
     AddTrace ws, _
-             "STEP 3", "REQUEST", "Send WinHTTP POST", _
+             "STEP 3", "REQUEST", "Send XMLHTTP POST", _
              "Endpoint: " & API_ENDPOINT_ADV & vbCrLf & _
              "Authorization: Bearer " & MaskApiKey(apiKey) & vbCrLf & _
+             "Transport: MSXML2.XMLHTTP.6.0" & vbCrLf & _
              "Excel remains responsive while waiting."
 
     startedAt = Timer
 
     With httpRequest
 
-        'Use asynchronous WinHTTP here for the same reason as normal Chat:
-        'a synchronous Send would hold VBA inside the COM call until the API
-        'finishes. In that state DoEvents cannot run and Excel appears frozen.
+        'Use the same asynchronous XMLHTTP transport as normal Chat.
         '
-        'With asynchronous=True, Send returns control to VBA and the shared
-        'WaitForWinHttpResponse helper performs short waits while allowing
-        'Trace updates, StatusBar progress, and YieldToExcel.
+        'Tool Calling can make two HTTP requests. A synchronous Send on either
+        'request would freeze the Excel UI until that call completes.
+        '
+        'With asynchronous=True, Send returns to VBA immediately. The shared
+        'WaitForXmlHttpResponse helper polls readyState, updates Trace and the
+        'StatusBar, and yields to Excel between polls.
         .Open "POST", API_ENDPOINT_ADV, True
-        .SetTimeouts 10000, 10000, 30000, TOOL_REQUEST_TIMEOUT_SECONDS * 1000
-        .SetRequestHeader "Authorization", "Bearer " & apiKey
-        .SetRequestHeader "Content-Type", "application/json; charset=utf-8"
+        .setRequestHeader "Authorization", "Bearer " & apiKey
+        .setRequestHeader "Content-Type", "application/json; charset=utf-8"
         .Send StringToUtf8Bytes(requestBody)
 
     End With
 
-    'Tool Calling can make two separate HTTP requests. Using the same
-    'responsive wait helper for both calls keeps the Excel UI usable during
-    'either wait and makes the timing behavior consistent with normal Chat.
-    WaitForWinHttpResponse _
+    WaitForXmlHttpResponse _
         httpRequest, _
         ws, _
         "Waiting for OrcaRouter Tool Calling response", _
@@ -772,8 +774,8 @@ Private Sub SendJsonRequest( _
         15
 
     httpStatus = httpRequest.Status
-    responseHeaders = httpRequest.GetAllResponseHeaders
-    responseText = httpRequest.ResponseText
+    responseHeaders = httpRequest.getAllResponseHeaders
+    responseText = httpRequest.responseText
 
     Set ws = Nothing
 
