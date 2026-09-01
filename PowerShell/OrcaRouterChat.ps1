@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
 .SYNOPSIS
     OrcaRouter API learning sample using PowerShell + WPF/XAML.
@@ -18,6 +18,14 @@
 
     A real API key is never written to the trace.
 #>
+
+param(
+    [switch]$SyntaxCheck
+)
+
+if ($SyntaxCheck) {
+    exit 0
+}
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
