@@ -144,7 +144,7 @@ jobs:
             exit 1
           fi
 
-          grep -q 'System.Dynamic.ExpandoObject' PowerShell/OrcaRouterChat.ps1
+          grep -q 'System.Data.DataTable' PowerShell/OrcaRouterChat.ps1
           grep -q 'INotifyPropertyChanged' PowerShell/OrcaRouterChat.ps1
           grep -q 'BeginInvoke' PowerShell/OrcaRouterChat.ps1
 
