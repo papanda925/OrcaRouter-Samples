@@ -21,6 +21,27 @@ OrcaRouter API処理
 
 API KeyはWPFの `PasswordBox.Password` が標準では通常のData Binding対象にならないため、従来どおり直接取得します。Traceも大量追記を分かりやすくするため `AppendText()` を使用します。
 
+## Responsive window layout
+
+WPFの `Grid` と `*`（star sizing）を使い、ウィンドウサイズに合わせて INPUT / OUTPUT / TRACE が連動して伸縮するようにしています。
+
+```text
+Window
+  ├─ Header / API settings : Auto
+  ├─ INPUT                 : 3*
+  ├─ OUTPUT                : 3*
+  ├─ TRACE                 : 4*
+  └─ Status                : Auto
+```
+
+通常起動時は最大化して表示します。タイトルバーの **最小化 / 元に戻す / 最大化** が使え、元に戻した後はウィンドウ端をドラッグして自由にサイズ変更できます。
+
+`ResizeMode="CanResizeWithGrip"` を指定しているため、右下のサイズ変更グリップも利用できます。
+
+INPUT / OUTPUT / TRACE の間には `GridSplitter` を置いています。たとえば回答欄を広くしたい場合は、区切り線を上下にドラッグしてその場で比率を変更できます。ウィンドウを拡大・縮小した場合も、そのGrid配分に従って各欄が連動します。
+
+小さいウィンドウで1つの欄だけが極端につぶれないよう、各行には最低高さを持たせ、各TextBoxは内部スクロールできるようにしています。
+
 ## Question入力欄 / MVVM
 
 Question欄はWPF標準の `TextBox` をそのまま編集用コントロールとして使います。
@@ -41,7 +62,7 @@ PowerShell + `XamlReader` では、主要な入力欄までData Bindingだけに
 
 また、API待機中もQuestion欄は無効化しません。応答を待ちながら次の質問を入力できます。
 
-CIではWindows PowerShell 5.1上で、QuestionBoxが **編集可能・有効・フォーカス可能・複数行向けの高さを持つこと**、Text変更がViewModelへ同期されることを確認します。
+CIではWindows PowerShell 5.1上で、QuestionBoxが **編集可能・有効・フォーカス可能**であること、Text変更がViewModelへ同期されることに加え、1200×900の復元サイズで Question / Answer / Trace が一定以上の実表示高さを持つことも確認します。
 
 参考: PowerShell / WPF / MVVMの考え方
 - https://papanda925.com/?p=2187
