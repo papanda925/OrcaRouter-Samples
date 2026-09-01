@@ -32,6 +32,7 @@ Private Const SAMPLE_SHEET_NAME_ADV As String = "OrcaRouter Chat"
 Private Const MAX_STREAM_TRACE_EVENTS As Long = 50
 Private Const STREAM_CONNECT_TIMEOUT_SECONDS As Long = 15
 Private Const STREAM_MAX_TIME_SECONDS As Long = 90
+Private Const TOOL_REQUEST_TIMEOUT_SECONDS As Long = 120
 
 Public Sub SendOrcaRouterStreaming()
 
@@ -175,7 +176,7 @@ Public Sub SendOrcaRouterStreaming()
                         If Len(contentPart) > 0 Then
                             answerText = answerText & contentPart
                             ws.Range("B11").Value = answerText
-                            DoEvents
+                            YieldToExcel
                         End If
 
                     End If
@@ -194,7 +195,7 @@ Public Sub SendOrcaRouterStreaming()
 
         Else
 
-            DoEvents
+            YieldToExcel
 
         End If
 
@@ -247,6 +248,7 @@ Public Sub SendOrcaRouterStreaming()
              "Total elapsed: " & Format$(ElapsedSeconds(startedAt), "0.000") & " sec"
 
 CleanExit:
+    Application.StatusBar = False
     Set exec = Nothing
     Set shell = Nothing
     Set ws = Nothing
@@ -455,6 +457,7 @@ Public Sub SendOrcaRouterToolCalling()
              "Total elapsed: " & Format$(ElapsedSeconds(startedAt), "0.000") & " sec"
 
 CleanExit:
+    Application.StatusBar = False
     Set httpRequest = Nothing
     Set ws = Nothing
     Exit Sub
@@ -722,24 +725,42 @@ Private Sub SendJsonRequest( _
     ByRef responseHeaders As String, _
     ByRef responseText As String)
 
-    AddTrace ThisWorkbook.Worksheets(SAMPLE_SHEET_NAME_ADV), _
+    Dim ws As Worksheet
+    Dim startedAt As Double
+
+    Set ws = ThisWorkbook.Worksheets(SAMPLE_SHEET_NAME_ADV)
+
+    AddTrace ws, _
              "STEP 3", "REQUEST", "Send WinHTTP POST", _
              "Endpoint: " & API_ENDPOINT_ADV & vbCrLf & _
-             "Authorization: Bearer " & MaskApiKey(apiKey)
+             "Authorization: Bearer " & MaskApiKey(apiKey) & vbCrLf & _
+             "Excel remains responsive while waiting."
+
+    startedAt = Timer
 
     With httpRequest
 
-        .Open "POST", API_ENDPOINT_ADV, False
-        .SetTimeouts 10000, 10000, 30000, 60000
+        .Open "POST", API_ENDPOINT_ADV, True
+        .SetTimeouts 10000, 10000, 30000, TOOL_REQUEST_TIMEOUT_SECONDS * 1000
         .SetRequestHeader "Authorization", "Bearer " & apiKey
         .SetRequestHeader "Content-Type", "application/json; charset=utf-8"
         .Send StringToUtf8Bytes(requestBody)
 
-        httpStatus = .Status
-        responseHeaders = .GetAllResponseHeaders
-        responseText = .ResponseText
-
     End With
+
+    WaitForWinHttpResponse _
+        httpRequest, _
+        ws, _
+        "Waiting for OrcaRouter Tool Calling response", _
+        startedAt, _
+        TOOL_REQUEST_TIMEOUT_SECONDS, _
+        15
+
+    httpStatus = httpRequest.Status
+    responseHeaders = httpRequest.GetAllResponseHeaders
+    responseText = httpRequest.ResponseText
+
+    Set ws = Nothing
 
 End Sub
 
