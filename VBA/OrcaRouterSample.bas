@@ -379,6 +379,247 @@ ErrorHandler:
 
 End Sub
 
+Public Sub NewOrcaRouterChat()
+
+    Dim ws As Worksheet
+
+    On Error GoTo ErrorHandler
+
+    Set ws = ThisWorkbook.Worksheets(SAMPLE_SHEET_NAME)
+    ClearConversationHistoryState
+    ws.Range("B11").Value = "The conversation will appear here."
+    UpdateVbaHistoryStatus ws
+    ResetVbaDeveloperInformation ws
+
+CleanExit:
+    Set ws = Nothing
+    Exit Sub
+
+ErrorHandler:
+    MsgBox "Failed to start a new chat." & vbCrLf & Err.Description, _
+           vbExclamation, _
+           "OrcaRouter Sample"
+    Resume CleanExit
+
+End Sub
+
+Public Sub ApplyOrcaRouterPromptExample()
+
+    Dim ws As Worksheet
+    Dim exampleName As String
+    Dim promptText As String
+
+    On Error GoTo ErrorHandler
+
+    Set ws = ThisWorkbook.Worksheets(SAMPLE_SHEET_NAME)
+    exampleName = Trim$(CStr(ws.Range("B10").Value))
+
+    Select Case exampleName
+        Case "Summary"
+            promptText = "Summarize the following text in three concise bullet points:"
+        Case "Explain"
+            promptText = "Explain the following content for a beginner and define technical terms:"
+        Case "Code review"
+            promptText = "Review the following code. Explain issues, reasons, and an improved example:"
+        Case "JSON"
+            promptText = "Organize the following content and return JSON only:"
+        Case "Translate"
+            promptText = "Translate the following Japanese text into natural English:"
+        Case Else
+            promptText = "Summarize the following text in three concise bullet points:"
+    End Select
+
+    ws.Range("B6").Value = promptText & vbCrLf & vbCrLf & "Paste content here."
+
+CleanExit:
+    Set ws = Nothing
+    Exit Sub
+
+ErrorHandler:
+    MsgBox "Failed to apply the prompt example." & vbCrLf & Err.Description, _
+           vbExclamation, _
+           "OrcaRouter Sample"
+    Resume CleanExit
+
+End Sub
+
+Private Sub ClearConversationHistoryState()
+
+    Dim i As Long
+
+    conversationCount = 0
+
+    For i = 1 To MAX_HISTORY_TURNS
+        conversationUsers(i) = vbNullString
+        conversationAssistants(i) = vbNullString
+    Next i
+
+End Sub
+
+Private Sub AddConversationTurn(ByVal userText As String, ByVal assistantText As String)
+
+    Dim i As Long
+
+    If conversationCount >= MAX_HISTORY_TURNS Then
+        For i = 1 To MAX_HISTORY_TURNS - 1
+            conversationUsers(i) = conversationUsers(i + 1)
+            conversationAssistants(i) = conversationAssistants(i + 1)
+        Next i
+        conversationCount = MAX_HISTORY_TURNS - 1
+    End If
+
+    conversationCount = conversationCount + 1
+    conversationUsers(conversationCount) = userText
+    conversationAssistants(conversationCount) = assistantText
+
+End Sub
+
+Private Function BuildConversationDisplay( _
+    Optional ByVal pendingQuestion As String = "", _
+    Optional ByVal pendingAnswer As String = "") As String
+
+    Dim i As Long
+    Dim result As String
+
+    For i = 1 To conversationCount
+        result = result & "YOU" & vbCrLf
+        result = result & conversationUsers(i) & vbCrLf & vbCrLf
+        result = result & "ASSISTANT" & vbCrLf
+        result = result & conversationAssistants(i) & vbCrLf & vbCrLf
+    Next i
+
+    If Len(pendingQuestion) > 0 Then
+        result = result & "YOU" & vbCrLf
+        result = result & pendingQuestion & vbCrLf & vbCrLf
+
+        If Len(pendingAnswer) > 0 Then
+            result = result & "ASSISTANT" & vbCrLf
+            result = result & pendingAnswer & vbCrLf & vbCrLf
+        End If
+    End If
+
+    If Len(result) = 0 Then
+        result = "The conversation will appear here."
+    End If
+
+    If Len(result) > RAW_JSON_MAX_TEXT Then
+        result = "...(older display text omitted)..." & vbCrLf & _
+                 Right$(result, RAW_JSON_MAX_TEXT - 40)
+    End If
+
+    BuildConversationDisplay = result
+
+End Function
+
+Private Sub UpdateVbaHistoryStatus(ByVal ws As Worksheet)
+
+    ws.Range("M20").Value = conversationCount & " / " & MAX_HISTORY_TURNS & " turns"
+
+End Sub
+
+Private Sub ResetVbaDeveloperInformation(ByVal ws As Worksheet)
+
+    ws.Range("K18").Value = "-"
+    ws.Range("M18").Value = "-"
+    ws.Range("O18").Value = "-"
+    ws.Range("K19").Value = "-"
+    ws.Range("M19").Value = "-"
+    ws.Range("O19").Value = "-"
+    ws.Range("K20").Value = "(not returned)"
+    ws.Range("J22").Value = "{}"
+    UpdateVbaHistoryStatus ws
+
+End Sub
+
+Private Sub UpdateVbaDeveloperInformation( _
+    ByVal ws As Worksheet, _
+    ByVal httpStatus As Long, _
+    ByVal elapsedSeconds As Double, _
+    ByVal requestedModel As String, _
+    ByVal requestJson As String, _
+    ByVal responseJson As String)
+
+    Dim promptTokens As Double
+    Dim completionTokens As Double
+    Dim totalTokens As Double
+    Dim costUsd As Double
+    Dim actualModel As String
+
+    ws.Range("K18").Value = httpStatus
+    ws.Range("M18").Value = Format$(elapsedSeconds, "0.000") & " sec"
+
+    actualModel = requestedModel
+    If TryExtractAssistantStringProperty(responseJson, "model", actualModel) Then
+        ws.Range("O18").Value = actualModel
+    Else
+        ws.Range("O18").Value = requestedModel
+    End If
+
+    If TryExtractJsonNumberProperty(responseJson, "prompt_tokens", promptTokens) Then
+        ws.Range("K19").Value = promptTokens
+    Else
+        ws.Range("K19").Value = "-"
+    End If
+
+    If TryExtractJsonNumberProperty(responseJson, "completion_tokens", completionTokens) Then
+        ws.Range("M19").Value = completionTokens
+    Else
+        ws.Range("M19").Value = "-"
+    End If
+
+    If TryExtractJsonNumberProperty(responseJson, "total_tokens", totalTokens) Then
+        ws.Range("O19").Value = totalTokens
+    Else
+        ws.Range("O19").Value = "-"
+    End If
+
+    If TryExtractJsonNumberProperty(responseJson, "cost_usd", costUsd) Then
+        ws.Range("K20").Value = "$" & Format$(costUsd, "0.000000")
+    Else
+        ws.Range("K20").Value = "(not returned)"
+    End If
+
+    ws.Range("J22").Value = Left$(requestJson, RAW_JSON_MAX_TEXT)
+    UpdateVbaHistoryStatus ws
+
+End Sub
+
+Private Function TryExtractJsonNumberProperty( _
+    ByVal jsonText As String, _
+    ByVal propertyName As String, _
+    ByRef numberValue As Double) As Boolean
+
+    Dim regularExpression As Object
+    Dim matches As Object
+    Dim pattern As String
+
+    Set regularExpression = CreateObject("VBScript.RegExp")
+
+    pattern = Chr$(34) & propertyName & Chr$(34) & _
+              Chr$(92) & "s*:" & Chr$(92) & "s*" & _
+              "(-?[0-9]+(" & Chr$(92) & ".[0-9]+)?([Ee][+-]?[0-9]+)?)"
+
+    With regularExpression
+        .Global = False
+        .IgnoreCase = False
+        .MultiLine = True
+        .Pattern = pattern
+    End With
+
+    Set matches = regularExpression.Execute(jsonText)
+
+    If matches.Count = 0 Then
+        TryExtractJsonNumberProperty = False
+    Else
+        numberValue = Val(matches(0).SubMatches(0))
+        TryExtractJsonNumberProperty = True
+    End If
+
+    Set matches = Nothing
+    Set regularExpression = Nothing
+
+End Function
+
 Public Sub SendOrcaRouterChat()
 
     Dim ws As Worksheet
