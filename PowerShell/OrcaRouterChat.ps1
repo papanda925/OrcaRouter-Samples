@@ -35,6 +35,87 @@ Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
 Add-Type -AssemblyName System.Net.Http
 
+if (-not ('OrcaRouterViewModel' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System.ComponentModel;
+
+public sealed class OrcaRouterViewModel : INotifyPropertyChanged
+{
+    private string _model = "";
+    private string _mode = "";
+    private string _question = "";
+    private string _answer = "";
+    private string _statusText = "";
+
+    public event PropertyChangedEventHandler PropertyChanged;
+
+    private void RaisePropertyChanged(string propertyName)
+    {
+        var handler = PropertyChanged;
+        if (handler != null)
+        {
+            handler(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    public string Model
+    {
+        get { return _model; }
+        set
+        {
+            if (_model == value) return;
+            _model = value;
+            RaisePropertyChanged("Model");
+        }
+    }
+
+    public string Mode
+    {
+        get { return _mode; }
+        set
+        {
+            if (_mode == value) return;
+            _mode = value;
+            RaisePropertyChanged("Mode");
+        }
+    }
+
+    public string Question
+    {
+        get { return _question; }
+        set
+        {
+            if (_question == value) return;
+            _question = value;
+            RaisePropertyChanged("Question");
+        }
+    }
+
+    public string Answer
+    {
+        get { return _answer; }
+        set
+        {
+            if (_answer == value) return;
+            _answer = value;
+            RaisePropertyChanged("Answer");
+        }
+    }
+
+    public string StatusText
+    {
+        get { return _statusText; }
+        set
+        {
+            if (_statusText == value) return;
+            _statusText = value;
+            RaisePropertyChanged("StatusText");
+        }
+    }
+}
+'@
+}
+
 $script:ApiEndpoint = 'https://api.orcarouter.ai/v1/chat/completions'
 $script:ApiKeyPlaceholder = 'xxx-your-orcarouter-api-key-xxx'
 
@@ -254,6 +335,14 @@ $sendButton = $window.FindName('SendButton')
 $clearTraceButton = $window.FindName('ClearTraceButton')
 $statusText = $window.FindName('StatusText')
 
+$viewModel = [OrcaRouterViewModel]::new()
+$viewModel.Model = 'orcarouter/free'
+$viewModel.Mode = 'Chat'
+$viewModel.Question = '日本語で「こんにちは。PowerShell版Chatのテストです。」とだけ答えてください。'
+$viewModel.Answer = 'ここに回答が表示されます。'
+$viewModel.StatusText = 'Ready'
+$window.DataContext = $viewModel
+
 $apiKeyBox.Password = $script:DefaultApiKey
 
 function Add-Trace {
@@ -290,7 +379,10 @@ function Set-UiBusy {
     $apiKeyBox.IsEnabled = -not $Busy
     $modelBox.IsEnabled = -not $Busy
     $modeBox.IsEnabled = -not $Busy
-    $questionBox.IsEnabled = -not $Busy
+
+    # Keep Question editable even while an API request is running.
+    # This also avoids making the input box look broken during a slow model call.
+    $questionBox.IsEnabled = $true
 }
 
 function Refresh-Ui {
@@ -301,9 +393,11 @@ function Refresh-Ui {
 }
 
 function Get-SelectedMode {
-    $selected = $modeBox.SelectedItem
-    if ($null -eq $selected) { return 'Chat' }
-    return [string]$selected.Content
+    if ([string]::IsNullOrWhiteSpace($viewModel.Mode)) {
+        return 'Chat'
+    }
+
+    return [string]$viewModel.Mode
 }
 
 function Assert-Inputs {
@@ -579,7 +673,7 @@ function Invoke-StreamingMode {
 
                     if ($contentPart -is [string] -and $contentPart.Length -gt 0) {
                         [void]$answer.Append($contentPart)
-                        $answerBox.Text = $answer.ToString()
+                        $viewModel.Answer = $answer.ToString()
                         $answerBox.ScrollToEnd()
                         Refresh-Ui
                     }
@@ -789,12 +883,12 @@ function Protect-LocalTraceText {
 
 function Invoke-OrcaRouterChat {
     $apiKey = $apiKeyBox.Password.Trim()
-    $model = $modelBox.Text.Trim()
-    $question = $questionBox.Text.Trim()
+    $model = $viewModel.Model.Trim()
+    $question = $viewModel.Question.Trim()
     $mode = Get-SelectedMode
 
-    $answerBox.Text = ''
-    $statusText.Text = 'Processing...'
+    $viewModel.Answer = ''
+    $viewModel.StatusText = 'Processing...'
     $statusText.Foreground = '#64748B'
     Set-UiBusy -Busy $true
 
@@ -814,7 +908,7 @@ function Invoke-OrcaRouterChat {
         }
 
         # STEP 6: Update UI and trace.
-        $answerBox.Text = $assistantText
+        $viewModel.Answer = $assistantText
 
         Add-Trace -Step 'STEP 6' -Direction 'LOCAL' -Title '画面へ回答を表示' -Data ([ordered]@{
             Mode = $mode
@@ -822,7 +916,7 @@ function Invoke-OrcaRouterChat {
             TotalElapsedMs = $stopwatch.ElapsedMilliseconds
         })
 
-        $statusText.Text = 'Completed'
+        $viewModel.StatusText = 'Completed'
         $statusText.Foreground = '#0F766E'
     }
     catch {
@@ -846,8 +940,8 @@ function Invoke-OrcaRouterChat {
             Privacy = 'Local user/repository path roots are replaced with placeholders.'
         })
 
-        $answerBox.Text = "ERROR: $safeMessage"
-        $statusText.Text = 'Error - Trace を確認してください'
+        $viewModel.Answer = "ERROR: $safeMessage"
+        $viewModel.StatusText = 'Error - Trace を確認してください'
         $statusText.Foreground = '#B42318'
     }
     finally {
@@ -862,7 +956,7 @@ $sendButton.Add_Click({
 
 $clearTraceButton.Add_Click({
     $traceBox.Clear()
-    $statusText.Text = 'Ready'
+    $viewModel.StatusText = 'Ready'
     $statusText.Foreground = '#64748B'
 })
 
@@ -870,10 +964,13 @@ $modeBox.Add_SelectionChanged({
     $mode = Get-SelectedMode
 
     if ($mode -eq 'Tool Calling') {
-        $questionBox.Text = 'calculate_sum ツールを使って 123 と 456 を足し、その結果を日本語で説明してください。'
+        $viewModel.Question = 'calculate_sum ツールを使って 123 と 456 を足し、その結果を日本語で説明してください。'
     }
     elseif ($mode -eq 'Streaming') {
-        $questionBox.Text = 'Streamingの動作確認です。OrcaRouterの特徴を3つ、短い箇条書きで説明してください。'
+        $viewModel.Question = '日本語で「こんにちは。Streamingのテストです。」と短く答えてください。'
+    }
+    elseif ($mode -eq 'Chat') {
+        $viewModel.Question = '日本語で「こんにちは。PowerShell版Chatのテストです。」とだけ答えてください。'
     }
 })
 
@@ -889,9 +986,15 @@ $questionBox.Add_PreviewKeyDown({
 
 Add-Trace -Step 'READY' -Direction 'LOCAL' -Title 'サンプルを起動' -Data ([ordered]@{
     Endpoint = $script:ApiEndpoint
-    Model = $modelBox.Text
+    Model = $viewModel.Model
     Mode = Get-SelectedMode
     Note = 'APIキーはダミー値です。実行前に画面上で差し替えてください。'
+})
+
+$window.Add_ContentRendered({
+    # Explicitly focus the editable question box and keep IME/input enabled.
+    [void]$questionBox.Focus()
+    $questionBox.CaretIndex = $questionBox.Text.Length
 })
 
 $null = $window.ShowDialog()
