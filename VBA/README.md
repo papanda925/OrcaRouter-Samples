@@ -10,13 +10,17 @@ Excel VBA から OrcaRouter の Chat Completions API を呼び出し、**Chat / 
 
 | Area | Excel |
 |---|---|
+| First-run API-key link | B2:H2 |
 | API key | B3 |
 | Model | B4 |
 | Mode | B5:D5 |
 | Question | B6:H9 |
-| Answer | B11:H15 |
+| Prompt example | B10:D10 |
+| Conversation | B11:H15 |
 | Raw JSON title/status | J1:P2 |
-| Raw JSON body | J3:P15 |
+| Response JSON | J3:P15 |
+| Developer metrics | J17:P20 |
+| Request JSON | J22:P30 |
 | Trace | A18:E... |
 | Send | 図形ボタン |
 | Clear trace | 図形ボタン |
@@ -174,6 +178,16 @@ Streamingでは1つのJSONレスポンスではなくSSEイベントが連続し
 
 Raw JSONはExcelセルの上限と可読性を考慮し、非常に長い場合は約30,000文字で切り詰めます。Traceには従来どおりHTTP Status、Headers、Raw response等も記録します。
 
+## Multi-turn Chat / New chat / Prompt example / Developer Information
+
+通常ChatではVBAモジュール内に直近10往復の user / assistant を保持し、次回の `messages` JSONへ再び含めます。シート上の **New chat** ボタンは履歴だけをクリアします。
+
+B10:D10のPrompt exampleを選んで **Apply prompt** を押すと、要約・初心者向け説明・コードレビュー・JSON・翻訳の雛形をQuestionへ入れられます。
+
+Developer Informationでは HTTP Status、Elapsed、Model、Prompt / Completion / Total Tokens、Costを確認できます。Request JSONはJ22:P30、Response JSONは従来のRaw JSON領域J3:P15で確認します。Cost取得には `X-OrcaRouter-Include-Cost: true` を使い、APIが値を返さない場合は推測しません。
+
+> 現段階で10往復履歴を再送する対象は通常Chatです。既存のStreaming / Tool Callingサンプルは従来どおり独立した検証モードとして残しています。
+
 ## Trace / debug
 
 シート下部に次を時系列で記録します。
@@ -229,7 +243,8 @@ VBEはUnicode対応のソースインポートを安定して扱えず、Windows
 
 - Documentation: https://docs.orcarouter.ai/introduction
 - Quickstart: https://docs.orcarouter.ai/getting-started/quickstart
-- Get an API key: https://docs.orcarouter.ai/getting-started/get-api-key
+- Start OrcaRouter (project referral link): https://www.orcarouter.ai/ref/ref_5074f764e512c8dd3d9d
+- API key documentation: https://docs.orcarouter.ai/getting-started/get-api-key
 - Models: https://www.orcarouter.ai/models
 - Streaming: https://docs.orcarouter.ai/advanced/streaming
 - Tool Calling: https://docs.orcarouter.ai/advanced/tool-calling
