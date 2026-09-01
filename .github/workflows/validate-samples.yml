@@ -67,8 +67,20 @@ jobs:
             throw 'ResultTabs was not found in MainWindow.xaml'
           }
 
-          if ($resultTabs.Items.Count -ne 2) {
-            throw 'ResultTabs must contain Answer and Trace tabs.'
+          if ($resultTabs.Items.Count -ne 3) {
+            throw 'ResultTabs must contain Answer, Developer, and Trace tabs.'
+          }
+
+          if ($null -eq $window.FindName('DeveloperBox')) {
+            throw 'DeveloperBox was not found in MainWindow.xaml'
+          }
+
+          if ($null -eq $window.FindName('NewChatButton')) {
+            throw 'NewChatButton was not found in MainWindow.xaml'
+          }
+
+          if ($null -eq $window.FindName('PromptExampleBox')) {
+            throw 'PromptExampleBox was not found in MainWindow.xaml'
           }
 
           $pageScrollViewer = $window.FindName('PageScrollViewer')
@@ -262,6 +274,32 @@ jobs:
 
           print("Secret/personal-path audit passed.")
           PY
+
+      - name: Check priority-one playground features
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          referral='https://www.orcarouter.ai/ref/ref_5074f764e512c8dd3d9d'
+
+          grep -q "$referral" README.md
+          grep -q "$referral" Web/index.html
+          grep -q "$referral" PowerShell/OrcaRouterChat.ps1
+          grep -q "$referral" VBA/OrcaRouterSample.bas
+
+          grep -q 'MAX_HISTORY_TURNS = 10' Web/app.js
+          grep -q 'X-OrcaRouter-Include-Cost' Web/app.js
+          grep -q 'newChatButton' Web/app.js
+          grep -q 'Developer Information' Web/index.html
+
+          grep -q 'MaxHistoryTurns = 10' PowerShell/OrcaRouterChat.ps1
+          grep -q 'X-OrcaRouter-Include-Cost' PowerShell/OrcaRouterWorker.ps1
+          grep -q '\[object\[\]\]\$History' PowerShell/OrcaRouterWorker.ps1
+
+          grep -q 'MAX_HISTORY_TURNS As Long = 10' VBA/OrcaRouterSample.bas
+          grep -q 'X-OrcaRouter-Include-Cost' VBA/OrcaRouterSample.bas
+          grep -q 'Public Sub NewOrcaRouterChat' VBA/OrcaRouterSample.bas
+          grep -q 'Developer Information' VBA/OrcaRouterSample.bas
 
       - name: Check VBA advanced entry points exist
         shell: bash
