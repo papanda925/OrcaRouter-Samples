@@ -10,6 +10,7 @@ const REQUEST_TIMEOUT_MS = 60000;
 const MAX_STREAM_TRACE_EVENTS = 50;
 
 const apiKeyInput = document.getElementById("apiKey");
+const apiKeyFileInput = document.getElementById("apiKeyFile");
 const modelInput = document.getElementById("model");
 const modeInput = document.getElementById("mode");
 const questionInput = document.getElementById("question");
@@ -31,6 +32,43 @@ function maskApiKey(apiKey) {
   if (!apiKey) return "(empty)";
   if (apiKey.length <= 8) return "********";
   return `${apiKey.slice(0, 4)}...${apiKey.slice(-4)}`;
+}
+
+function extractApiKeyFromText(text) {
+  const match = text.match(/sk-orca-[A-Za-z0-9._-]+/);
+
+  if (!match) {
+    throw new Error(
+      "選択したファイルから完全な OrcaRouter API Key（sk-orca-...）を見つけられませんでした。"
+    );
+  }
+
+  return match[0];
+}
+
+async function loadApiKeyFromFile(file) {
+  if (!file) return;
+
+  const maxBytes = 1024 * 1024;
+
+  if (file.size > maxBytes) {
+    throw new Error("キーのファイルが大きすぎます。1MB以下のファイルを選択してください。");
+  }
+
+  const text = await file.text();
+  const apiKey = extractApiKeyFromText(text);
+
+  apiKeyInput.value = apiKey;
+
+  clearTracePlaceholder();
+  addTrace("KEY", "LOCAL", "APIキーをローカルファイルから読み込み", {
+    fileName: file.name,
+    fileSize: file.size,
+    apiKey: maskApiKey(apiKey),
+    note: "ファイル本文や完全なAPIキーはTraceへ出力していません。"
+  });
+
+  setStatus("API Key loaded from local file");
 }
 
 function formatTraceData(data) {
@@ -594,6 +632,26 @@ modeInput.addEventListener("change", () => {
   } else if (modeInput.value === "stream") {
     questionInput.value =
       "Streamingの動作確認です。OrcaRouterの特徴を3つ、短い箇条書きで説明してください。";
+  }
+});
+
+apiKeyFileInput.addEventListener("change", async () => {
+  const file = apiKeyFileInput.files?.[0];
+
+  try {
+    await loadApiKeyFromFile(file);
+  } catch (error) {
+    const message = error?.message || String(error);
+
+    clearTracePlaceholder();
+    addTrace("KEY", "ERROR", "APIキーファイルの読み込みに失敗", {
+      fileName: file?.name ?? "(not selected)",
+      message
+    });
+
+    setStatus(message, true);
+  } finally {
+    apiKeyFileInput.value = "";
   }
 });
 

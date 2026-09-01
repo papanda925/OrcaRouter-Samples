@@ -50,7 +50,24 @@ const API_KEY_PLACEHOLDER = "xxx-your-orcarouter-api-key-xxx";
 const DEFAULT_API_KEY = "xxx-your-orcarouter-api-key-xxx";
 ```
 
-## 画面で入力する場合（推奨）
+## OrcaRouter Consoleからダウンロードしたキーのファイルを使う場合（推奨）
+
+Web画面の **「キーのファイルを読込」** を押し、OrcaRouter Consoleからダウンロードしたキーのファイルを選択します。
+
+ブラウザ側でファイル本文を読み、最初に見つかった完全な `sk-orca-...` 形式の文字列をAPI Key欄へ設定します。
+
+対応しやすい形式:
+
+- プレーンテキスト
+- JSON
+- .env形式
+- その他、本文中に完全な `sk-orca-...` が含まれるテキストファイル
+
+読み込み時にTraceへ出すのは、ファイル名・サイズ・マスク済みキーだけです。**ファイル本文と完全なAPIキーはTraceへ出力しません。**
+
+この処理はブラウザ内で完結し、キーのファイル自体をGitHubやこのリポジトリへアップロードする必要はありません。
+
+## 画面で直接入力する場合（推奨）
 
 ソースは変更しません。
 

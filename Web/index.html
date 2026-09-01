@@ -27,9 +27,14 @@
     </section>
 
     <section class="config-card">
-      <div class="field">
+      <div class="field api-key-field">
         <label for="apiKey">API key</label>
-        <input id="apiKey" type="password" value="xxx-your-orcarouter-api-key-xxx" autocomplete="off">
+        <div class="api-key-row">
+          <input id="apiKey" type="password" value="xxx-your-orcarouter-api-key-xxx" autocomplete="off">
+          <label class="file-button" for="apiKeyFile">キーのファイルを読込</label>
+          <input id="apiKeyFile" class="visually-hidden" type="file">
+        </div>
+        <p class="field-help">OrcaRouter Console からダウンロードしたキーのファイルを選ぶと、完全な <code>sk-orca-...</code> をブラウザ内で読み込みます。ファイル内容は保存しません。</p>
       </div>
       <div class="field">
         <label for="model">Model</label>

@@ -36,6 +36,8 @@ xxx-your-orcarouter-api-key-xxx
 
 OrcaRouterで発行したAPIキーへ画面上で差し替えてください。
 
+OrcaRouter Console からAPIキーのファイルをダウンロードした場合は、Web画面の **「キーのファイルを読込」** を押して、そのファイルを選択できます。ブラウザがファイルをローカルで読み取り、`sk-orca-...` 形式の完全なキーをAPI Key欄へ設定します。ファイル本文や完全なキーはTraceへ出力しません。
+
 ローカル検証用に `Web/app.js` へ一時的に埋め込む方法も用意しています。詳しくは [APIキーの設定方法](../docs/api-key-setup.md) を参照してください。
 
 既定モデルは、学習用途で試しやすい `orcarouter/free` です。
