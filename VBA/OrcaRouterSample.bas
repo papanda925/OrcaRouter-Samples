@@ -276,8 +276,8 @@ Public Sub SetupOrcaRouterSample()
     ws.Rows("10:10").RowHeight = 28
     ws.Rows("11:15").RowHeight = 26
 
-    ws.Range("A3:A17").Font.Bold = True
-    ws.Range("A3:A17").Font.Color = RGB(71, 85, 105)
+    ws.Range("A2:A17").Font.Bold = True
+    ws.Range("A2:A17").Font.Color = RGB(71, 85, 105)
 
     'Send button
     Set sendButton = ws.Shapes.AddShape( _
@@ -385,11 +385,17 @@ Public Sub NewOrcaRouterChat()
 
     On Error GoTo ErrorHandler
 
+    If requestInProgress Then
+        MsgBox "A request is still running. Wait for it to finish before starting a new chat.", _
+               vbInformation, _
+               "OrcaRouter Sample"
+        Exit Sub
+    End If
+
     Set ws = ThisWorkbook.Worksheets(SAMPLE_SHEET_NAME)
     ClearConversationHistoryState
     ws.Range("B11").Value = "The conversation will appear here."
     UpdateVbaHistoryStatus ws
-    ResetVbaDeveloperInformation ws
 
 CleanExit:
     Set ws = Nothing
