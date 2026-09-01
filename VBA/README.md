@@ -43,9 +43,20 @@ VBEの `.bas` インポートはWindowsのシステムコードページに依�
 4. 既に文字化けした `OrcaRouterSample` / `OrcaRouterAdvanced` がある場合は削除
 5. `ファイル > ファイルのインポート` から `VBA\OrcaRouterSample.bas` と `VBA\OrcaRouterAdvanced.bas` を直接読み込む
 6. `デバッグ > VBAProjectのコンパイル` を実行
-7. `SetupOrcaRouterSample` を実行
+7. **`SetupOrcaRouterSample` を実行**
 8. 作成された `OrcaRouter Chat` シートの B3 にAPIキーを入力
-9. 「Send」ボタンを押す
+9. 必要に応じて `RunOrcaRouterVbaSelfTests` / `TestOrcaRouterConnection` を実行
+10. 「Send」ボタンを押す
+
+### Setupは最初に必須
+
+2つのBASファイルをimportしただけでは、入力欄・Answer・Raw JSON・Trace・Sendボタンを持つサンプルシートは完成しません。
+
+最初に `SetupOrcaRouterSample` を実行してください。
+
+また、Setupを再実行するとサンプルシートを作り直すため、B3のAPIキーや入力値がダミー値へ戻ることがあります。**Setup後はB3を必ず再確認**してください。
+
+**Web版やPowerShell版へ入力したAPIキーはExcelへ自動共有されません。** VBA版ではB3へ個別に入力します。
 
 初期APIキーはダミーです。
 
@@ -56,6 +67,28 @@ xxx-your-orcarouter-api-key-xxx
 既定モデルは `orcarouter/free` です。
 
 B3セルへの入力だけでなく、ローカル検証用に `OrcaRouterSample.bas` の定数へ一時的に埋め込む方法も用意しています。詳しくは [APIキーの設定方法](../docs/api-key-setup.md) を参照してください。
+
+## 初回テストのおすすめ順
+
+1. `Chat` で短い固定回答を確認
+2. `Streaming` でAnswerが少しずつ増えることを確認
+3. `Tool Calling` で `123 と 456 を足してください。` を確認
+
+内部ロジックだけを確認する場合:
+
+```text
+RunOrcaRouterVbaSelfTests
+```
+
+API到達性と認証を切り分ける場合:
+
+```text
+TestOrcaRouterConnection
+```
+
+Tool Callingが失敗した場合は、まずRaw JSONの `HTTP Status` / `error.code` を確認してください。Quotaやモデル対応の問題では、`calculate_sum` を実行する前にAPI側で止まることがあります。
+
+3方式共通の手順とモード比較は [はじめて使うときの手順](../docs/getting-started.md) を参照してください。
 
 ## Common processing steps
 
@@ -191,3 +224,13 @@ Model欄は自由入力です。`orcarouter/free` が `free_quota_exhausted` を
 
 VBEはUnicode対応のソースインポートを安定して扱えず、Windowsのシステムコードページによって結果が変わります。
 そのためVBAの2つの `.bas` はASCII-onlyをCIで強制しています。これにより、日本語Windows・英語Windows・UTF-8システムロケールなどの差に影響されずインポートできます。
+
+## Official OrcaRouter links
+
+- Documentation: https://docs.orcarouter.ai/introduction
+- Quickstart: https://docs.orcarouter.ai/getting-started/quickstart
+- Get an API key: https://docs.orcarouter.ai/getting-started/get-api-key
+- Models: https://www.orcarouter.ai/models
+- Streaming: https://docs.orcarouter.ai/advanced/streaming
+- Tool Calling: https://docs.orcarouter.ai/advanced/tool-calling
+- Errors: https://docs.orcarouter.ai/operations/errors
