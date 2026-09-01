@@ -84,11 +84,11 @@ Browser `fetch()` の `ReadableStream` を読み取ります。
 
 ### VBA
 
-通常Chatでは `WinHttp.WinHttpRequest.5.1` を使いますが、late bindingだけで分かりやすいStreaming callbackを作るのは複雑になるため、Streaming ModeだけWindows標準の `curl.exe` を使用します。
+VBA版では Chat / Streaming / Tool Calling を `MSXML2.XMLHTTP.6.0` に統一しています。
 
-VBAからcurlを起動し、標準出力に流れるSSEを1行ずつ読みます。
+Streamingは `.Open "POST", URL, True` で非同期送信し、`readyState = 3 (LOADING)` の間から `responseText` の増分を読みます。受信済み文字数を保持して新しい部分だけを取り出し、改行単位でSSEの `data: {...}` を解析します。
 
-APIキーはcurlの**コマンドライン引数には入れず**、stdinから渡すcurl config内でAuthorization headerを設定します。
+外部PowerShell、`WScript.Shell`、`curl.exe` は使用しません。MSXMLがHTTPのUTF-8レスポンスをVBAのUnicode文字列へ変換した後にAnswerへ書くため、コンソールコードページによる文字化けも避けやすくしています。
 
 ### Streaming error
 
@@ -158,6 +158,8 @@ sequenceDiagram
 ```
 
 このサンプルでは `tool_choice` で `calculate_sum` を明示的に指定し、Tool Callingの互換性を確認しやすくしています。
+
+`orcarouter/free` が `free_quota_exhausted` を返した場合、Tool Callingロジックへ到達する前にOrcaRouter側でリクエストが拒否されています。コードが計算に失敗したわけではありません。このサンプルは意図しない課金を避けるため有料モデルへ自動フォールバックせず、具体的な有料モデルの指定は利用者が明示的に行います。
 
 ---
 
