@@ -72,24 +72,35 @@ AnswerBox を更新
 
 StreamingではWorker側がSSEを読み取り、途中経過のAnswerイベントをQueueへ渡します。UI側はQueueから受け取った文字列をViewModelの `Answer` へ設定し、Data Bindingで回答欄へ反映します。
 
-## Responsive window layout / Result tabs
+## Responsive window layout / page scroll / Result tabs
 
-画面全体を縦スクロールする方式ではなく、**INPUT + 結果ワークスペース** の2段構成にしています。
+画面は **ウィンドウサイズに連動して伸縮** しつつ、高さが足りない場合は右側のページ全体用スクロールバーで下まで移動できる構成です。
 
 ```text
 Window
-  ├─ Header / API settings : Auto
-  ├─ INPUT                 : 2*
-  ├─ GridSplitter
-  ├─ RESULT                : 5*
-  │    ├─ 回答 Tab
-  │    └─ トレース Tab
-  └─ Status                : Auto
+  └─ PageScrollViewer
+       ├─ Header / API settings
+       ├─ INPUT
+       ├─ GridSplitter
+       ├─ RESULT
+       │    ├─ 回答 Tab
+       │    └─ トレース Tab
+       └─ Status
 ```
 
-RESULTは `TabControl` です。**回答** と **トレース** をタブで即座に切り替えられるため、ページ全体を下までスクロールしなくてもHTTPトレースへアクセスできます。
+`PageScrollViewer` は `VerticalScrollBarVisibility="Auto"` です。最大化・元に戻す・画面解像度・Windowsの表示倍率などによって縦方向に収まらない場合だけ、**ウィンドウ右側に縦スクロールバー**が表示されます。これで下部のRESULTやStatusまで移動できます。
 
-これはIDEや管理画面でよく使われる「固定した作業領域 + タブ切替」の考え方です。長いAnswerやTraceだけは各TextBox内部のスクロールを使います。
+RESULTは `TabControl` です。**回答** と **トレース** をタブで切り替えます。さらに長いAnswerやTraceは、各TextBox内部のスクロールバーで内容だけを移動できます。
+
+つまりスクロールは役割を分けています。
+
+```text
+右端のページスクロール
+  → 画面全体を上下移動
+
+回答 / トレース内部のスクロール
+  → 長い本文だけを移動
+```
 
 通常起動時は最大化して表示します。タイトルバーの **最小化 / 元に戻す / 最大化** が使え、元に戻した後はウィンドウ端をドラッグして自由にサイズ変更できます。
 
@@ -117,7 +128,7 @@ PowerShell + `XamlReader` では、主要な入力欄までData Bindingだけに
 
 また、API待機中もQuestion欄は無効化しません。応答を待ちながら次の質問を入力できます。
 
-CIではWindows PowerShell 5.1上で、QuestionBoxの編集性、ResultTabsに「回答」「トレース」の2タブがあること、1200×900で各タブの表示領域が十分な高さを持つこと、`DataRowView` が `INotifyPropertyChanged` を実装していること、Answer / Status のData Binding更新を確認します。さらに、実APIを呼ばないBackground Runspace自己テストで、Answer / CompletedイベントがQueueへ返ることも検証します。
+CIではWindows PowerShell 5.1上で、QuestionBoxの編集性、ResultTabsに「回答」「トレース」の2タブがあること、1200×900で各タブの表示領域が十分な高さを持つことに加え、ウィンドウを低くしたときにPageScrollViewerへ実際のスクロール範囲が生まれ、下部まで移動できることを確認します。さらに、`DataRowView` の `INotifyPropertyChanged`、Answer / Status のData Binding、Background Runspace自己テストも検証します。
 
 参考: PowerShell / WPF / MVVMの考え方
 - https://papanda925.com/?p=2187
