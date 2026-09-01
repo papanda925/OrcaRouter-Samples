@@ -16,6 +16,7 @@ param(
     [string]$Question = '',
     [ValidateSet('Chat', 'Streaming', 'Tool Calling')]
     [string]$Mode = 'Chat',
+    [object[]]$History = @(),
     [Parameter(Mandatory = $true)]
     [System.Collections.Concurrent.ConcurrentQueue[object]]$EventQueue
 )
@@ -106,6 +107,83 @@ function Get-PropertyValue {
     if ($null -eq $property) { return $null }
 
     return $property.Value
+}
+
+function New-ConversationMessages {
+    param([string]$CurrentQuestion)
+
+    $messages = @()
+
+    foreach ($turn in @($History)) {
+        if ($null -eq $turn) { continue }
+
+        $userText = Get-PropertyValue -Object $turn -Name 'User'
+        $assistantText = Get-PropertyValue -Object $turn -Name 'Assistant'
+
+        if (-not [string]::IsNullOrWhiteSpace([string]$userText)) {
+            $messages += [ordered]@{
+                role = 'user'
+                content = [string]$userText
+            }
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace([string]$assistantText)) {
+            $messages += [ordered]@{
+                role = 'assistant'
+                content = [string]$assistantText
+            }
+        }
+    }
+
+    $messages += [ordered]@{
+        role = 'user'
+        content = $CurrentQuestion
+    }
+
+    return $messages
+}
+
+function Merge-Usage {
+    param(
+        $FirstUsage,
+        $SecondUsage
+    )
+
+    if ($null -eq $FirstUsage -and $null -eq $SecondUsage) {
+        return $null
+    }
+
+    $result = [ordered]@{
+        prompt_tokens = 0
+        completion_tokens = 0
+        total_tokens = 0
+    }
+
+    $cost = 0.0
+    $hasCost = $false
+
+    foreach ($usage in @($FirstUsage, $SecondUsage)) {
+        if ($null -eq $usage) { continue }
+
+        foreach ($name in @('prompt_tokens', 'completion_tokens', 'total_tokens')) {
+            $value = Get-PropertyValue -Object $usage -Name $name
+            if ($null -ne $value) {
+                $result[$name] += [long]$value
+            }
+        }
+
+        $costValue = Get-PropertyValue -Object $usage -Name 'cost_usd'
+        if ($null -ne $costValue) {
+            $cost += [double]$costValue
+            $hasCost = $true
+        }
+    }
+
+    if ($hasCost) {
+        $result['cost_usd'] = $cost
+    }
+
+    return [pscustomobject]$result
 }
 
 function Get-ResponseHeaders {
@@ -292,6 +370,7 @@ function New-JsonRequest {
 
     $request.Headers.Authorization =
         [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $ApiKey)
+    [void]$request.Headers.TryAddWithoutValidation('X-OrcaRouter-Include-Cost', 'true')
 
     $request.Content =
         [System.Net.Http.StringContent]::new(
