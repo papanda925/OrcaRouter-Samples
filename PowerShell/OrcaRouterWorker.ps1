@@ -447,27 +447,40 @@ function Invoke-Chat {
 
     $body = [ordered]@{
         model = $Model
-        messages = @(
-            [ordered]@{ role = 'user'; content = $Question }
-        )
+        messages = @(New-ConversationMessages -CurrentQuestion $Question)
     }
 
     Add-WorkerTrace -Step 'STEP 2' -Direction 'REQUEST' -Title '通常Chatリクエストを組み立て' -Data @{
         Endpoint = $apiEndpoint
         Authorization = 'Bearer {0}' -f (Mask-ApiKey -Value $ApiKey)
+        HistoryTurns = @($History).Count
+        IncludeCost = $true
         Body = $body
     }
 
-    $result = Invoke-JsonRequest -Body $body -Stopwatch $Stopwatch -TraceTitle '通常Chat POSTを送信'
-    $answer = Get-AssistantText -ResponseJson $result.Json
-    $usage = Get-PropertyValue -Object $result.Json -Name 'usage'
+    $httpResult = Invoke-JsonRequest -Body $body -Stopwatch $Stopwatch -TraceTitle '通常Chat POSTを送信'
+    $answer = Get-AssistantText -ResponseJson $httpResult.Json
+    $usage = Get-PropertyValue -Object $httpResult.Json -Name 'usage'
+    $actualModel = Get-PropertyValue -Object $httpResult.Json -Name 'model'
+
+    if ([string]::IsNullOrWhiteSpace([string]$actualModel)) {
+        $actualModel = $Model
+    }
 
     Add-WorkerTrace -Step 'STEP 5' -Direction 'LOCAL' -Title 'Assistantメッセージを解析' -Data @{
         AnswerChars = $answer.Length
+        HistoryTurns = @($History).Count
         Usage = if ($null -ne $usage) { $usage } else { '(usage not returned)' }
     }
 
-    return $answer
+    return [pscustomobject]@{
+        Answer = $answer
+        Usage = $usage
+        Request = $body
+        Response = $httpResult.Json
+        HttpStatus = $httpResult.Status
+        ActualModel = [string]$actualModel
+    }
 }
 
 function Invoke-Streaming {
