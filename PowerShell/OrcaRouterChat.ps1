@@ -11,7 +11,7 @@
     Model / Mode / Answer / StatusText use WPF Data Binding.
     The ViewModel is a pure .NET ExpandoObject created from PowerShell.
     ExpandoObject implements INotifyPropertyChanged, so no C# ViewModel is
-    compiled with Add-Type -TypeDefinition.
+    compiled from embedded C# source.
 
     QuestionBox remains a direct WPF TextBox for reliable keyboard/IME input.
     Its text is mirrored into the ViewModel for state/diagnostics.
@@ -130,7 +130,7 @@ $statusText = $window.FindName('StatusText')
 # Pure PowerShell/.NET ViewModel.
 # ExpandoObject already implements INotifyPropertyChanged.
 $viewModel = [System.Dynamic.ExpandoObject]::new()
-$viewModelValues = [System.Collections.Generic.IDictionary[string, object]]$viewModel
+[System.Collections.Generic.IDictionary[string, object]]$viewModelValues = $viewModel
 
 $viewModelValues['Model'] = 'orcarouter/free'
 $viewModelValues['Mode'] = 'Chat'
