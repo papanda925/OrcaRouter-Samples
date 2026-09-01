@@ -37,14 +37,23 @@ Public Sub SetupOrcaRouterSample()
     Dim ws As Worksheet
     Dim sendButton As Shape
     Dim clearButton As Shape
+    Dim listSeparator As String
+    Dim workbookNameForOnAction As String
+    Dim previousScreenUpdating As Boolean
 
     On Error GoTo ErrorHandler
+
+    previousScreenUpdating = Application.ScreenUpdating
 
     Set ws = GetOrCreateSampleSheet()
 
     Application.ScreenUpdating = False
 
+    ws.Cells.UnMerge
     ws.Cells.Clear
+
+    listSeparator = Application.International(xlListSeparator)
+    workbookNameForOnAction = Replace$(ThisWorkbook.Name, "'", "''")
 
     Do While ws.Shapes.Count > 0
         ws.Shapes(1).Delete
@@ -87,7 +96,10 @@ Public Sub SetupOrcaRouterSample()
         .Borders.Color = RGB(217, 225, 236)
         .Validation.Delete
         .Validation.Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, _
-                        Operator:=xlBetween, Formula1:="Chat,Streaming,Tool Calling"
+                        Operator:=xlBetween, _
+                        Formula1:="Chat" & listSeparator & _
+                                 "Streaming" & listSeparator & _
+                                 "Tool Calling"
     End With
 
     'Question
@@ -159,7 +171,7 @@ Public Sub SetupOrcaRouterSample()
         .Fill.ForeColor.RGB = RGB(15, 23, 42)
         .Line.ForeColor.RGB = RGB(15, 23, 42)
         .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
-        .OnAction = "'" & ThisWorkbook.Name & "'!SendOrcaRouterChat"
+        .OnAction = "'" & workbookNameForOnAction & "'!SendOrcaRouterChat"
     End With
 
     'Clear trace button
@@ -176,7 +188,7 @@ Public Sub SetupOrcaRouterSample()
         .Fill.ForeColor.RGB = RGB(255, 255, 255)
         .Line.ForeColor.RGB = RGB(217, 225, 236)
         .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(23, 32, 51)
-        .OnAction = "'" & ThisWorkbook.Name & "'!ClearOrcaRouterTrace"
+        .OnAction = "'" & workbookNameForOnAction & "'!ClearOrcaRouterTrace"
     End With
 
     AddTrace ws, "READY", "LOCAL", "Created sample UI", _
@@ -189,7 +201,7 @@ Public Sub SetupOrcaRouterSample()
     ws.Range("B3").Select
 
 CleanExit:
-    Application.ScreenUpdating = True
+    Application.ScreenUpdating = previousScreenUpdating
     Set clearButton = Nothing
     Set sendButton = Nothing
     Set ws = Nothing
@@ -361,6 +373,66 @@ ErrorHandler:
 
     On Error GoTo 0
     GoTo CleanExit
+
+End Sub
+
+Public Sub RunOrcaRouterVbaSelfTests()
+
+    Dim originalText As String
+    Dim encodedText As String
+    Dim decodedText As String
+    Dim requestJson As String
+    Dim utf8Bytes As Variant
+    Dim byteCount As Long
+
+    On Error GoTo ErrorHandler
+
+    originalText = "Line1" & vbLf & "Quote:" & Chr$(34) & " Backslash:" & Chr$(92)
+    encodedText = JsonEscape(originalText)
+    decodedText = JsonUnescape(encodedText)
+
+    If decodedText <> originalText Then
+        Err.Raise vbObjectError + 3001, "RunOrcaRouterVbaSelfTests", _
+                  "JsonEscape / JsonUnescape round-trip failed."
+    End If
+
+    requestJson = BuildRequestJson("orcarouter/free", "hello")
+
+    If requestJson <> _
+       "{""model"":""orcarouter/free"",""messages"":[{""role"":""user"",""content"":""hello""}]}" Then
+
+        Err.Raise vbObjectError + 3002, "RunOrcaRouterVbaSelfTests", _
+                  "BuildRequestJson produced an unexpected result."
+    End If
+
+    If MaskApiKey("1234567890") <> "1234...7890" Then
+        Err.Raise vbObjectError + 3003, "RunOrcaRouterVbaSelfTests", _
+                  "MaskApiKey produced an unexpected result."
+    End If
+
+    utf8Bytes = StringToUtf8Bytes("ABC")
+    byteCount = UBound(utf8Bytes) - LBound(utf8Bytes) + 1
+
+    If byteCount <> 3 Then
+        Err.Raise vbObjectError + 3004, "RunOrcaRouterVbaSelfTests", _
+                  "UTF-8 conversion produced an unexpected byte count."
+    End If
+
+    RunOrcaRouterAdvancedSelfTests
+
+    MsgBox "All local VBA self-tests passed.", _
+           vbInformation, _
+           "OrcaRouter VBA Self-Test"
+
+    Exit Sub
+
+ErrorHandler:
+    MsgBox "VBA self-test failed." & vbCrLf & _
+           "Err.Number: " & Err.Number & vbCrLf & _
+           "Err.Source: " & Err.Source & vbCrLf & _
+           "Err.Description: " & Err.Description, _
+           vbExclamation, _
+           "OrcaRouter VBA Self-Test"
 
 End Sub
 

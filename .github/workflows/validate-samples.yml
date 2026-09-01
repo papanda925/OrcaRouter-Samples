@@ -143,3 +143,105 @@ jobs:
           if failed:
               sys.exit(1)
           PY
+
+      - name: Static audit VBA declarations and compile-risk patterns
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          failed = False
+          procedures = {}
+          modules = {}
+
+          proc_re = re.compile(
+              r"^\s*(?:Public|Private)?\s*(Sub|Function)\s+([A-Za-z_][A-Za-z0-9_]*)",
+              re.I,
+          )
+          dim_re = re.compile(r"^\s*Dim\s+(.+)", re.I)
+
+          for path in Path("VBA").glob("*.bas"):
+              text = path.read_text(encoding="ascii")
+              lines = text.splitlines()
+              modules[path] = lines
+
+              if not any(re.match(r"^\s*Option\s+Explicit\s*$", line, re.I) for line in lines):
+                  print(f"{path}: Option Explicit is missing")
+                  failed = True
+
+              for line_number, line in enumerate(lines, start=1):
+                  if len(line) > 1023:
+                      print(
+                          f"{path}:{line_number}: physical line length "
+                          f"{len(line)} exceeds VBA's 1023-character limit"
+                      )
+                      failed = True
+
+                  match = proc_re.match(line)
+                  if match:
+                      name = match.group(2).lower()
+                      procedures.setdefault(name, []).append(
+                          (path, line_number, match.group(1).lower())
+                      )
+
+              if "DUMMY_API_KEY" in text:
+                  print(f"{path}: legacy undefined identifier DUMMY_API_KEY found")
+                  failed = True
+
+          for name, locations in procedures.items():
+              if len(locations) > 1:
+                  locations_text = ", ".join(
+                      f"{path}:{line}" for path, line, _ in locations
+                  )
+                  print(
+                      f"Duplicate procedure name '{name}' across VBA modules: "
+                      f"{locations_text}"
+                  )
+                  failed = True
+
+          proc_names = set(procedures)
+
+          for path, lines in modules.items():
+              current = None
+              current_kind = None
+
+              for line_number, line in enumerate(lines, start=1):
+                  match = proc_re.match(line)
+                  if match:
+                      current = match.group(2)
+                      current_kind = match.group(1).lower()
+                      continue
+
+                  if current:
+                      dim_match = dim_re.match(line)
+                      if dim_match:
+                          for part in dim_match.group(1).split(","):
+                              local_match = re.match(
+                                  r"\s*([A-Za-z_][A-Za-z0-9_]*)",
+                                  part,
+                              )
+                              if local_match:
+                                  local_name = local_match.group(1).lower()
+                                  if local_name in proc_names:
+                                      print(
+                                          f"{path}:{line_number}: local variable "
+                                          f"'{local_name}' shadows a procedure/function name "
+                                          f"inside {current}"
+                                      )
+                                      failed = True
+
+                      if re.match(
+                          rf"^\s*End\s+{re.escape(current_kind)}\s*$",
+                          line,
+                          re.I,
+                      ):
+                          current = None
+                          current_kind = None
+
+          if failed:
+              sys.exit(1)
+
+          print("VBA static audit passed.")
+          PY

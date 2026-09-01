@@ -30,6 +30,8 @@ Private Const API_ENDPOINT_ADV As String = "https://api.orcarouter.ai/v1/chat/co
 Private Const API_KEY_PLACEHOLDER_ADV As String = "xxx-your-orcarouter-api-key-xxx"
 Private Const SAMPLE_SHEET_NAME_ADV As String = "OrcaRouter Chat"
 Private Const MAX_STREAM_TRACE_EVENTS As Long = 50
+Private Const STREAM_CONNECT_TIMEOUT_SECONDS As Long = 15
+Private Const STREAM_MAX_TIME_SECONDS As Long = 90
 
 Public Sub SendOrcaRouterStreaming()
 
@@ -102,9 +104,13 @@ Public Sub SendOrcaRouterStreaming()
     'STEP 3: Send HTTP POST.
     AddTrace ws, "STEP 3", "REQUEST", "Send Streaming POST with curl.exe", _
              "curl.exe --config - --no-buffer --silent --show-error --include" & vbCrLf & _
+             "Connect timeout: " & STREAM_CONNECT_TIMEOUT_SECONDS & " sec" & vbCrLf & _
+             "Overall timeout: " & STREAM_MAX_TIME_SECONDS & " sec" & vbCrLf & _
              "The API key is passed through curl stdin config, not as a command-line argument."
 
-    command = """" & curlPath & """ --config - --no-buffer --silent --show-error --include"
+    command = """" & curlPath & """ --config - --no-buffer --silent --show-error --include" & _
+              " --connect-timeout " & CStr(STREAM_CONNECT_TIMEOUT_SECONDS) & _
+              " --max-time " & CStr(STREAM_MAX_TIME_SECONDS)
 
     Set shell = CreateObject("WScript.Shell")
     Set exec = shell.Exec(command)
@@ -484,6 +490,94 @@ ErrorHandler:
 
 End Sub
 
+Public Sub RunOrcaRouterAdvancedSelfTests()
+
+    Dim streamingJson As String
+    Dim toolJson As String
+    Dim toolResultJson As String
+    Dim extractedText As String
+    Dim extractedNumber As Double
+    Dim statusCode As Long
+    Dim headerValue As String
+
+    streamingJson = BuildStreamingRequestJson("orcarouter/free", "hello")
+
+    If InStr(1, streamingJson, """stream"":true", vbBinaryCompare) = 0 Or _
+       InStr(1, streamingJson, """include_usage"":true", vbBinaryCompare) = 0 Then
+
+        Err.Raise vbObjectError + 3101, "RunOrcaRouterAdvancedSelfTests", _
+                  "BuildStreamingRequestJson produced an unexpected result."
+    End If
+
+    toolJson = BuildToolRequestJson("orcarouter/free", "add 1 and 2")
+
+    If InStr(1, toolJson, """name"":""calculate_sum""", vbBinaryCompare) = 0 Or _
+       InStr(1, toolJson, """tool_choice""", vbBinaryCompare) = 0 Then
+
+        Err.Raise vbObjectError + 3102, "RunOrcaRouterAdvancedSelfTests", _
+                  "BuildToolRequestJson produced an unexpected result."
+    End If
+
+    toolResultJson = BuildToolResultRequestJson( _
+                         "orcarouter/free", _
+                         "add 1 and 2", _
+                         "call_123", _
+                         "calculate_sum", _
+                         "{""a"":1,""b"":2}", _
+                         "{""a"":1,""b"":2,""sum"":3}")
+
+    If InStr(1, toolResultJson, """tool_call_id"":""call_123""", vbBinaryCompare) = 0 Or _
+       InStr(1, toolResultJson, """role"":""tool""", vbBinaryCompare) = 0 Then
+
+        Err.Raise vbObjectError + 3103, "RunOrcaRouterAdvancedSelfTests", _
+                  "BuildToolResultRequestJson produced an unexpected result."
+    End If
+
+    If Not TryExtractJsonStringProperty( _
+               "{""message"":""hello""}", _
+               "message", _
+               extractedText) Then
+
+        Err.Raise vbObjectError + 3104, "RunOrcaRouterAdvancedSelfTests", _
+                  "TryExtractJsonStringProperty did not find a known property."
+    End If
+
+    If extractedText <> "hello" Then
+        Err.Raise vbObjectError + 3105, "RunOrcaRouterAdvancedSelfTests", _
+                  "TryExtractJsonStringProperty decoded an unexpected value."
+    End If
+
+    extractedNumber = ExtractJsonNumber("{""a"":123.5}", "a")
+
+    If Abs(extractedNumber - 123.5) > 0.000001 Then
+        Err.Raise vbObjectError + 3106, "RunOrcaRouterAdvancedSelfTests", _
+                  "ExtractJsonNumber produced an unexpected value."
+    End If
+
+    statusCode = ParseHttpStatusLine("HTTP/2 200")
+
+    If statusCode <> 200 Then
+        Err.Raise vbObjectError + 3107, "RunOrcaRouterAdvancedSelfTests", _
+                  "ParseHttpStatusLine produced an unexpected value."
+    End If
+
+    headerValue = ExtractHeaderValue( _
+                      "Content-Type: application/json" & vbCrLf & _
+                      "Retry-After: 10" & vbCrLf, _
+                      "Retry-After")
+
+    If headerValue <> "10" Then
+        Err.Raise vbObjectError + 3108, "RunOrcaRouterAdvancedSelfTests", _
+                  "ExtractHeaderValue produced an unexpected value."
+    End If
+
+    If JsonNumber(123.5) <> "123.5" Then
+        Err.Raise vbObjectError + 3109, "RunOrcaRouterAdvancedSelfTests", _
+                  "JsonNumber did not produce locale-independent JSON."
+    End If
+
+End Sub
+
 Private Sub ValidateAdvancedInputs( _
     ByVal apiKey As String, _
     ByVal model As String, _
@@ -665,7 +759,7 @@ Public Sub RaiseOrcaRouterHttpError( _
     Call TryExtractJsonStringProperty(responseText, "code", errorCode)
 
     retryAfter = ExtractHeaderValue(responseHeaders, "Retry-After")
-    guidance = BuildHttpGuidance(httpStatus, errorCode, retryAfter)
+    guidance = BuildHttpGuidance(httpStatus, errorCode, retryAfter, errorMessage)
 
     Err.Raise vbObjectError + 2300 + httpStatus, "RaiseOrcaRouterHttpError", _
               "HTTP " & httpStatus & vbCrLf & _
@@ -680,9 +774,44 @@ End Sub
 Private Function BuildHttpGuidance( _
     ByVal httpStatus As Long, _
     ByVal errorCode As String, _
-    ByVal retryAfter As String) As String
+    ByVal retryAfter As String, _
+    ByVal errorMessage As String) As String
 
     Select Case httpStatus
+
+        Case 400
+
+            Select Case errorCode
+
+                Case "bad_request_body"
+                    BuildHttpGuidance = _
+                        "The request JSON could not be parsed. Check the request body in the trace."
+
+                Case "model_price_error"
+                    BuildHttpGuidance = _
+                        "Pricing is not configured for this model. Contact OrcaRouter support."
+
+                Case "api_not_implemented"
+                    BuildHttpGuidance = _
+                        "This endpoint or operation is not supported for the selected model."
+
+                Case "prompt_blocked", "sensitive_words_detected", "guardrail_blocked"
+                    BuildHttpGuidance = _
+                        "The request was blocked by a provider safety policy or workspace guardrail. Change the input or policy."
+
+                Case "firewall_blocked"
+                    BuildHttpGuidance = _
+                        "The Agent Firewall denied the requested tool. Review the firewall policy and error metadata."
+
+                Case "firewall_approval_pending"
+                    BuildHttpGuidance = _
+                        "The tool call is waiting for firewall approval. A plain retry will not resolve it."
+
+                Case Else
+                    BuildHttpGuidance = _
+                        "Bad request. Check error.code, message, and the request JSON in the trace."
+
+            End Select
 
         Case 401
             BuildHttpGuidance = _
@@ -690,49 +819,82 @@ Private Function BuildHttpGuidance( _
 
         Case 403
 
-            Select Case errorCode
+            If InStr(1, errorMessage, "token cycle spend limit reached", vbTextCompare) > 0 Then
 
-                Case "insufficient_user_quota"
-                    BuildHttpGuidance = _
-                        "Check workspace balance and member/agent budget."
+                BuildHttpGuidance = _
+                    "This API key reached its recurring spend limit. Wait for the reset time in the message or raise the key limit."
 
-                Case "pre_consume_token_quota_failed"
-                    BuildHttpGuidance = _
-                        "Check the quota limit assigned to this API key."
+            Else
 
-                Case "free_quota_exhausted"
-                    BuildHttpGuidance = _
-                        "No free model is currently available through the free router. Specify a paid model."
+                Select Case errorCode
 
-                Case Else
-                    BuildHttpGuidance = _
-                        "HTTP 403 has multiple possible causes. Check error.code and message."
+                    Case "insufficient_user_quota"
+                        BuildHttpGuidance = _
+                            "Check workspace balance and member/agent budget."
 
-            End Select
+                    Case "pre_consume_token_quota_failed"
+                        BuildHttpGuidance = _
+                            "Check the quota limit assigned to this API key."
+
+                    Case "access_denied"
+                        BuildHttpGuidance = _
+                            "The key is valid but this request is not permitted. Check cycle limits, IP allowlist, and model access."
+
+                    Case "free_quota_exhausted"
+                        BuildHttpGuidance = _
+                            "No free model is currently available through the free router. Specify a paid model."
+
+                    Case Else
+                        BuildHttpGuidance = _
+                            "HTTP 403 has multiple possible causes. Check model access, error.code, and message."
+
+                End Select
+
+            End If
+
+        Case 404
+            BuildHttpGuidance = _
+                "The endpoint or model was not found. Verify the endpoint and model id."
 
         Case 425
             BuildHttpGuidance = _
-                "The selected model may not be available yet."
+                "The selected model is announced but not live yet. Check error metadata for an alternative."
 
         Case 429
 
             If Len(retryAfter) > 0 Then
                 BuildHttpGuidance = _
-                    "Rate limit reached. Wait for Retry-After seconds before retrying."
+                    "Rate limit reached. Wait for Retry-After seconds, then retry once."
             Else
                 BuildHttpGuidance = _
-                    "For a free-tier 429 without Retry-After, review prompt length and request shape."
+                    "A free-tier 429 without Retry-After is not time-based. Shorten the prompt before retrying."
             End If
+
+        Case 500
+            BuildHttpGuidance = _
+                "OrcaRouter returned an internal server error."
+
+        Case 502
+            BuildHttpGuidance = _
+                "All upstream providers or fallback routes failed. Retry later or inspect fallback headers."
 
         Case 503
 
-            If errorCode = "model_not_found" Then
-                BuildHttpGuidance = _
-                    "Check whether the selected model is available for the current account."
-            Else
-                BuildHttpGuidance = _
-                    "The service or upstream provider may be temporarily unavailable."
-            End If
+            Select Case errorCode
+
+                Case "model_not_found"
+                    BuildHttpGuidance = _
+                        "Check whether the selected model is available for the current account."
+
+                Case "byok:key_unavailable"
+                    BuildHttpGuidance = _
+                        "The workspace BYOK provider key could not be used. Rotate or re-add the provider key, or review platform fallback settings."
+
+                Case Else
+                    BuildHttpGuidance = _
+                        "The service or upstream provider may be temporarily unavailable."
+
+            End Select
 
         Case Else
             BuildHttpGuidance = _
@@ -948,6 +1110,7 @@ Private Function BuildCurlConfig( _
         "header = ""Authorization: Bearer " & _
             EscapeCurlConfigValue(apiKey) & """" & vbCrLf & _
         "header = ""Content-Type: application/json""" & vbCrLf & _
+        "header = ""Accept: text/event-stream""" & vbCrLf & _
         "data = """ & EscapeCurlConfigValue(requestBody) & """" & vbCrLf
 
 End Function
