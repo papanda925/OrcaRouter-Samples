@@ -12,11 +12,14 @@ Model欄は自由入力なので、`orcarouter/free` から利用可能な有料
 
 ## 画面
 
-1画面で次の3点を確認できます。
+1画面で次の4点を確認できます。
 
 - 質問
 - OrcaRouterからの回答
+- APIから返ったRaw JSON
 - 処理ステップとHTTPトレース
+
+Raw JSON欄はVBA版と同じ考え方で、Chatではレスポンス本文全体、Tool Callingでは1回目→最終2回目のレスポンス、Streamingでは最新のSSE JSONイベントを表示します。Answer解析に失敗した場合でもAPIが実際に返した内容を確認できます。
 
 トレースには、APIキーを伏せたリクエスト情報、リクエストJSON、HTTPステータス、応答ヘッダー、Raw response、エラー情報などを表示します。
 
@@ -117,10 +120,14 @@ Request example:
 
 ## Advanced verification
 
-StreamingではBrowserの `ReadableStream` を読み、`data: {...}` と終端の `data: [DONE]` をTraceへ表示します。SSE途中で `error` chunkが返された場合もエラーとして扱います。
+StreamingではBrowserの `fetch()` + `ReadableStream` を使い、`TextDecoder("utf-8")` で受信バイト列をUnicode文字列へ変換しながら、`data: {...}` と終端の `data: [DONE]` を逐次処理します。SSE途中で `error` chunkが返された場合もエラーとして扱います。
 
 Tool Callingではローカル関数 `calculate_sum(a, b)` を公開し、モデルからの `tool_calls` → ローカル実行 → `role: "tool"` を含む2回目のAPI呼び出しまでをTraceできます。
 
-403 / 429などはHTTP Statusだけでなく、可能な範囲で `error.type`、`error.code`、`Retry-After` も表示します。
+401 / 402 / 403 / 425 / 429 / 503などはHTTP Statusだけでなく、可能な範囲で `error.type`、`error.code`、`Retry-After` も表示します。
+
+実APIで確認された `free_quota_exhausted` はHTTP Statusだけに依存せず `error.code` を優先して判定します。無料ルーターで拒否された場合に有料モデルへ自動切替はしません。
+
+通常Chat / Tool Callingの待機上限は120秒、Streamingは90秒です。
 
 詳細: [Advanced API tests](../docs/advanced-features.md)

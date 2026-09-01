@@ -10,15 +10,16 @@ OrcaRouter API を **Web / PowerShell / Excel VBA** から呼び出す、学習�
 |---|---|---|---|
 | [Web](Web/README.md) | HTML / CSS | Browser `fetch` / ReadableStream | Chat / Streaming / Tool Calling |
 | [PowerShell](PowerShell/README.md) | WPF / XAML | `System.Net.Http.HttpClient` | Chat / Streaming / Tool Calling |
-| [VBA](VBA/README.md) | Excel worksheet / cells | WinHTTP + curl(SSE) | Chat / Streaming / Tool Calling |
+| [VBA](VBA/README.md) | Excel worksheet / cells | `MSXML2.XMLHTTP.6.0` | Chat / Streaming / Tool Calling |
 
 ## What you can see
 
-各サンプルは、同じ画面または同じ操作単位で次の3点を確認できるようにしています。
+各サンプルは、同じ画面または同じ操作単位で次の内容を確認しやすいようにしています。
 
 1. **質問**
 2. **OrcaRouterからの回答**
-3. **処理ステップ / HTTP電文のTrace**
+3. **Raw response / Raw JSON**
+4. **処理ステップ / HTTP電文のTrace**
 
 Traceには学習用として、通常より多めのデバッグ情報を残します。
 

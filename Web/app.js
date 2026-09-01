@@ -6,8 +6,10 @@ const API_KEY_PLACEHOLDER = "xxx-your-orcarouter-api-key-xxx";
 // 公開GitHubへ実APIキーをコミットしないでください。
 const DEFAULT_API_KEY = "xxx-your-orcarouter-api-key-xxx";
 
-const REQUEST_TIMEOUT_MS = 60000;
+const CHAT_TOOL_TIMEOUT_MS = 120000;
+const STREAM_TIMEOUT_MS = 90000;
 const MAX_STREAM_TRACE_EVENTS = 50;
+const MAX_RAW_JSON_CHARS = 30000;
 
 const apiKeyInput = document.getElementById("apiKey");
 const apiKeyFileInput = document.getElementById("apiKeyFile");
@@ -15,6 +17,9 @@ const modelInput = document.getElementById("model");
 const modeInput = document.getElementById("mode");
 const questionInput = document.getElementById("question");
 const answerBox = document.getElementById("answer");
+const rawJsonTitle = document.getElementById("rawJsonTitle");
+const rawJsonStatus = document.getElementById("rawJsonStatus");
+const rawJsonBox = document.getElementById("rawJson");
 const traceList = document.getElementById("trace");
 const sendButton = document.getElementById("sendButton");
 const clearTraceButton = document.getElementById("clearTraceButton");
@@ -69,6 +74,25 @@ async function loadApiKeyFromFile(file) {
   });
 
   setStatus("API Key loaded from local file");
+}
+
+function limitRawText(value) {
+  const text = String(value ?? "");
+  if (text.length <= MAX_RAW_JSON_CHARS) return text;
+  return `${text.slice(0, MAX_RAW_JSON_CHARS)}\n...(truncated for readability)`;
+}
+
+function prepareRawResponse(caption = "Raw JSON") {
+  rawJsonTitle.textContent = caption;
+  rawJsonStatus.textContent = "Waiting for HTTP response...";
+  rawJsonBox.textContent = "";
+}
+
+function displayRawResponse(rawText, caption, status = 0) {
+  rawJsonTitle.textContent = caption;
+  rawJsonStatus.textContent =
+    `${status ? `HTTP Status: ${status}` : "HTTP Status: (not available)"} / Chars: ${String(rawText ?? "").length}`;
+  rawJsonBox.textContent = limitRawText(rawText);
 }
 
 function formatTraceData(data) {
@@ -143,22 +167,52 @@ function buildErrorDetails(status, statusText, headers, rawBody) {
 
   let guidance = "Trace の error.code / error.type / HTTP Status を確認してください。";
 
-  if (status === 401) {
+  if (code === "free_quota_exhausted") {
+    guidance =
+      "orcarouter/free の無料枠または利用可能な無料モデルがありません。Tool Calling等の処理へ到達する前にAPI側で拒否されています。有料モデルへは自動切替しません。";
+  } else if (status === 400 && code === "bad_request_body") {
+    guidance = "Request JSONを解析できません。Traceのrequest bodyを確認してください。";
+  } else if (status === 400 && code === "model_price_error") {
+    guidance = "選択モデルの価格設定に問題があります。OrcaRouter側のモデル情報を確認してください。";
+  } else if (status === 400 && code === "api_not_implemented") {
+    guidance = "選択モデルではこのAPI操作がサポートされていません。";
+  } else if (
+    status === 400 &&
+    ["prompt_blocked", "sensitive_words_detected", "guardrail_blocked"].includes(code)
+  ) {
+    guidance = "Providerの安全ポリシーまたはWorkspace guardrailで拒否されています。";
+  } else if (status === 400 && code === "firewall_blocked") {
+    guidance = "Agent FirewallがToolを拒否しました。Firewall policyとmetadataを確認してください。";
+  } else if (status === 400 && code === "firewall_approval_pending") {
+    guidance = "Tool CallがFirewall承認待ちです。単純な再試行では解消しません。";
+  } else if (status === 401) {
     guidance = "APIキーが無効、またはAuthorizationヘッダーが不正です。";
+  } else if (status === 402) {
+    guidance = "支払いまたはQuotaが必要です。error.code と残高/無料枠を確認してください。";
   } else if (status === 403 && code === "insufficient_user_quota") {
     guidance = "Workspace残高またはメンバー/エージェント予算を確認してください。";
   } else if (status === 403 && code === "pre_consume_token_quota_failed") {
     guidance = "APIキー自身のQuota上限を確認してください。";
-  } else if (status === 403 && code === "free_quota_exhausted") {
-    guidance = "無料ルーターで処理できる無料モデルがありません。有料モデルを指定してください。";
+  } else if (status === 403 && code === "access_denied") {
+    guidance = "APIキーは認識されていますが、このリクエストは許可されていません。モデル権限・IP制限・利用上限を確認してください。";
+  } else if (status === 404) {
+    guidance = "EndpointまたはModel IDが見つかりません。指定値を確認してください。";
+  } else if (status === 425) {
+    guidance = "指定モデルはまだ利用開始前の可能性があります。error.metadata も確認してください。";
   } else if (status === 429 && retryAfter) {
     guidance = `Rate Limitです。Retry-After=${retryAfter} 秒を待ってから再試行してください。`;
   } else if (status === 429) {
     guidance = "Retry-Afterがない無料枠429は、同じ長いPromptを待って再送しても改善しない場合があります。";
-  } else if (status === 425) {
-    guidance = "指定モデルはまだ利用開始前の可能性があります。error.metadata も確認してください。";
+  } else if (status === 500) {
+    guidance = "OrcaRouter内部エラーです。時間を置いて再試行してください。";
+  } else if (status === 502) {
+    guidance = "上流Providerまたはfallback routeが失敗しています。時間を置くかTraceのHeaderを確認してください。";
   } else if (status === 503 && code === "model_not_found") {
     guidance = "そのモデルが現在のアカウントで利用可能か確認してください。";
+  } else if (status === 503 && code === "byok:key_unavailable") {
+    guidance = "WorkspaceのBYOK provider keyを利用できません。Provider keyまたはfallback設定を確認してください。";
+  } else if (status === 503) {
+    guidance = "OrcaRouterまたは上流Providerが一時的に利用できない可能性があります。";
   }
 
   return {
@@ -191,25 +245,33 @@ function validateInputs(apiKey, model, question, mode) {
   if (!question) throw new Error("質問を入力してください。");
 }
 
-function createAbortController() {
+function createAbortController(timeoutMs) {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
   return { controller, timeoutId };
 }
 
-async function postJson(apiKey, body, startedAt, traceTitle = "OrcaRouterへPOSTを送信") {
+async function postJson(
+  apiKey,
+  body,
+  startedAt,
+  traceTitle = "OrcaRouterへPOSTを送信",
+  rawCaption = "Raw JSON",
+  timeoutMs = CHAT_TOOL_TIMEOUT_MS
+) {
   addTrace("STEP 3", "REQUEST", traceTitle, {
-    timeoutMs: REQUEST_TIMEOUT_MS
+    timeoutMs
   });
 
-  const { controller, timeoutId } = createAbortController();
+  const { controller, timeoutId } = createAbortController(timeoutMs);
 
   try {
     const response = await fetch(API_ENDPOINT, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json; charset=utf-8",
+        Accept: "application/json"
       },
       body: JSON.stringify(body),
       signal: controller.signal
@@ -217,6 +279,8 @@ async function postJson(apiKey, body, startedAt, traceTitle = "OrcaRouterへPOST
 
     const rawBody = await response.text();
     const headers = Object.fromEntries(response.headers.entries());
+
+    displayRawResponse(rawBody, rawCaption, response.status);
 
     addTrace("STEP 4", "RESPONSE", "HTTPレスポンスを受信", {
       status: response.status,
@@ -263,12 +327,18 @@ async function runChat(apiKey, model, question, startedAt) {
     endpoint: API_ENDPOINT,
     headers: {
       Authorization: `Bearer ${maskApiKey(apiKey)}`,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json; charset=utf-8"
     },
     body: requestBody
   });
 
-  const result = await postJson(apiKey, requestBody, startedAt);
+  const result = await postJson(
+    apiKey,
+    requestBody,
+    startedAt,
+    "OrcaRouterへPOSTを送信",
+    "Raw JSON - Chat"
+  );
 
   // STEP 5: Parse assistant message.
   const assistantText = extractAssistantText(result.json);
@@ -299,17 +369,20 @@ async function runStreaming(apiKey, model, question, startedAt) {
 
   // STEP 3: Send HTTP POST.
   addTrace("STEP 3", "REQUEST", "Streaming POSTを送信", {
-    timeoutMs: REQUEST_TIMEOUT_MS
+    timeoutMs: STREAM_TIMEOUT_MS,
+    transport: "Browser fetch + ReadableStream",
+    encoding: "TextDecoder(utf-8)"
   });
 
-  const { controller, timeoutId } = createAbortController();
+  const { controller, timeoutId } = createAbortController(STREAM_TIMEOUT_MS);
 
   try {
     const response = await fetch(API_ENDPOINT, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json; charset=utf-8",
+        Accept: "text/event-stream"
       },
       body: JSON.stringify(requestBody),
       signal: controller.signal
@@ -319,6 +392,7 @@ async function runStreaming(apiKey, model, question, startedAt) {
 
     if (!response.ok) {
       const rawBody = await response.text();
+      displayRawResponse(rawBody, "Raw JSON - Streaming error", response.status);
       addTrace("STEP 4", "RESPONSE", "Streaming開始前にHTTPエラー", {
         status: response.status,
         headers,
@@ -353,6 +427,10 @@ async function runStreaming(apiKey, model, question, startedAt) {
     let answer = "";
     let eventCount = 0;
     let usage = null;
+    let latestPayload = "";
+
+    rawJsonTitle.textContent = "Raw JSON - Streaming (latest SSE event)";
+    rawJsonStatus.textContent = `HTTP Status: ${response.status} / Streaming`;
 
     while (true) {
       const { value, done } = await reader.read();
@@ -374,6 +452,13 @@ async function runStreaming(apiKey, model, question, startedAt) {
           });
           continue;
         }
+
+        latestPayload = payload;
+        displayRawResponse(
+          latestPayload,
+          "Raw JSON - Streaming (latest SSE event)",
+          response.status
+        );
 
         let chunk;
 
@@ -420,6 +505,41 @@ async function runStreaming(apiKey, model, question, startedAt) {
           usage = chunk.usage;
         }
       }
+    }
+
+    buffer += decoder.decode();
+
+    if (buffer.trim()) {
+      const finalLine = buffer.trim();
+      if (finalLine.startsWith("data:")) {
+        const payload = finalLine.slice(5).trim();
+        if (payload && payload !== "[DONE]") {
+          latestPayload = payload;
+          displayRawResponse(
+            latestPayload,
+            "Raw JSON - Streaming (latest SSE event)",
+            response.status
+          );
+
+          try {
+            const chunk = JSON.parse(payload);
+            const delta = chunk?.choices?.[0]?.delta?.content;
+            if (typeof delta === "string" && delta.length > 0) {
+              answer += delta;
+              answerBox.textContent = answer;
+            }
+            if (chunk.usage) usage = chunk.usage;
+          } catch {
+            addTrace("STEP 4", "STREAM", "最後のSSE dataをJSON化できません", payload);
+          }
+        }
+      }
+    }
+
+    if (!answer) {
+      throw new Error(
+        "Streamingは完了しましたが回答本文を取得できませんでした。Raw JSON / Trace を確認してください。"
+      );
     }
 
     // STEP 5: Parse assistant message.
@@ -489,7 +609,8 @@ async function runToolCalling(apiKey, model, question, startedAt) {
     apiKey,
     firstRequest,
     startedAt,
-    "Tool Calling 1回目を送信"
+    "Tool Calling 1回目を送信",
+    "Raw JSON - Tool Calling response #1"
   );
 
   const assistantMessage = first.json?.choices?.[0]?.message;
@@ -556,7 +677,8 @@ async function runToolCalling(apiKey, model, question, startedAt) {
     apiKey,
     secondRequest,
     startedAt,
-    "Tool Calling 2回目を送信"
+    "Tool Calling 2回目を送信",
+    "Raw JSON - Tool Calling response #2 (final)"
   );
 
   const assistantText = extractAssistantText(second.json);
@@ -577,6 +699,13 @@ async function sendChat() {
 
   clearTracePlaceholder();
   answerBox.textContent = "";
+  prepareRawResponse(
+    mode === "stream"
+      ? "Raw JSON - Streaming"
+      : mode === "tools"
+        ? "Raw JSON - Tool Calling"
+        : "Raw JSON - Chat"
+  );
   setStatus("Processing...");
   sendButton.disabled = true;
 
@@ -607,8 +736,9 @@ async function sendChat() {
     setStatus("Completed");
   } catch (error) {
     const isAbort = error?.name === "AbortError";
+    const timeoutMs = mode === "stream" ? STREAM_TIMEOUT_MS : CHAT_TOOL_TIMEOUT_MS;
     const message = isAbort
-      ? `タイムアウトしました（${REQUEST_TIMEOUT_MS / 1000}秒）。`
+      ? `タイムアウトしました（${timeoutMs / 1000}秒）。`
       : error?.message || String(error);
 
     addTrace("ERROR", "ERROR", "処理中にエラーが発生", {
@@ -631,7 +761,10 @@ modeInput.addEventListener("change", () => {
       "calculate_sum ツールを使って 123 と 456 を足し、その結果を日本語で説明してください。";
   } else if (modeInput.value === "stream") {
     questionInput.value =
-      "Streamingの動作確認です。OrcaRouterの特徴を3つ、短い箇条書きで説明してください。";
+      "日本語で「こんにちは。Streamingのテストです。」と短く答えてください。";
+  } else {
+    questionInput.value =
+      "日本語で「こんにちは。Web版Chatのテストです。」とだけ答えてください。";
   }
 });
 

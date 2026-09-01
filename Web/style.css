@@ -288,8 +288,32 @@ textarea:focus {
   font-weight: 700;
 }
 
+.raw-panel,
 .trace-panel {
   margin-top: 18px;
+}
+
+.raw-status {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.raw-json {
+  min-height: 220px;
+  max-height: 420px;
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: #dbeafe;
+  background: #0f172a;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: Consolas, "Cascadia Code", monospace;
+  font-size: 0.78rem;
+  line-height: 1.55;
 }
 
 .trace-list {

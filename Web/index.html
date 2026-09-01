@@ -14,7 +14,7 @@
         <p class="eyebrow">ORCAROUTER API LEARNING SAMPLE</p>
         <h1>Web Chat</h1>
         <p class="lead">
-          Chat / Streaming / Tool Calling を切り替えながら、質問・回答・HTTP電文を同じ画面で確認できます。
+          Chat / Streaming / Tool Calling を切り替えながら、質問・回答・Raw JSON・HTTP電文を同じ画面で確認できます。
         </p>
       </div>
       <a class="docs-link" href="../docs/processing-flow.md">Common flow</a>
@@ -65,7 +65,7 @@
           rows="8"
           spellcheck="false"
           placeholder="例: TCPとUDPの違いを初心者向けに説明してください。"
-        >こんにちは。OrcaRouterについて一言で説明してください。</textarea>
+        >日本語で「こんにちは。Web版Chatのテストです。」とだけ答えてください。</textarea>
         <p id="statusText" class="status-text" aria-live="polite">Ready</p>
       </article>
 
@@ -78,6 +78,17 @@
         </div>
         <div id="answer" class="answer-box" aria-live="polite">ここに回答が表示されます。</div>
       </article>
+    </section>
+
+    <section class="panel raw-panel">
+      <div class="panel-header">
+        <div>
+          <span class="step-label">RAW</span>
+          <h2 id="rawJsonTitle">Raw JSON</h2>
+        </div>
+        <span id="rawJsonStatus" class="raw-status">No response yet.</span>
+      </div>
+      <pre id="rawJson" class="raw-json" aria-live="polite"></pre>
     </section>
 
     <section class="panel trace-panel">
