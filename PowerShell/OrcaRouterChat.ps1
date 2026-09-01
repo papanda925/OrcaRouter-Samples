@@ -344,6 +344,15 @@ $viewModel.Answer = 'ここに回答が表示されます。'
 $viewModel.StatusText = 'Ready'
 $window.DataContext = $viewModel
 
+# Window.DataContext normally flows to child controls automatically.
+# Set it explicitly on the bound fields as well so XamlReader-loaded WPF
+# controls have a deterministic binding source before the Window is shown.
+$modelBox.DataContext = $viewModel
+$modeBox.DataContext = $viewModel
+$questionBox.DataContext = $viewModel
+$answerBox.DataContext = $viewModel
+$statusText.DataContext = $viewModel
+
 $apiKeyBox.Password = $script:DefaultApiKey
 
 function Add-Trace {
@@ -1008,6 +1017,10 @@ if ($UiBindingCheck) {
 
     $viewModel.Question = 'ViewModel-to-View binding test'
     $bindingExpression.UpdateTarget()
+    $window.Dispatcher.Invoke(
+        [System.Action]{ },
+        [System.Windows.Threading.DispatcherPriority]::DataBind
+    )
 
     if ($questionBox.Text -ne 'ViewModel-to-View binding test') {
         throw 'ViewModel-to-View binding failed for QuestionBox.'
@@ -1015,6 +1028,10 @@ if ($UiBindingCheck) {
 
     $questionBox.Text = 'View-to-ViewModel binding test'
     $bindingExpression.UpdateSource()
+    $window.Dispatcher.Invoke(
+        [System.Action]{ },
+        [System.Windows.Threading.DispatcherPriority]::DataBind
+    )
 
     if ($viewModel.Question -ne 'View-to-ViewModel binding test') {
         throw 'View-to-ViewModel binding failed for QuestionBox.'
