@@ -93,10 +93,10 @@ Web版・VBA版と同じ6ステップにそろえています。
 - raw response body
 - elapsed time
 - exception type
-- PowerShell script stack
-- invocation position
+- PowerShell script stack（ローカルのユーザー/リポジトリパスをプレースホルダー化）
+- invocation position（ローカルのユーザー/リポジトリパスをプレースホルダー化）
 
-実APIキーそのものはトレースに出力しません。
+実APIキーそのものはトレースに出力しません。エラーのStack/Positionにローカルパスが含まれる場合は、`<repository-root>` / `<USERPROFILE>` などへ置換してから画面へ表示します。
 
 ## API
 
