@@ -76,13 +76,17 @@ jobs:
           & .\VBA\prepare-import.ps1 -OutputDirectory $outputDirectory
 
           $cp932 = [System.Text.Encoding]::GetEncoding(932)
+          $sourceText = [System.IO.File]::ReadAllText(
+            'VBA/OrcaRouterSample.bas',
+            [System.Text.Encoding]::UTF8
+          )
           $sampleText = [System.IO.File]::ReadAllText(
             (Join-Path $outputDirectory 'OrcaRouterSample.bas'),
             $cp932
           )
 
-          if (-not $sampleText.Contains('入力値を検証')) {
-            throw 'CP932 VBA import file did not preserve Japanese text.'
+          if ($sampleText -ne $sourceText) {
+            throw 'CP932 VBA import file did not round-trip to the UTF-8 source text.'
           }
 
   safety:
