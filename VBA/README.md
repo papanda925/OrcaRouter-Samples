@@ -25,17 +25,38 @@ Excel VBA から OrcaRouter の Chat Completions API を呼び出し、**Chat / 
 
 - `OrcaRouterSample.bas` - シートUI作成、通常Chat、共通helper
 - `OrcaRouterAdvanced.bas` - Streaming、Tool Calling、高度なエラー診断
+- `prepare-import.ps1` - UTF-8のソースをVBEインポート用Shift-JIS(CP932)へ変換
 
 外部JSONライブラリを必須にしないため、この学習版では Chat Completions の `content` 文字列を取り出す軽量な処理を含めています。本番コードではフル機能のJSONパーサー利用を推奨します。
 
 ## Quick start
 
+日本語版WindowsのVBEは、UTF-8の `.bas` をそのままインポートすると日本語コメントや文字列が文字化けすることがあります。
+GitHub上のソースはUTF-8のまま維持し、インポート時だけCP932へ変換します。
+
+まずPowerShellでVBAフォルダへ移動し、変換スクリプトを実行してください。
+
+```powershell
+cd C:\Users\papanda925\OrcaRouter-Samples\VBA
+powershell.exe -ExecutionPolicy Bypass -File .\prepare-import.ps1
+```
+
+`VBA\import-ready` に次の2ファイルが作成されます。
+
+```text
+OrcaRouterSample.bas
+OrcaRouterAdvanced.bas
+```
+
+その後:
+
 1. 新しいExcelブックを `.xlsm` 形式で保存
 2. `Alt + F11` でVBEを開く
-3. `ファイル > ファイルのインポート` から `OrcaRouterSample.bas` と `OrcaRouterAdvanced.bas` を読み込む
-4. `SetupOrcaRouterSample` を実行
-5. 作成された `OrcaRouter Chat` シートの B3 にAPIキーを入力
-6. 「送信」ボタンを押す
+3. 既に文字化けした `OrcaRouterSample` / `OrcaRouterAdvanced` がある場合は削除
+4. `ファイル > ファイルのインポート` から **`VBA\import-ready` 側**の2ファイルを読み込む
+5. `SetupOrcaRouterSample` を実行
+6. 作成された `OrcaRouter Chat` シートの B3 にAPIキーを入力
+7. 「送信」ボタンを押す
 
 初期APIキーはダミーです。
 
@@ -113,3 +134,10 @@ Streaming Modeでは、APIキーをcurlのコマンドライン引数へ直接�
 Model欄は自由入力なので、無料ルーターから利用可能な有料モデルへ変更してAPI互換性を比較できます。
 
 詳細: [Advanced API tests](../docs/advanced-features.md)
+
+
+## VBE import encoding
+
+GitHubの `.bas` ファイルはUTF-8です。一方、Windows版VBEの「ファイルのインポート」は環境によってANSIコードページとして読み込むため、日本語を含むUTF-8ファイルを直接インポートすると文字化けする場合があります。
+
+`prepare-import.ps1` はソース内容を変更せず、ローカルの `import-ready` フォルダへCP932版を作成します。生成物は `.gitignore` の対象であり、GitHubへコミットしない運用です。
