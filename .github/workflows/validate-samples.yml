@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - "feature/**"
+      - "fix/**"
 
 permissions:
   contents: read
@@ -52,6 +53,42 @@ jobs:
             throw 'ModeBox was not found in MainWindow.xaml'
           }
 
+      - name: Validate VBA import preparation
+        shell: powershell
+        run: |
+          $tokens = $null
+          $errors = $null
+          $scriptText = Get-Content 'VBA/prepare-import.ps1' -Raw -Encoding UTF8
+          [System.Management.Automation.Language.Parser]::ParseInput(
+            $scriptText,
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object {
+              Write-Error ("Line {0}: {1}" -f $_.Extent.StartLineNumber, $_.Message)
+            }
+            exit 1
+          }
+
+          $outputDirectory = Join-Path $env:RUNNER_TEMP 'vba-import'
+          & .\VBA\prepare-import.ps1 -OutputDirectory $outputDirectory
+
+          $cp932 = [System.Text.Encoding]::GetEncoding(932)
+          $sourceText = [System.IO.File]::ReadAllText(
+            'VBA/OrcaRouterSample.bas',
+            [System.Text.Encoding]::UTF8
+          )
+          $sampleText = [System.IO.File]::ReadAllText(
+            (Join-Path $outputDirectory 'OrcaRouterSample.bas'),
+            $cp932
+          )
+
+          if ($sampleText -ne $sourceText) {
+            throw 'CP932 VBA import file did not round-trip to the UTF-8 source text.'
+          }
+
   safety:
     name: Source safety checks
     runs-on: ubuntu-latest
@@ -77,3 +114,47 @@ jobs:
           grep -q 'Public Sub SendOrcaRouterStreaming' VBA/OrcaRouterAdvanced.bas
           grep -q 'Public Sub SendOrcaRouterToolCalling' VBA/OrcaRouterAdvanced.bas
           grep -q 'RaiseOrcaRouterHttpError' VBA/OrcaRouterAdvanced.bas
+
+      - name: Check VBA line continuation limit
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          failed = False
+
+          for path in Path("VBA").glob("*.bas"):
+              run = 0
+              run_start = 0
+
+              for line_number, line in enumerate(
+                  path.read_text(encoding="utf-8").splitlines(),
+                  start=1,
+              ):
+                  if re.search(r"_\s*$", line):
+                      if run == 0:
+                          run_start = line_number
+                      run += 1
+                  else:
+                      if run > 24:
+                          print(
+                              f"{path}:{run_start}: "
+                              f"{run} line-continuation characters in one statement "
+                              "(VBA maximum is 24)."
+                          )
+                          failed = True
+                      run = 0
+
+              if run > 24:
+                  print(
+                      f"{path}:{run_start}: "
+                      f"{run} line-continuation characters in one statement "
+                      "(VBA maximum is 24)."
+                  )
+                  failed = True
+
+          if failed:
+              sys.exit(1)
+          PY
