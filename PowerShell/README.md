@@ -10,7 +10,7 @@ PowerShell + WPF/XAML で OrcaRouter の Chat Completions API を呼び出し、
 
 PowerShell版は **C#コードを埋め込まず、PowerShell + .NETだけ** で構成しています。
 
-ViewModelには `System.Dynamic.ExpandoObject` を使います。`ExpandoObject` は `INotifyPropertyChanged` を実装しているため、PowerShell側で値を変更するとWPFのData Bindingへ変更通知できます。
+ViewModelには1行だけの `DataTable` から作った `System.Data.DataRowView` を使います。`DataRowView` は `INotifyPropertyChanged` を実装しているため、PowerShell側でAnswerやStatusなどの列値を変更するとWPFのData Bindingへ変更通知できます。C#のViewModelクラスは使いません。
 
 ```text
 WPF UI thread
@@ -35,7 +35,7 @@ Background PowerShell Runspace
 |---|---|
 | Model / Mode | TwoWay Data Binding |
 | Answer / Status | OneWay Data Binding |
-| ViewModel変更通知 | `ExpandoObject` の `INotifyPropertyChanged` |
+| ViewModel変更通知 | `DataRowView` の `INotifyPropertyChanged` |
 | Question | WPF `TextBox` を直接入力し、`TextChanged` でViewModelへ同期 |
 | API Key | `PasswordBox.Password` を直接取得 |
 | Trace | `AppendText()` で追記 |
@@ -113,7 +113,7 @@ PowerShell + `XamlReader` では、主要な入力欄までData Bindingだけに
 
 また、API待機中もQuestion欄は無効化しません。応答を待ちながら次の質問を入力できます。
 
-CIではWindows PowerShell 5.1上で、QuestionBoxの編集性、1200×900での Question / Answer / Trace の実表示高さ、`ExpandoObject` が `INotifyPropertyChanged` を実装していること、Answer / Status のData Binding更新を確認します。さらに、実APIを呼ばないBackground Runspace自己テストで、Answer / CompletedイベントがQueueへ返ることも検証します。
+CIではWindows PowerShell 5.1上で、QuestionBoxの編集性、1200×900での Question / Answer / Trace の実表示高さ、`DataRowView` が `INotifyPropertyChanged` を実装していること、Answer / Status のData Binding更新を確認します。さらに、実APIを呼ばないBackground Runspace自己テストで、Answer / CompletedイベントがQueueへ返ることも検証します。
 
 参考: PowerShell / WPF / MVVMの考え方
 - https://papanda925.com/?p=2187
