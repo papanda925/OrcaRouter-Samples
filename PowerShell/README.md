@@ -72,26 +72,30 @@ AnswerBox を更新
 
 StreamingではWorker側がSSEを読み取り、途中経過のAnswerイベントをQueueへ渡します。UI側はQueueから受け取った文字列をViewModelの `Answer` へ設定し、Data Bindingで回答欄へ反映します。
 
-## Responsive window layout
+## Responsive window layout / Result tabs
 
-WPFの `Grid` と `*`（star sizing）を使い、ウィンドウサイズに合わせて INPUT / OUTPUT / TRACE が連動して伸縮するようにしています。
+画面全体を縦スクロールする方式ではなく、**INPUT + 結果ワークスペース** の2段構成にしています。
 
 ```text
 Window
   ├─ Header / API settings : Auto
-  ├─ INPUT                 : 3*
-  ├─ OUTPUT                : 3*
-  ├─ TRACE                 : 4*
+  ├─ INPUT                 : 2*
+  ├─ GridSplitter
+  ├─ RESULT                : 5*
+  │    ├─ 回答 Tab
+  │    └─ トレース Tab
   └─ Status                : Auto
 ```
 
+RESULTは `TabControl` です。**回答** と **トレース** をタブで即座に切り替えられるため、ページ全体を下までスクロールしなくてもHTTPトレースへアクセスできます。
+
+これはIDEや管理画面でよく使われる「固定した作業領域 + タブ切替」の考え方です。長いAnswerやTraceだけは各TextBox内部のスクロールを使います。
+
 通常起動時は最大化して表示します。タイトルバーの **最小化 / 元に戻す / 最大化** が使え、元に戻した後はウィンドウ端をドラッグして自由にサイズ変更できます。
 
-`ResizeMode="CanResizeWithGrip"` を指定しているため、右下のサイズ変更グリップも利用できます。
+`ResizeMode="CanResizeWithGrip"` を指定し、INPUTとRESULTの間には `GridSplitter` を配置しています。質問欄を広くしたい場合、または結果欄を広くしたい場合は境界を上下にドラッグできます。
 
-INPUT / OUTPUT / TRACE の間には `GridSplitter` を置いています。たとえば回答欄を広くしたい場合は、区切り線を上下にドラッグしてその場で比率を変更できます。ウィンドウを拡大・縮小した場合も、そのGrid配分に従って各欄が連動します。
-
-小さいウィンドウで1つの欄だけが極端につぶれないよう、各行には最低高さを持たせ、各TextBoxは内部スクロールできるようにしています。
+送信時は「回答」タブを表示します。エラー時は「トレース」タブへ自動で切り替え、診断情報をすぐ確認できるようにしています。
 
 ## Question入力欄 / MVVM
 
@@ -113,7 +117,7 @@ PowerShell + `XamlReader` では、主要な入力欄までData Bindingだけに
 
 また、API待機中もQuestion欄は無効化しません。応答を待ちながら次の質問を入力できます。
 
-CIではWindows PowerShell 5.1上で、QuestionBoxの編集性、1200×900での Question / Answer / Trace の実表示高さ、`DataRowView` が `INotifyPropertyChanged` を実装していること、Answer / Status のData Binding更新を確認します。さらに、実APIを呼ばないBackground Runspace自己テストで、Answer / CompletedイベントがQueueへ返ることも検証します。
+CIではWindows PowerShell 5.1上で、QuestionBoxの編集性、ResultTabsに「回答」「トレース」の2タブがあること、1200×900で各タブの表示領域が十分な高さを持つこと、`DataRowView` が `INotifyPropertyChanged` を実装していること、Answer / Status のData Binding更新を確認します。さらに、実APIを呼ばないBackground Runspace自己テストで、Answer / CompletedイベントがQueueへ返ることも検証します。
 
 参考: PowerShell / WPF / MVVMの考え方
 - https://papanda925.com/?p=2187
@@ -132,8 +136,8 @@ Model欄は自由入力なので、無料ルーターと有料モデルで同じ
 1画面で次の3点を確認できます。
 
 - 質問
-- OrcaRouterからの回答
-- 処理ステップとHTTPトレース
+- OrcaRouterからの回答（「回答」タブ）
+- 処理ステップとHTTPトレース（「トレース」タブ）
 
 トレースには、APIキーを伏せたリクエスト情報、Request JSON、HTTPステータス、Response headers、Raw response、例外情報などを表示します。
 
