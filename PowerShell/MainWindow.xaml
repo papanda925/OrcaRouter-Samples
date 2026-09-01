@@ -113,6 +113,22 @@
                 <StackPanel Grid.Column="0">
                     <TextBlock Text="API key" Margin="0,0,0,6" Foreground="#64748B" FontWeight="SemiBold"/>
                     <PasswordBox x:Name="ApiKeyBox" Height="42"/>
+                    <StackPanel x:Name="FirstRunPanel" Margin="0,8,0,0">
+                        <Button
+                            x:Name="ReferralButton"
+                            Content="APIキーをまだお持ちでない方: OrcaRouterを始める"
+                            HorizontalAlignment="Left"
+                            Padding="10,5"
+                            Background="#F0F9FF"
+                            Foreground="#0369A1"
+                            BorderBrush="#BAE6FD"/>
+                        <TextBlock
+                            Margin="0,4,0,0"
+                            Text="本プロジェクトの紹介リンクです。紹介経由の利用に応じて開発者へ報酬が還元される場合があります。"
+                            Foreground="#64748B"
+                            FontSize="11"
+                            TextWrapping="Wrap"/>
+                    </StackPanel>
                 </StackPanel>
 
                 <StackPanel Grid.Column="2">
@@ -160,14 +176,39 @@
                         <TextBlock Text="INPUT" Foreground="#0F766E" FontSize="11" FontWeight="Bold"/>
                         <TextBlock Text="質問" FontSize="18" FontWeight="Bold"/>
                     </StackPanel>
-                    <Button
-                        x:Name="SendButton"
+                    <StackPanel
                         Grid.Column="1"
-                        Content="送信"
-                        MinWidth="110"
-                        Background="#0F172A"
-                        Foreground="White"
-                        BorderBrush="#0F172A"/>
+                        Orientation="Horizontal"
+                        VerticalAlignment="Center">
+                        <ComboBox
+                            x:Name="PromptExampleBox"
+                            Width="190"
+                            Height="38"
+                            Margin="0,0,8,0"
+                            SelectedIndex="0">
+                            <ComboBoxItem Content="Prompt example"/>
+                            <ComboBoxItem Content="要約"/>
+                            <ComboBoxItem Content="初心者向け説明"/>
+                            <ComboBoxItem Content="コードレビュー"/>
+                            <ComboBoxItem Content="JSON形式で整理"/>
+                            <ComboBoxItem Content="英訳"/>
+                        </ComboBox>
+                        <Button
+                            x:Name="NewChatButton"
+                            Content="新しいチャット"
+                            MinWidth="120"
+                            Margin="0,0,8,0"
+                            Background="White"
+                            Foreground="#172033"
+                            BorderBrush="#D9E1EC"/>
+                        <Button
+                            x:Name="SendButton"
+                            Content="送信"
+                            MinWidth="110"
+                            Background="#0F172A"
+                            Foreground="White"
+                            BorderBrush="#0F172A"/>
+                    </StackPanel>
                 </Grid>
                 <TextBox
                     x:Name="QuestionBox"
@@ -222,7 +263,7 @@
 
                 <StackPanel Margin="0,0,0,10">
                     <TextBlock Text="RESULT" Foreground="#0F766E" FontSize="11" FontWeight="Bold"/>
-                    <TextBlock Text="回答 / HTTPトレース" FontSize="18" FontWeight="Bold"/>
+                    <TextBlock Text="会話 / HTTPトレース / Developer Information" FontSize="18" FontWeight="Bold"/>
                 </StackPanel>
 
                 <TabControl
@@ -244,6 +285,25 @@
                                 MinHeight="180"
                                 VerticalContentAlignment="Top"
                                 Text="{Binding Answer, Mode=OneWay}"/>
+                        </Grid>
+                    </TabItem>
+
+                    <TabItem Header="Developer">
+                        <Grid Margin="10">
+                            <TextBox
+                                x:Name="DeveloperBox"
+                                IsReadOnly="True"
+                                AcceptsReturn="True"
+                                TextWrapping="NoWrap"
+                                HorizontalScrollBarVisibility="Auto"
+                                VerticalScrollBarVisibility="Auto"
+                                MinHeight="180"
+                                VerticalContentAlignment="Top"
+                                FontFamily="Consolas"
+                                FontSize="12"
+                                Foreground="#D9E7FF"
+                                Background="#0F172A"
+                                BorderBrush="#0F172A"/>
                         </Grid>
                     </TabItem>
 
@@ -299,11 +359,19 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBlock
-                x:Name="StatusText"
-                Text="{Binding StatusText, Mode=OneWay}"
-                Foreground="#64748B"
-                VerticalAlignment="Center"/>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock
+                    x:Name="StatusText"
+                    Text="{Binding StatusText, Mode=OneWay}"
+                    Foreground="#64748B"
+                    VerticalAlignment="Center"/>
+                <TextBlock
+                    x:Name="HistoryStatusText"
+                    Margin="18,0,0,0"
+                    Text="履歴 0 / 10 往復"
+                    Foreground="#94A3B8"
+                    VerticalAlignment="Center"/>
+            </StackPanel>
             <TextBlock
                 Grid.Column="1"
                 Text="Ctrl+Enter でも送信できます"
