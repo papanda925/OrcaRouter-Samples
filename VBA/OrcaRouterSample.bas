@@ -376,6 +376,66 @@ ErrorHandler:
 
 End Sub
 
+Public Sub RunOrcaRouterVbaSelfTests()
+
+    Dim originalText As String
+    Dim encodedText As String
+    Dim decodedText As String
+    Dim requestJson As String
+    Dim utf8Bytes As Variant
+    Dim byteCount As Long
+
+    On Error GoTo ErrorHandler
+
+    originalText = "Line1" & vbLf & "Quote:" & Chr$(34) & " Backslash:" & Chr$(92)
+    encodedText = JsonEscape(originalText)
+    decodedText = JsonUnescape(encodedText)
+
+    If decodedText <> originalText Then
+        Err.Raise vbObjectError + 3001, "RunOrcaRouterVbaSelfTests", _
+                  "JsonEscape / JsonUnescape round-trip failed."
+    End If
+
+    requestJson = BuildRequestJson("orcarouter/free", "hello")
+
+    If requestJson <> _
+       "{""model"":""orcarouter/free"",""messages"":[{""role"":""user"",""content"":""hello""}]}" Then
+
+        Err.Raise vbObjectError + 3002, "RunOrcaRouterVbaSelfTests", _
+                  "BuildRequestJson produced an unexpected result."
+    End If
+
+    If MaskApiKey("1234567890") <> "1234...7890" Then
+        Err.Raise vbObjectError + 3003, "RunOrcaRouterVbaSelfTests", _
+                  "MaskApiKey produced an unexpected result."
+    End If
+
+    utf8Bytes = StringToUtf8Bytes("ABC")
+    byteCount = UBound(utf8Bytes) - LBound(utf8Bytes) + 1
+
+    If byteCount <> 3 Then
+        Err.Raise vbObjectError + 3004, "RunOrcaRouterVbaSelfTests", _
+                  "UTF-8 conversion produced an unexpected byte count."
+    End If
+
+    RunOrcaRouterAdvancedSelfTests
+
+    MsgBox "All local VBA self-tests passed.", _
+           vbInformation, _
+           "OrcaRouter VBA Self-Test"
+
+    Exit Sub
+
+ErrorHandler:
+    MsgBox "VBA self-test failed." & vbCrLf & _
+           "Err.Number: " & Err.Number & vbCrLf & _
+           "Err.Source: " & Err.Source & vbCrLf & _
+           "Err.Description: " & Err.Description, _
+           vbExclamation, _
+           "OrcaRouter VBA Self-Test"
+
+End Sub
+
 Public Sub ClearOrcaRouterTrace()
 
     Dim ws As Worksheet
