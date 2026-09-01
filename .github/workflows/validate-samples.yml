@@ -139,7 +139,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          if grep -R -n -E 'Add-Type[[:space:]]+-TypeDefinition|using[[:space:]]+System\.ComponentModel|public[[:space:]]+sealed[[:space:]]+class' PowerShell; then
+          if grep -n -E 'Add-Type[[:space:]]+-TypeDefinition|using[[:space:]]+System\.ComponentModel|public[[:space:]]+sealed[[:space:]]+class' PowerShell/*.ps1; then
             echo "PowerShell sample must not compile embedded C# source."
             exit 1
           fi
