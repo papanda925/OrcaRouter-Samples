@@ -62,13 +62,13 @@ jobs:
             throw "Windows PowerShell 5.1 failed to decode/parse OrcaRouterChat.ps1."
           }
 
-      - name: Verify WPF QuestionBox ViewModel binding
+      - name: Verify WPF QuestionBox editor
         shell: powershell
         run: |
           & powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File '.\PowerShell\OrcaRouterChat.ps1' -UiBindingCheck
 
           if ($LASTEXITCODE -ne 0) {
-            throw "WPF QuestionBox/ViewModel binding check failed."
+            throw "WPF QuestionBox editor check failed."
           }
 
   safety:
