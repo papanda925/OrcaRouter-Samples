@@ -74,7 +74,7 @@ VBAコード内にも `STEP 1` ～ `STEP 6` の同じコメントを配置して
 
 ## HTTP implementation
 
-通常ChatとTool Callingでは、参照設定を追加せずに使える late binding の `MSXML2.XMLHTTP.6.0` を利用します。
+Chat / Streaming / Tool Calling は、参照設定を追加せずに使える late binding の `MSXML2.XMLHTTP.6.0` を利用します。
 
 ### XMLHTTPへ変更した理由
 
@@ -82,7 +82,7 @@ PowerShell版は .NET の `HttpClient` で比較的すぐ応答する一方、VB
 
 `WinHttp.WinHttpRequest` はWindowsのWinHTTPスタックを使い、主にマシン単位のネットワーク／プロキシ設定を参照します。一方、`MSXML2.XMLHTTP.6.0` はデスクトップアプリケーション向けで、現在のユーザー環境のネットワーク／プロキシ設定に近い経路を使います。
 
-そのため、このExcel VBAサンプルでは通常ChatとTool Callingを `XMLHTTP` に切り替えています。PowerShellの `HttpClient` と完全に同じ実装ではありませんが、少なくともWinHTTP固有の通信経路を外して比較できるようにしています。
+そのため、このExcel VBAサンプルでは Chat / Streaming / Tool Calling を `XMLHTTP` に統一しています。PowerShellの `HttpClient` と完全に同じ実装ではありませんが、少なくともWinHTTP固有の通信経路や外部 `curl.exe` プロセスを使わず、Excel/VBA内で比較できるようにしています。
 
 ### 非同期処理にしている理由
 
@@ -115,7 +115,7 @@ YieldToExcel → DoEvents
 通常Chatでタイムアウトした場合は、まず `TestOrcaRouterConnection` マクロを実行してください。このマクロも `MSXML2.XMLHTTP.6.0` で `GET /v1/models` を呼び出し、次を切り分けます。
 
 - 2xx: ネットワーク到達性とAPIキー認証は動作。Chat側のモデル選択・ルーティング・応答待ちを確認
-- 401 / 403: APIキー、権限、Quotaなどを確認
+- 401 / 402 / 403: APIキー、権限、Quota、無料枠・残高などを確認
 - HTTP応答前のタイムアウト: ユーザー側ネットワーク、プロキシ、セキュリティ製品などを確認
 
 ```text
@@ -137,7 +137,7 @@ Answer抽出は、レスポンス全体から単純に最初の `content` を探
 
 Tool Callingでは1回目のTool CallレスポンスをRaw JSONへ表示し、2回目の最終レスポンス受信後にRaw JSON欄を最終レスポンスへ更新します。Answerには2回目の `message.content` を表示します。
 
-Streamingでは1つのJSONレスポンスではなくSSEイベントが連続するため、Raw JSON欄には最後に受信したJSON形式のSSEイベントを表示します。Answer欄には各SSEイベントの `delta.content` を連結した最終テキストを表示します。
+Streamingでは1つのJSONレスポンスではなくSSEイベントが連続します。`XMLHTTP.responseText` を `readyState = 3 (LOADING)` の間から差分読取し、`data: {...}` 行を順次解析します。Raw JSON欄には最後に受信したJSON形式のSSEイベントを表示し、Answer欄には各SSEイベントの `delta.content` を連結して逐次表示します。MSXMLがHTTPレスポンスをUnicode文字列へ変換した後にセルへ書くため、コンソール標準出力経由の文字化けを避けられます。
 
 Raw JSONはExcelセルの上限と可読性を考慮し、非常に長い場合は約30,000文字で切り詰めます。Traceには従来どおりHTTP Status、Headers、Raw response等も記録します。
 
@@ -165,7 +165,7 @@ Excelセルの最大文字数と可読性を考慮し、非常に長いTraceデ�
 ## Notes
 
 - Windows版Excelを想定しています。
-- 通常ChatとTool Callingは `MSXML2.XMLHTTP.6.0` の非同期送信を使い、`readyState` を短い間隔で確認します。
+- Chat / Streaming / Tool Calling は `MSXML2.XMLHTTP.6.0` の非同期送信を使い、`readyState` を短い間隔で確認します。
 - 待機ループ、Streamingの逐次更新、Trace描画では `DoEvents` を直接ばらまかず、`YieldToExcel` を通して約0.05秒間隔に抑制しています。
 - 待機中はExcelのステータスバーへ経過秒数を表示し、一定間隔でTraceにも `WAIT` 行を追加します。
 - 通常Chatの総待機上限は120秒です。
@@ -177,12 +177,12 @@ Excelセルの最大文字数と可読性を考慮し、非常に長いTraceデ�
 B5セルのドロップダウンで選択します。
 
 - `Chat` - `MSXML2.XMLHTTP.6.0` による非同期Chat
-- `Streaming` - Windows標準 `curl.exe` をVBAから起動し、SSEを標準出力から逐次読取
+- `Streaming` - `MSXML2.XMLHTTP.6.0` の `responseText` を差分読取し、SSE `data:` 行をVBA内で逐次解析
 - `Tool Calling` - `calculate_sum(a, b)` のTool Callをローカル実行し、Tool結果を含む2回目のAPI呼び出しまで実施
 
-Streaming Modeでは、APIキーをcurlのコマンドライン引数へ直接書かず、stdinから渡すcurl configにAuthorization headerを設定します。
+Streaming Modeでも外部PowerShellや `WScript.Shell`、`curl.exe` は使用しません。
 
-Model欄は自由入力なので、無料ルーターから利用可能な有料モデルへ変更してAPI互換性を比較できます。
+Model欄は自由入力です。`orcarouter/free` が `free_quota_exhausted` を返した場合、このサンプルは有料モデルへ自動切替しません。意図しない課金を避けるため、利用者が残高・モデル料金を確認したうえで、B4へ具体的な有料モデルを明示的に入力してください。
 
 詳細: [Advanced API tests](../docs/advanced-features.md)
 
