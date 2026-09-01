@@ -38,11 +38,11 @@ function Write-HttpResponse {
     )
 
     $headerText =
-        "HTTP/1.1 $StatusCode $StatusText\r\n" +
-        "Content-Type: $ContentType\r\n" +
-        "Content-Length: $($Body.Length)\r\n" +
-        "Cache-Control: no-store\r\n" +
-        "Connection: close\r\n\r\n"
+        "HTTP/1.1 $StatusCode $StatusText`r`n" +
+        "Content-Type: $ContentType`r`n" +
+        "Content-Length: $($Body.Length)`r`n" +
+        "Cache-Control: no-store`r`n" +
+        "Connection: close`r`n`r`n"
 
     $headerBytes = [System.Text.Encoding]::ASCII.GetBytes($headerText)
 
