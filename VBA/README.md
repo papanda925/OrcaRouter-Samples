@@ -25,38 +25,25 @@ Excel VBA から OrcaRouter の Chat Completions API を呼び出し、**Chat / 
 
 - `OrcaRouterSample.bas` - シートUI作成、通常Chat、共通helper
 - `OrcaRouterAdvanced.bas` - Streaming、Tool Calling、高度なエラー診断
-- `prepare-import.ps1` - UTF-8のソースをVBEインポート用Shift-JIS(CP932)へ変換
+
+VBEの文字コード差異で壊れないよう、2つの `.bas` は **ASCIIのみ** で記述しています。コード内のコメント・UI文言・エラーメッセージは英語です。READMEは日本語のままです。
 
 外部JSONライブラリを必須にしないため、この学習版では Chat Completions の `content` 文字列を取り出す軽量な処理を含めています。本番コードではフル機能のJSONパーサー利用を推奨します。
 
 ## Quick start
 
-日本語版WindowsのVBEは、UTF-8の `.bas` をそのままインポートすると日本語コメントや文字列が文字化けすることがあります。
-GitHub上のソースはUTF-8のまま維持し、インポート時だけCP932へ変換します。
+VBEの `.bas` インポートはWindowsのシステムコードページに依存し、日本語を含むソースは環境によって文字化けします。
+そのため、このリポジトリのVBAソースは **ASCII-only** に変更しました。Shift-JIS変換は不要です。
 
-まずPowerShellでVBAフォルダへ移動し、変換スクリプトを実行してください。
-
-```powershell
-cd C:\Users\papanda925\OrcaRouter-Samples\VBA
-powershell.exe -ExecutionPolicy Bypass -File .\prepare-import.ps1
-```
-
-`VBA\import-ready` に次の2ファイルが作成されます。
-
-```text
-OrcaRouterSample.bas
-OrcaRouterAdvanced.bas
-```
-
-その後:
-
-1. 新しいExcelブックを `.xlsm` 形式で保存
-2. `Alt + F11` でVBEを開く
-3. 既に文字化けした `OrcaRouterSample` / `OrcaRouterAdvanced` がある場合は削除
-4. `ファイル > ファイルのインポート` から **`VBA\import-ready` 側**の2ファイルを読み込む
-5. `SetupOrcaRouterSample` を実行
-6. 作成された `OrcaRouter Chat` シートの B3 にAPIキーを入力
-7. 「送信」ボタンを押す
+1. PowerShellで最新の `main` を取得
+2. 新しいExcelブックを `.xlsm` 形式で保存
+3. `Alt + F11` でVBEを開く
+4. 既に文字化けした `OrcaRouterSample` / `OrcaRouterAdvanced` がある場合は削除
+5. `ファイル > ファイルのインポート` から `VBA\OrcaRouterSample.bas` と `VBA\OrcaRouterAdvanced.bas` を直接読み込む
+6. `デバッグ > VBAProjectのコンパイル` を実行
+7. `SetupOrcaRouterSample` を実行
+8. 作成された `OrcaRouter Chat` シートの B3 にAPIキーを入力
+9. 「Send」ボタンを押す
 
 初期APIキーはダミーです。
 
@@ -138,6 +125,5 @@ Model欄は自由入力なので、無料ルーターから利用可能な有料
 
 ## VBE import encoding
 
-GitHubの `.bas` ファイルはUTF-8です。一方、Windows版VBEの「ファイルのインポート」は環境によってANSIコードページとして読み込むため、日本語を含むUTF-8ファイルを直接インポートすると文字化けする場合があります。
-
-`prepare-import.ps1` はソース内容を変更せず、ローカルの `import-ready` フォルダへCP932版を作成します。生成物は `.gitignore` の対象であり、GitHubへコミットしない運用です。
+VBEはUnicode対応のソースインポートを安定して扱えず、Windowsのシステムコードページによって結果が変わります。
+そのためVBAの2つの `.bas` はASCII-onlyをCIで強制しています。これにより、日本語Windows・英語Windows・UTF-8システムロケールなどの差に影響されずインポートできます。
