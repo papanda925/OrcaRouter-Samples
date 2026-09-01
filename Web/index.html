@@ -35,6 +35,15 @@
           <input id="apiKeyFile" class="visually-hidden" type="file">
         </div>
         <p class="field-help">OrcaRouter Console からダウンロードしたキーのファイルを選ぶと、完全な <code>sk-orca-...</code> をブラウザ内で読み込みます。ファイル内容は保存しません。</p>
+        <div id="firstRunHelp" class="first-run-help">
+          <strong>APIキーをまだお持ちでない方:</strong>
+          <a
+            href="https://www.orcarouter.ai/ref/ref_5074f764e512c8dd3d9d"
+            target="_blank"
+            rel="noopener noreferrer"
+          >OrcaRouterを初めて利用する / APIキーを作成する</a>
+          <span>※ 本プロジェクトの紹介リンクです。紹介経由の利用に応じて開発者へ報酬が還元される場合があります。</span>
+        </div>
       </div>
       <div class="field">
         <label for="model">Model</label>
@@ -48,6 +57,17 @@
           <option value="tools">Tool Calling (calculate_sum)</option>
         </select>
       </div>
+      <div class="field prompt-example-field">
+        <label for="promptExample">Prompt example</label>
+        <select id="promptExample">
+          <option value="">-- 例を選択 --</option>
+          <option value="summary">要約</option>
+          <option value="explain">初心者向け説明</option>
+          <option value="review">コードレビュー</option>
+          <option value="json">JSON形式で整理</option>
+          <option value="translate">英訳</option>
+        </select>
+      </div>
     </section>
 
     <section class="workspace">
@@ -57,7 +77,10 @@
             <span class="step-label">INPUT</span>
             <h2>質問</h2>
           </div>
-          <button id="sendButton" class="primary-button" type="button">送信</button>
+          <div class="button-row">
+            <button id="newChatButton" class="secondary-button" type="button">新しいチャット</button>
+            <button id="sendButton" class="primary-button" type="button">送信</button>
+          </div>
         </div>
 
         <textarea
@@ -66,19 +89,55 @@
           spellcheck="false"
           placeholder="例: TCPとUDPの違いを初心者向けに説明してください。"
         >日本語で「こんにちは。Web版Chatのテストです。」とだけ答えてください。</textarea>
-        <p id="statusText" class="status-text" aria-live="polite">Ready</p>
+        <div class="status-row">
+          <p id="statusText" class="status-text" aria-live="polite">Ready</p>
+          <p id="historyStatus" class="status-text">履歴 0 / 10 往復</p>
+        </div>
       </article>
 
       <article class="panel answer-panel">
         <div class="panel-header">
           <div>
-            <span class="step-label">OUTPUT</span>
-            <h2>回答</h2>
+            <span class="step-label">CONVERSATION</span>
+            <h2>会話</h2>
           </div>
         </div>
-        <div id="answer" class="answer-box" aria-live="polite">ここに回答が表示されます。</div>
+        <div id="answer" class="answer-box conversation-box" aria-live="polite">ここに会話が表示されます。</div>
       </article>
     </section>
+
+
+    <details class="panel developer-panel">
+      <summary>
+        <span>
+          <span class="step-label">DEVELOPER</span>
+          <strong>Developer Information</strong>
+        </span>
+        <span class="summary-help">API通信の中身を見る</span>
+      </summary>
+      <div class="developer-content">
+        <div class="metrics-grid">
+          <div><span>HTTP Status</span><strong id="devHttpStatus">-</strong></div>
+          <div><span>Elapsed</span><strong id="devElapsed">-</strong></div>
+          <div><span>Model</span><strong id="devModel">-</strong></div>
+          <div><span>Prompt Tokens</span><strong id="devPromptTokens">-</strong></div>
+          <div><span>Completion Tokens</span><strong id="devCompletionTokens">-</strong></div>
+          <div><span>Total Tokens</span><strong id="devTotalTokens">-</strong></div>
+          <div><span>Cost</span><strong id="devCost">-</strong></div>
+          <div><span>History</span><strong id="devHistory">0 / 10 turns</strong></div>
+        </div>
+        <div class="developer-json-grid">
+          <section>
+            <h3>Request JSON</h3>
+            <pre id="devRequestJson" class="raw-json">{}</pre>
+          </section>
+          <section>
+            <h3>Response JSON</h3>
+            <pre id="devResponseJson" class="raw-json">{}</pre>
+          </section>
+        </div>
+      </div>
+    </details>
 
     <section class="panel raw-panel">
       <div class="panel-header">
