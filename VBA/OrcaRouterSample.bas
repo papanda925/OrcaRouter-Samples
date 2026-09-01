@@ -953,6 +953,7 @@ Public Sub RunOrcaRouterVbaSelfTests()
                   "JsonEscape / JsonUnescape round-trip failed."
     End If
 
+    ClearConversationHistoryState
     requestJson = BuildRequestJson("orcarouter/free", "hello")
 
     If requestJson <> _
@@ -961,6 +962,19 @@ Public Sub RunOrcaRouterVbaSelfTests()
         Err.Raise vbObjectError + 3002, "RunOrcaRouterVbaSelfTests", _
                   "BuildRequestJson produced an unexpected result."
     End If
+
+    AddConversationTurn "first question", "first answer"
+    requestJson = BuildRequestJson("orcarouter/free", "second question")
+
+    If InStr(1, requestJson, """role"":""assistant""", vbBinaryCompare) = 0 Or _
+       InStr(1, requestJson, "first answer", vbBinaryCompare) = 0 Or _
+       InStr(1, requestJson, "second question", vbBinaryCompare) = 0 Then
+
+        Err.Raise vbObjectError + 3005, "RunOrcaRouterVbaSelfTests", _
+                  "Conversation history was not included in BuildRequestJson."
+    End If
+
+    ClearConversationHistoryState
 
     If MaskApiKey("1234567890") <> "1234...7890" Then
         Err.Raise vbObjectError + 3003, "RunOrcaRouterVbaSelfTests", _
