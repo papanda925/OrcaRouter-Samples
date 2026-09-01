@@ -71,6 +71,19 @@ jobs:
             throw 'ResultTabs must contain Answer and Trace tabs.'
           }
 
+          $pageScrollViewer = $window.FindName('PageScrollViewer')
+
+          if ($null -eq $pageScrollViewer) {
+            throw 'PageScrollViewer was not found in MainWindow.xaml'
+          }
+
+          if (
+            $pageScrollViewer.VerticalScrollBarVisibility -ne
+            [System.Windows.Controls.ScrollBarVisibility]::Auto
+          ) {
+            throw 'PageScrollViewer must use an automatic vertical scrollbar.'
+          }
+
       - name: Execute script parser through Windows PowerShell 5.1
         shell: powershell
         run: |
