@@ -109,6 +109,11 @@ jobs:
           for file_name in tracked:
               path = Path(file_name)
 
+              # Do not scan this workflow source itself: it necessarily contains
+              # the regex patterns and example placeholders used by the audit.
+              if file_name == ".github/workflows/validate-samples.yml":
+                  continue
+
               if not path.is_file():
                   continue
 
