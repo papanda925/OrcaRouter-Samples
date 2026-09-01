@@ -135,6 +135,59 @@ h2 {
   font-weight: 700;
 }
 
+.api-key-field {
+  grid-column: span 1;
+}
+
+.api-key-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.file-button {
+  min-height: 44px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--text) !important;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.file-button:hover {
+  border-color: #a9b7c8;
+  background: #f8fafc;
+}
+
+.field-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.field-help code {
+  font-family: Consolas, "Cascadia Code", monospace;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
 .field input,
 .field select,
 textarea {
@@ -314,6 +367,10 @@ textarea:focus {
 
   .config-card,
   .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .api-key-row {
     grid-template-columns: 1fr;
   }
 }
