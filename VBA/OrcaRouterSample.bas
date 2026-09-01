@@ -32,6 +32,7 @@ Private Const SAMPLE_SHEET_NAME As String = "OrcaRouter Chat"
 Private Const TRACE_HEADER_ROW As Long = 18
 Private Const TRACE_FIRST_ROW As Long = 19
 Private Const MAX_TRACE_TEXT As Long = 30000
+Private Const RAW_JSON_MAX_TEXT As Long = 30000
 Private Const CHAT_TOTAL_TIMEOUT_SECONDS As Long = 120
 Private Const CHAT_WAIT_TRACE_INTERVAL_SECONDS As Long = 15
 Private Const MODELS_TEST_TIMEOUT_MS As Long = 20000
@@ -141,6 +142,35 @@ Public Sub SetupOrcaRouterSample()
         .Borders.Color = RGB(217, 225, 236)
     End With
 
+    'Raw JSON response area
+    With ws.Range("J1:P1")
+        .Merge
+        .Value = "Raw JSON Response"
+        .Font.Size = 14
+        .Font.Bold = True
+        .Font.Color = RGB(23, 32, 51)
+    End With
+
+    With ws.Range("J2:P2")
+        .Merge
+        .Value = "No response yet."
+        .Font.Bold = True
+        .Font.Color = RGB(71, 85, 105)
+    End With
+
+    With ws.Range("J3:P15")
+        .Merge
+        .Value = vbNullString
+        .WrapText = True
+        .VerticalAlignment = xlTop
+        .HorizontalAlignment = xlLeft
+        .Interior.Color = RGB(250, 250, 250)
+        .Borders.Color = RGB(217, 225, 236)
+        .Font.Name = "Consolas"
+        .Font.Size = 9
+        .NumberFormat = "@"
+    End With
+
     'Trace header
     ws.Range("A17").Value = "Processing steps / HTTP trace"
     ws.Range("A17").Font.Bold = True
@@ -166,6 +196,8 @@ Public Sub SetupOrcaRouterSample()
     ws.Columns("D").ColumnWidth = 30
     ws.Columns("E").ColumnWidth = 90
     ws.Columns("F:H").ColumnWidth = 12
+    ws.Columns("I").ColumnWidth = 2
+    ws.Columns("J:P").ColumnWidth = 12
 
     ws.Rows("3:5").RowHeight = 24
     ws.Rows("6:9").RowHeight = 26
@@ -288,6 +320,7 @@ Public Sub SendOrcaRouterChat()
     End If
 
     ws.Range("B11").Value = vbNullString
+    PrepareRawResponse ws, "Raw JSON Response - " & mode
 
     'STEP 1: Validate inputs.
     AddTrace ws, "STEP 1", "LOCAL", "Validate inputs", _
@@ -371,6 +404,8 @@ Public Sub SendOrcaRouterChat()
     httpStatus = httpRequest.Status
     responseHeaders = httpRequest.getAllResponseHeaders
     responseText = httpRequest.responseText
+
+    DisplayRawResponse ws, responseText, "Raw JSON Response - Chat", httpStatus
 
     elapsedTimeSeconds = ElapsedSeconds(startedAt)
 
@@ -700,23 +735,72 @@ End Function
 
 Public Function ExtractAssistantContent(ByVal responseJson As String) As String
 
-    Dim regularExpression As Object
-    Dim matches As Object
-    Dim encodedContent As String
-    Dim pattern As String
-
-    Set regularExpression = CreateObject("VBScript.RegExp")
+    Dim choicesPosition As Long
+    Dim messagePosition As Long
+    Dim messageJson As String
+    Dim decodedValue As String
 
     'Expected OpenAI-compatible shape:
     'choices[0].message.content
     '
-    'This lightweight sample extracts the first JSON string property named "content".
-    'For production code, use a full JSON parser.
+    'Scope the search to the "message" section instead of taking the first
+    'property named "content" from the whole response. This reduces the chance
+    'of accidentally reading another content field if the response grows.
+    choicesPosition = InStr(1, responseJson, """choices""", vbTextCompare)
+
+    If choicesPosition = 0 Then
+        Err.Raise vbObjectError + 1101, "ExtractAssistantContent", _
+                  "Could not find choices in the JSON response."
+    End If
+
+    messagePosition = InStr(choicesPosition, responseJson, """message""", vbTextCompare)
+
+    If messagePosition = 0 Then
+        Err.Raise vbObjectError + 1102, "ExtractAssistantContent", _
+                  "Could not find choices[0].message in the JSON response."
+    End If
+
+    messageJson = Mid$(responseJson, messagePosition)
+
+    'Normal Chat Completions usually returns content as one JSON string.
+    If TryExtractAssistantStringProperty(messageJson, "content", decodedValue) Then
+        ExtractAssistantContent = decodedValue
+        Exit Function
+    End If
+
+    'Some OpenAI-compatible responses can represent message content as an
+    'array of parts, for example: [{"type":"text","text":"hello"}].
+    'For this lightweight learning sample, use the first text string as a
+    'fallback so Answer is still populated for that common shape.
+    decodedValue = ExtractAssistantTextParts(messageJson)
+
+    If Len(decodedValue) > 0 Then
+        ExtractAssistantContent = decodedValue
+        Exit Function
+    End If
+
+    Err.Raise vbObjectError + 1103, "ExtractAssistantContent", _
+              "Could not extract choices[0].message.content. See Raw JSON Response."
+
+End Function
+
+Private Function TryExtractAssistantStringProperty( _
+    ByVal jsonText As String, _
+    ByVal propertyName As String, _
+    ByRef decodedValue As String) As Boolean
+
+    Dim regularExpression As Object
+    Dim matches As Object
+    Dim pattern As String
+
+    Set regularExpression = CreateObject("VBScript.RegExp")
+
     pattern = _
-        Chr$(34) & "content" & Chr$(34) & _
+        Chr$(34) & propertyName & Chr$(34) & _
         Chr$(92) & "s*:" & Chr$(92) & "s*" & _
         Chr$(34) & _
-        "((" & Chr$(92) & Chr$(92) & ".|[^" & Chr$(34) & Chr$(92) & Chr$(92) & "])*)" & _
+        "((" & Chr$(92) & Chr$(92) & ".|[^" & _
+        Chr$(34) & Chr$(92) & Chr$(92) & "])*)" & _
         Chr$(34)
 
     With regularExpression
@@ -726,15 +810,66 @@ Public Function ExtractAssistantContent(ByVal responseJson As String) As String
         .Pattern = pattern
     End With
 
-    Set matches = regularExpression.Execute(responseJson)
+    Set matches = regularExpression.Execute(jsonText)
 
     If matches.Count = 0 Then
-        Err.Raise vbObjectError + 1101, "ExtractAssistantContent", _
-                  "Could not extract choices[0].message.content. Check the raw response in the trace."
+        decodedValue = vbNullString
+        TryExtractAssistantStringProperty = False
+    Else
+        decodedValue = JsonUnescape(matches(0).SubMatches(0))
+        TryExtractAssistantStringProperty = True
     End If
 
-    encodedContent = matches(0).SubMatches(0)
-    ExtractAssistantContent = JsonUnescape(encodedContent)
+    Set matches = Nothing
+    Set regularExpression = Nothing
+
+End Function
+
+Private Function ExtractAssistantTextParts(ByVal messageJson As String) As String
+
+    Dim regularExpression As Object
+    Dim matches As Object
+    Dim oneMatch As Object
+    Dim pattern As String
+    Dim result As String
+    Dim decodedPart As String
+
+    Set regularExpression = CreateObject("VBScript.RegExp")
+
+    pattern = _
+        Chr$(34) & "text" & Chr$(34) & _
+        Chr$(92) & "s*:" & Chr$(92) & "s*" & _
+        Chr$(34) & _
+        "((" & Chr$(92) & Chr$(92) & ".|[^" & _
+        Chr$(34) & Chr$(92) & Chr$(92) & "])*)" & _
+        Chr$(34)
+
+    With regularExpression
+        .Global = True
+        .IgnoreCase = False
+        .MultiLine = True
+        .Pattern = pattern
+    End With
+
+    Set matches = regularExpression.Execute(messageJson)
+
+    For Each oneMatch In matches
+
+        decodedPart = JsonUnescape(oneMatch.SubMatches(0))
+
+        If Len(decodedPart) > 0 Then
+
+            If Len(result) > 0 Then
+                result = result & vbCrLf
+            End If
+
+            result = result & decodedPart
+
+        End If
+
+    Next oneMatch
+
+    ExtractAssistantTextParts = result
 
     Set matches = Nothing
     Set regularExpression = Nothing
@@ -891,6 +1026,54 @@ Public Function ElapsedSeconds(ByVal startedAt As Double) As Double
     Else
         'Timer resets at midnight.
         ElapsedSeconds = (86400# - startedAt) + currentTime
+    End If
+
+End Function
+
+Public Sub PrepareRawResponse( _
+    ByVal ws As Worksheet, _
+    ByVal caption As String)
+
+    ws.Range("J1").Value = caption
+    ws.Range("J2").Value = "Waiting for HTTP response..."
+    ws.Range("J3").Value = vbNullString
+
+    YieldToExcel True
+
+End Sub
+
+Public Sub DisplayRawResponse( _
+    ByVal ws As Worksheet, _
+    ByVal responseText As String, _
+    ByVal caption As String, _
+    Optional ByVal httpStatus As Long = 0)
+
+    Dim statusText As String
+
+    ws.Range("J1").Value = caption
+
+    If httpStatus = 0 Then
+        statusText = "HTTP Status: (not available)"
+    Else
+        statusText = "HTTP Status: " & CStr(httpStatus)
+    End If
+
+    statusText = statusText & " / Chars: " & Len(responseText)
+
+    ws.Range("J2").Value = statusText
+    ws.Range("J3").Value = LimitRawJsonText(responseText)
+
+    YieldToExcel True
+
+End Sub
+
+Private Function LimitRawJsonText(ByVal value As String) As String
+
+    If Len(value) <= RAW_JSON_MAX_TEXT Then
+        LimitRawJsonText = value
+    Else
+        LimitRawJsonText = Left$(value, RAW_JSON_MAX_TEXT) & vbCrLf & _
+                           "...(truncated for Excel cell limit / readability)"
     End If
 
 End Function

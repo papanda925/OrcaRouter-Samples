@@ -54,6 +54,7 @@ Public Sub SendOrcaRouterStreaming()
 
     Dim lineText As String
     Dim payload As String
+    Dim latestJsonPayload As String
     Dim contentPart As String
     Dim answerText As String
     Dim stderrText As String
@@ -78,6 +79,7 @@ Public Sub SendOrcaRouterStreaming()
     question = Trim$(CStr(ws.Range("B6").Value))
 
     ws.Range("B11").Value = vbNullString
+    PrepareRawResponse ws, "Raw JSON - Streaming (latest SSE event)"
 
     'STEP 1: Validate inputs.
     AddTrace ws, "STEP 1", "LOCAL", "Validate inputs", _
@@ -155,6 +157,7 @@ Public Sub SendOrcaRouterStreaming()
 
                 ElseIf Len(payload) > 0 Then
 
+                    latestJsonPayload = payload
                     eventCount = eventCount + 1
 
                     If eventCount <= MAX_STREAM_TRACE_EVENTS Then
@@ -229,6 +232,16 @@ Public Sub SendOrcaRouterStreaming()
             RaiseOrcaRouterHttpError httpStatus, responseHeaders, nonSseOutput
         End If
 
+    End If
+
+    If Len(latestJsonPayload) > 0 Then
+        DisplayRawResponse ws, latestJsonPayload, _
+                           "Raw JSON - Streaming (latest SSE event)", _
+                           httpStatus
+    ElseIf Len(nonSseOutput) > 0 Then
+        DisplayRawResponse ws, nonSseOutput, _
+                           "Raw response - Streaming", _
+                           httpStatus
     End If
 
     AddTrace ws, "STEP 4", "RESPONSE", "Streaming receive completed", _
@@ -338,6 +351,7 @@ Public Sub SendOrcaRouterToolCalling()
     question = Trim$(CStr(ws.Range("B6").Value))
 
     ws.Range("B11").Value = vbNullString
+    PrepareRawResponse ws, "Raw JSON - Tool Calling"
 
     'STEP 1: Validate inputs.
     AddTrace ws, "STEP 1", "LOCAL", "Validate inputs", _
@@ -365,6 +379,10 @@ Public Sub SendOrcaRouterToolCalling()
 
     SendJsonRequest httpRequest, apiKey, firstRequest, _
                     firstStatus, firstHeaders, firstResponse
+
+    DisplayRawResponse ws, firstResponse, _
+                       "Raw JSON - Tool Calling response #1", _
+                       firstStatus
 
     AddTrace ws, "STEP 4", "RESPONSE", _
              "Receive Tool Calling response #1", _
@@ -440,6 +458,10 @@ Public Sub SendOrcaRouterToolCalling()
     SendJsonRequest httpRequest, apiKey, secondRequest, _
                     secondStatus, secondHeaders, secondResponse
 
+    DisplayRawResponse ws, secondResponse, _
+                       "Raw JSON - Tool Calling response #2 (final)", _
+                       secondStatus
+
     AddTrace ws, "STEP 4", "RESPONSE", _
              "Receive Tool Calling response #2", _
              "HTTP Status: " & secondStatus & vbCrLf & _
@@ -511,6 +533,22 @@ Public Sub RunOrcaRouterAdvancedSelfTests()
     Dim extractedNumber As Double
     Dim statusCode As Long
     Dim headerValue As String
+
+    'Verify the common Answer extraction shapes used by Chat/Tool Calling.
+    If ExtractAssistantContent( _
+           "{""choices"":[{""message"":{""role"":""assistant"",""content"":""hello""}}]}") <> "hello" Then
+
+        Err.Raise vbObjectError + 3110, "RunOrcaRouterAdvancedSelfTests", _
+                  "ExtractAssistantContent failed for string content."
+    End If
+
+    If ExtractAssistantContent( _
+           "{""choices"":[{""message"":{""role"":""assistant"",""content"":[{""type"":""text"",""text"":""hello""},{""type"":""text"",""text"":""array""}]}}]}") <> _
+       "hello" & vbCrLf & "array" Then
+
+        Err.Raise vbObjectError + 3111, "RunOrcaRouterAdvancedSelfTests", _
+                  "ExtractAssistantContent failed for multi-part array content."
+    End If
 
     streamingJson = BuildStreamingRequestJson("orcarouter/free", "hello")
 

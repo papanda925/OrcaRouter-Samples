@@ -15,6 +15,8 @@ Excel VBA から OrcaRouter の Chat Completions API を呼び出し、**Chat / 
 | Mode | B5:D5 |
 | Question | B6:H9 |
 | Answer | B11:H15 |
+| Raw JSON title/status | J1:P2 |
+| Raw JSON body | J3:P15 |
 | Trace | A18:E... |
 | Send | 図形ボタン |
 | Clear trace | 図形ボタン |
@@ -121,6 +123,23 @@ POST https://api.orcarouter.ai/v1/chat/completions
 Authorization: Bearer <API_KEY>
 Content-Type: application/json
 ```
+
+## Answer / Raw JSON
+
+APIからHTTPレスポンスを受信すると、同じレスポンスを2つの見方で表示します。
+
+- **Answer（B11:H15）**: `choices[0].message.content` からユーザー向け回答本文を取り出して表示
+- **Raw JSON（J3:P15）**: APIから受信したレスポンス本文を、解析前の文字列のまま表示
+
+通常Chatでは受信したJSON全体をRaw JSONへ表示してからAnswerを解析します。そのため、Answer抽出でエラーになった場合でもRaw JSONを見ればAPIが実際に何を返したか確認できます。
+
+Answer抽出は、レスポンス全体から単純に最初の `content` を探すのではなく、`choices` → `message` の位置を確認してから `content` を取得します。また、`content` が文字列ではなくテキストパーツ配列の場合は、最初の `text` をフォールバックとして使用します。
+
+Tool Callingでは1回目のTool CallレスポンスをRaw JSONへ表示し、2回目の最終レスポンス受信後にRaw JSON欄を最終レスポンスへ更新します。Answerには2回目の `message.content` を表示します。
+
+Streamingでは1つのJSONレスポンスではなくSSEイベントが連続するため、Raw JSON欄には最後に受信したJSON形式のSSEイベントを表示します。Answer欄には各SSEイベントの `delta.content` を連結した最終テキストを表示します。
+
+Raw JSONはExcelセルの上限と可読性を考慮し、非常に長い場合は約30,000文字で切り詰めます。Traceには従来どおりHTTP Status、Headers、Raw response等も記録します。
 
 ## Trace / debug
 
