@@ -132,12 +132,14 @@ $statusText = $window.FindName('StatusText')
 $viewModel = [System.Dynamic.ExpandoObject]::new()
 [System.Collections.Generic.IDictionary[string, object]]$viewModelValues = $viewModel
 
-$viewModelValues['Model'] = 'orcarouter/free'
-$viewModelValues['Mode'] = 'Chat'
-$viewModelValues['Question'] =
+$viewModelValues.Add('Model', 'orcarouter/free')
+$viewModelValues.Add('Mode', 'Chat')
+$viewModelValues.Add(
+    'Question',
     '日本語で「こんにちは。PowerShell版Chatのテストです。」とだけ答えてください。'
-$viewModelValues['Answer'] = 'ここに回答が表示されます。'
-$viewModelValues['StatusText'] = 'Ready'
+)
+$viewModelValues.Add('Answer', 'ここに回答が表示されます。')
+$viewModelValues.Add('StatusText', 'Ready')
 
 $window.DataContext = $viewModel
 
@@ -147,7 +149,7 @@ $answerBox.DataContext = $viewModel
 $statusText.DataContext = $viewModel
 
 # Question is intentionally the actual TextBox input source.
-$questionBox.Text = [string]$viewModelValues['Question']
+$questionBox.Text = [string]$viewModelValues.get_Item('Question')
 
 $apiKeyBox.Password = $script:DefaultApiKey
 
@@ -166,7 +168,7 @@ function Set-ViewModelValue {
     )
 
     # ExpandoObject raises INotifyPropertyChanged for dictionary updates.
-    $viewModelValues[$Name] = $Value
+    $viewModelValues.set_Item($Name, $Value)
 }
 
 function Add-Trace {
@@ -209,7 +211,7 @@ function Set-UiBusy {
 }
 
 function Get-SelectedMode {
-    $mode = [string]$viewModelValues['Mode']
+    $mode = [string]$viewModelValues.get_Item('Mode')
 
     if ([string]::IsNullOrWhiteSpace($mode)) {
         return 'Chat'
@@ -412,7 +414,7 @@ function Invoke-OrcaRouterChat {
     }
 
     $apiKey = $apiKeyBox.Password.Trim()
-    $model = [string]$viewModelValues['Model']
+    $model = [string]$viewModelValues.get_Item('Model')
     $model = $model.Trim()
     $question = $questionBox.Text.Trim()
     $mode = Get-SelectedMode
@@ -550,7 +552,7 @@ if ($UiBindingCheck) {
             [System.Windows.Threading.DispatcherPriority]::Background
         )
 
-        if ([string]$viewModelValues['Question'] -ne 'Question editor input test') {
+        if ([string]$viewModelValues.get_Item('Question') -ne 'Question editor input test') {
             throw 'QuestionBox TextChanged did not update the ViewModel.'
         }
     }
@@ -563,7 +565,7 @@ if ($UiBindingCheck) {
 
 Add-Trace -Step 'READY' -Direction 'LOCAL' -Title 'サンプルを起動' -Data @{
     Endpoint = $script:ApiEndpoint
-    Model = [string]$viewModelValues['Model']
+    Model = [string]$viewModelValues.get_Item('Model')
     Mode = Get-SelectedMode
     ViewModel = 'ExpandoObject / INotifyPropertyChanged'
     Async = 'Background PowerShell runspace + DispatcherTimer'
