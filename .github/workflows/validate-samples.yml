@@ -61,6 +61,16 @@ jobs:
             throw 'ModeBox was not found in MainWindow.xaml'
           }
 
+          $resultTabs = $window.FindName('ResultTabs')
+
+          if ($null -eq $resultTabs) {
+            throw 'ResultTabs was not found in MainWindow.xaml'
+          }
+
+          if ($resultTabs.Items.Count -ne 2) {
+            throw 'ResultTabs must contain Answer and Trace tabs.'
+          }
+
       - name: Execute script parser through Windows PowerShell 5.1
         shell: powershell
         run: |
