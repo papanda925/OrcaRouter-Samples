@@ -126,6 +126,7 @@ $traceBox = $window.FindName('TraceBox')
 $sendButton = $window.FindName('SendButton')
 $clearTraceButton = $window.FindName('ClearTraceButton')
 $resultTabs = $window.FindName('ResultTabs')
+$pageScrollViewer = $window.FindName('PageScrollViewer')
 $statusText = $window.FindName('StatusText')
 
 # Pure PowerShell/.NET ViewModel.
@@ -513,6 +514,40 @@ if ($UiBindingCheck) {
         if ($window.ResizeMode -ne [System.Windows.ResizeMode]::CanResizeWithGrip) {
             throw 'Window must support resize/minimize/maximize.'
         }
+
+        if ($null -eq $pageScrollViewer) {
+            throw 'PageScrollViewer was not found.'
+        }
+
+        if (
+            $pageScrollViewer.VerticalScrollBarVisibility -ne
+            [System.Windows.Controls.ScrollBarVisibility]::Auto
+        ) {
+            throw 'PageScrollViewer must use an automatic vertical scrollbar.'
+        }
+
+        # At a shorter window height, the whole page must remain reachable
+        # through the right-side vertical scrollbar.
+        $window.Height = 720
+        $window.UpdateLayout()
+
+        if ($pageScrollViewer.ScrollableHeight -le 0) {
+            throw 'PageScrollViewer must have a scrollable vertical range.'
+        }
+
+        $pageScrollViewer.ScrollToEnd()
+        $window.Dispatcher.Invoke(
+            [System.Action]{ },
+            [System.Windows.Threading.DispatcherPriority]::Background
+        )
+
+        if ($pageScrollViewer.VerticalOffset -le 0) {
+            throw 'PageScrollViewer could not scroll to the lower content.'
+        }
+
+        $pageScrollViewer.ScrollToHome()
+        $window.Height = 900
+        $window.UpdateLayout()
 
         if ($questionBox.IsReadOnly) { throw 'QuestionBox must be editable.' }
         if (-not $questionBox.IsEnabled) { throw 'QuestionBox must be enabled.' }
