@@ -170,6 +170,21 @@ function buildErrorDetails(status, statusText, headers, rawBody) {
   if (code === "free_quota_exhausted") {
     guidance =
       "orcarouter/free の無料枠または利用可能な無料モデルがありません。Tool Calling等の処理へ到達する前にAPI側で拒否されています。有料モデルへは自動切替しません。";
+  } else if (status === 400 && code === "bad_request_body") {
+    guidance = "Request JSONを解析できません。Traceのrequest bodyを確認してください。";
+  } else if (status === 400 && code === "model_price_error") {
+    guidance = "選択モデルの価格設定に問題があります。OrcaRouter側のモデル情報を確認してください。";
+  } else if (status === 400 && code === "api_not_implemented") {
+    guidance = "選択モデルではこのAPI操作がサポートされていません。";
+  } else if (
+    status === 400 &&
+    ["prompt_blocked", "sensitive_words_detected", "guardrail_blocked"].includes(code)
+  ) {
+    guidance = "Providerの安全ポリシーまたはWorkspace guardrailで拒否されています。";
+  } else if (status === 400 && code === "firewall_blocked") {
+    guidance = "Agent FirewallがToolを拒否しました。Firewall policyとmetadataを確認してください。";
+  } else if (status === 400 && code === "firewall_approval_pending") {
+    guidance = "Tool CallがFirewall承認待ちです。単純な再試行では解消しません。";
   } else if (status === 401) {
     guidance = "APIキーが無効、またはAuthorizationヘッダーが不正です。";
   } else if (status === 402) {
@@ -178,14 +193,26 @@ function buildErrorDetails(status, statusText, headers, rawBody) {
     guidance = "Workspace残高またはメンバー/エージェント予算を確認してください。";
   } else if (status === 403 && code === "pre_consume_token_quota_failed") {
     guidance = "APIキー自身のQuota上限を確認してください。";
+  } else if (status === 403 && code === "access_denied") {
+    guidance = "APIキーは認識されていますが、このリクエストは許可されていません。モデル権限・IP制限・利用上限を確認してください。";
+  } else if (status === 404) {
+    guidance = "EndpointまたはModel IDが見つかりません。指定値を確認してください。";
+  } else if (status === 425) {
+    guidance = "指定モデルはまだ利用開始前の可能性があります。error.metadata も確認してください。";
   } else if (status === 429 && retryAfter) {
     guidance = `Rate Limitです。Retry-After=${retryAfter} 秒を待ってから再試行してください。`;
   } else if (status === 429) {
     guidance = "Retry-Afterがない無料枠429は、同じ長いPromptを待って再送しても改善しない場合があります。";
-  } else if (status === 425) {
-    guidance = "指定モデルはまだ利用開始前の可能性があります。error.metadata も確認してください。";
+  } else if (status === 500) {
+    guidance = "OrcaRouter内部エラーです。時間を置いて再試行してください。";
+  } else if (status === 502) {
+    guidance = "上流Providerまたはfallback routeが失敗しています。時間を置くかTraceのHeaderを確認してください。";
   } else if (status === 503 && code === "model_not_found") {
     guidance = "そのモデルが現在のアカウントで利用可能か確認してください。";
+  } else if (status === 503 && code === "byok:key_unavailable") {
+    guidance = "WorkspaceのBYOK provider keyを利用できません。Provider keyまたはfallback設定を確認してください。";
+  } else if (status === 503) {
+    guidance = "OrcaRouterまたは上流Providerが一時的に利用できない可能性があります。";
   }
 
   return {
@@ -734,7 +761,10 @@ modeInput.addEventListener("change", () => {
       "calculate_sum ツールを使って 123 と 456 を足し、その結果を日本語で説明してください。";
   } else if (modeInput.value === "stream") {
     questionInput.value =
-      "Streamingの動作確認です。OrcaRouterの特徴を3つ、短い箇条書きで説明してください。";
+      "日本語で「こんにちは。Streamingのテストです。」と短く答えてください。";
+  } else {
+    questionInput.value =
+      "日本語で「こんにちは。Web版Chatのテストです。」とだけ答えてください。";
   }
 });
 
