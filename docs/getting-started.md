@@ -205,7 +205,7 @@ Data Binding
 
 API待機はBackground Runspaceで行うため、通常ChatやTool Callingの応答待ち中もWPFのUIスレッドをHTTP待機で塞ぎません。Streamingも同じWorker側でSSEを読みます。
 
-ViewModelにはC#クラスを埋め込まず、PowerShellから `System.Dynamic.ExpandoObject` を作成して使用します。`ExpandoObject` は `INotifyPropertyChanged` を実装しているため、AnswerやStatusの変更をData Bindingへ通知できます。
+ViewModelにはC#クラスを埋め込まず、PowerShellで1行の `DataTable` を作り、その `System.Data.DataRowView` を使用します。`DataRowView` は `INotifyPropertyChanged` を実装しているため、AnswerやStatusの変更をData Bindingへ通知できます。
 
 PowerShell版のファイルは次の3つです。
 
