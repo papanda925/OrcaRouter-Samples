@@ -30,18 +30,26 @@ jobs:
         run: |
           $tokens = $null
           $errors = $null
-          $scriptText = Get-Content 'PowerShell/OrcaRouterChat.ps1' -Raw -Encoding UTF8
-          [System.Management.Automation.Language.Parser]::ParseInput(
-            $scriptText,
-            [ref]$tokens,
-            [ref]$errors
-          ) | Out-Null
+          foreach ($scriptPath in @(
+            'PowerShell/OrcaRouterChat.ps1',
+            'PowerShell/OrcaRouterWorker.ps1'
+          )) {
+            $tokens = $null
+            $errors = $null
+            $scriptText = Get-Content $scriptPath -Raw -Encoding UTF8
 
-          if ($errors.Count -gt 0) {
-            $errors | ForEach-Object {
-              Write-Error ("Line {0}: {1}" -f $_.Extent.StartLineNumber, $_.Message)
+            [System.Management.Automation.Language.Parser]::ParseInput(
+              $scriptText,
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object {
+                Write-Error ("{0} Line {1}: {2}" -f $scriptPath, $_.Extent.StartLineNumber, $_.Message)
+              }
+              exit 1
             }
-            exit 1
           }
 
           Add-Type -AssemblyName PresentationFramework
@@ -62,13 +70,50 @@ jobs:
             throw "Windows PowerShell 5.1 failed to decode/parse OrcaRouterChat.ps1."
           }
 
-      - name: Verify WPF QuestionBox editor
+      - name: Verify WPF Data Binding and responsive layout
         shell: powershell
         run: |
           & powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File '.\PowerShell\OrcaRouterChat.ps1' -UiBindingCheck
 
           if ($LASTEXITCODE -ne 0) {
-            throw "WPF QuestionBox editor check failed."
+            throw "WPF Data Binding / layout check failed."
+          }
+
+      - name: Verify background runspace event pipeline
+        shell: powershell
+        run: |
+          $queue = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
+          $worker = [System.Management.Automation.PowerShell]::Create()
+
+          [void]$worker.AddCommand((Resolve-Path '.\PowerShell\OrcaRouterWorker.ps1').Path)
+          [void]$worker.AddParameter('SelfTest', $true)
+          [void]$worker.AddParameter('EventQueue', $queue)
+
+          $async = $worker.BeginInvoke()
+
+          if (-not $async.AsyncWaitHandle.WaitOne(5000)) {
+            $worker.Stop()
+            $worker.Dispose()
+            throw 'Background runspace self-test timed out.'
+          }
+
+          [void]$worker.EndInvoke($async)
+          $worker.Dispose()
+
+          $events = @()
+          $item = $null
+
+          while ($queue.TryDequeue([ref]$item)) {
+            $events += $item
+            $item = $null
+          }
+
+          if (-not ($events | Where-Object Type -eq 'Answer')) {
+            throw 'Background runspace did not emit an Answer event.'
+          }
+
+          if (-not ($events | Where-Object Type -eq 'Completed')) {
+            throw 'Background runspace did not emit a Completed event.'
           }
 
   safety:
@@ -88,6 +133,20 @@ jobs:
           grep -q 'xxx-your-orcarouter-api-key-xxx' Web/app.js
           grep -q 'xxx-your-orcarouter-api-key-xxx' PowerShell/OrcaRouterChat.ps1
           grep -q 'xxx-your-orcarouter-api-key-xxx' VBA/OrcaRouterSample.bas
+
+      - name: Ensure PowerShell sample contains no embedded CSharp ViewModel
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if grep -n -E 'Add-Type[[:space:]]+-TypeDefinition|using[[:space:]]+System\.ComponentModel|public[[:space:]]+sealed[[:space:]]+class' PowerShell/*.ps1; then
+            echo "PowerShell sample must not compile embedded C# source."
+            exit 1
+          fi
+
+          grep -q 'System.Data.DataTable' PowerShell/OrcaRouterChat.ps1
+          grep -q 'INotifyPropertyChanged' PowerShell/OrcaRouterChat.ps1
+          grep -q 'BeginInvoke' PowerShell/OrcaRouterChat.ps1
 
       - name: Check for accidental secrets and personal paths
         shell: bash

@@ -11,7 +11,7 @@ OrcaRouter API を **Web / PowerShell / Excel VBA** から呼び出す、学習�
 | Sample | UI | HTTP implementation | Status |
 |---|---|---|---|
 | [Web](Web/README.md) | HTML / CSS | Browser `fetch` / ReadableStream | Chat / Streaming / Tool Calling |
-| [PowerShell](PowerShell/README.md) | WPF / XAML | `System.Net.Http.HttpClient` | Chat / Streaming / Tool Calling |
+| [PowerShell](PowerShell/README.md) | WPF / XAML | Background Runspace + `System.Net.Http.HttpClient` | Chat / Streaming / Tool Calling |
 | [VBA](VBA/README.md) | Excel worksheet / cells | `MSXML2.XMLHTTP.6.0` | Chat / Streaming / Tool Calling |
 
 ## First run checklist
@@ -148,6 +148,7 @@ OrcaRouter-Samples/
 ├─ PowerShell/
 │  ├─ MainWindow.xaml
 │  ├─ OrcaRouterChat.ps1
+│  ├─ OrcaRouterWorker.ps1
 │  └─ README.md
 ├─ VBA/
 │  ├─ OrcaRouterSample.bas
@@ -168,6 +169,8 @@ OrcaRouter-Samples/
 - HTTP POST
 - OpenAI互換レスポンス
 - UIとAPI処理の分離
+- WPF Data Binding / INotifyPropertyChanged
+- PowerShell Runspaceによる非同期処理
 - request / response trace
 - エラー処理
 - 実行環境ごとの違い

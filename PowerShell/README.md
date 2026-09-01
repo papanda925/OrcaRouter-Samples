@@ -5,21 +5,72 @@ PowerShell + WPF/XAML で OrcaRouter の Chat Completions API を呼び出し、
 ## Architecture
 
 - `MainWindow.xaml` - View（画面定義）
-- `OrcaRouterChat.ps1` - ViewModel、API呼び出し、トレース、エラー処理
+- `OrcaRouterChat.ps1` - UI、Data Binding、ViewModel、Runspace制御
+- `OrcaRouterWorker.ps1` - Chat / Streaming / Tool Calling のHTTP処理
 
-Model / Mode / Answer / Status は、`INotifyPropertyChanged` を実装した `OrcaRouterViewModel` とXAMLのData Bindingで連携します。Questionはユーザーが直接操作するWPF `TextBox` を入力元とし、`TextChanged` でViewModelへ同期します。
+PowerShell版は **C#コードを埋め込まず、PowerShell + .NETだけ** で構成しています。
+
+ViewModelには1行だけの `DataTable` から作った `System.Data.DataRowView` を使います。`DataRowView` は `INotifyPropertyChanged` を実装しているため、PowerShell側でAnswerやStatusなどの列値を変更するとWPFのData Bindingへ変更通知できます。C#のViewModelクラスは使いません。
 
 ```text
-View (XAML)
-   ⇅ TwoWay / OneWay Binding
-ViewModel (INotifyPropertyChanged)
-   ↓
-OrcaRouter API処理
+WPF UI thread
+  ├─ MainWindow.xaml
+  ├─ Question入力
+  ├─ Answer / Status のData Binding
+  ├─ 最大化 / リサイズ / GridSplitter
+  └─ DispatcherTimer
+          ↑
+          │ ConcurrentQueue
+          ↓
+Background PowerShell Runspace
+  └─ OrcaRouterWorker.ps1
+       ├─ Chat
+       ├─ Streaming
+       └─ Tool Calling
 ```
 
-これは **MVVMの考え方を取り入れた軽量構成**です。Send / ClearなどのイベントとQuestionの実入力はPowerShell/WPFコントロール側で扱うため、`ICommand` まで含めた厳密なフルMVVMではありません。
+役割は次のように分けています。
 
-API KeyはWPFの `PasswordBox.Password` が標準では通常のData Binding対象にならないため、従来どおり直接取得します。Traceも大量追記を分かりやすくするため `AppendText()` を使用します。
+| 項目 | 実装 |
+|---|---|
+| Model / Mode | TwoWay Data Binding |
+| Answer / Status | OneWay Data Binding |
+| ViewModel変更通知 | `DataRowView` の `INotifyPropertyChanged` |
+| Question | WPF `TextBox` を直接入力し、`TextChanged` でViewModelへ同期 |
+| API Key | `PasswordBox.Password` を直接取得 |
+| Trace | `AppendText()` で追記 |
+| HTTP通信 | Background PowerShell Runspace |
+| UIへの受け渡し | `ConcurrentQueue` + `DispatcherTimer` |
+
+これは **分かりやすさを優先した軽量MVVM** です。`ICommand` やRelayCommandは使わず、ボタンは `Add_Click({...})` で処理します。
+
+## Data Binding と非同期処理
+
+`INotifyPropertyChanged` と非同期処理は役割が異なります。
+
+```text
+Background Runspace
+      ↓
+OrcaRouterから結果を受信
+      ↓
+ConcurrentQueue
+      ↓
+UI側 DispatcherTimer
+      ↓
+ViewModel.Answer を変更
+      ↓
+INotifyPropertyChanged
+      ↓
+Data Binding
+      ↓
+AnswerBox を更新
+```
+
+`INotifyPropertyChanged` は「値が変わったことをWPFへ知らせる仕組み」です。画面を固めない役割は **Background PowerShell Runspace** が担当します。
+
+通常ChatやTool CallingでAPI応答を待っている間も、WPFのUIスレッドではHTTP待機をしません。そのため、ウィンドウの移動・最大化・リサイズ・Question入力などを継続できます。
+
+StreamingではWorker側がSSEを読み取り、途中経過のAnswerイベントをQueueへ渡します。UI側はQueueから受け取った文字列をViewModelの `Answer` へ設定し、Data Bindingで回答欄へ反映します。
 
 ## Responsive window layout
 
@@ -62,7 +113,7 @@ PowerShell + `XamlReader` では、主要な入力欄までData Bindingだけに
 
 また、API待機中もQuestion欄は無効化しません。応答を待ちながら次の質問を入力できます。
 
-CIではWindows PowerShell 5.1上で、QuestionBoxが **編集可能・有効・フォーカス可能**であること、Text変更がViewModelへ同期されることに加え、1200×900の復元サイズで Question / Answer / Trace が一定以上の実表示高さを持つことも確認します。
+CIではWindows PowerShell 5.1上で、QuestionBoxの編集性、1200×900での Question / Answer / Trace の実表示高さ、`DataRowView` が `INotifyPropertyChanged` を実装していること、Answer / Status のData Binding更新を確認します。さらに、実APIを呼ばないBackground Runspace自己テストで、Answer / CompletedイベントがQueueへ返ることも検証します。
 
 参考: PowerShell / WPF / MVVMの考え方
 - https://papanda925.com/?p=2187

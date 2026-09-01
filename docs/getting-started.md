@@ -181,6 +181,41 @@ ParserError
 
 Web版に入力したキーがPowerShell版へ自動的に引き継がれることはありません。
 
+## PowerShell版が画面を固めない仕組み
+
+PowerShell版では、WPF画面とOrcaRouter API処理を分離しています。
+
+```text
+WPF UI
+  ↓
+Background PowerShell Runspace
+  ↓
+OrcaRouter API
+  ↓
+ConcurrentQueue
+  ↓
+ViewModel.Answer
+  ↓
+INotifyPropertyChanged
+  ↓
+Data Binding
+  ↓
+回答欄を更新
+```
+
+API待機はBackground Runspaceで行うため、通常ChatやTool Callingの応答待ち中もWPFのUIスレッドをHTTP待機で塞ぎません。Streamingも同じWorker側でSSEを読みます。
+
+ViewModelにはC#クラスを埋め込まず、PowerShellで1行の `DataTable` を作り、その `System.Data.DataRowView` を使用します。`DataRowView` は `INotifyPropertyChanged` を実装しているため、AnswerやStatusの変更をData Bindingへ通知できます。
+
+PowerShell版のファイルは次の3つです。
+
+```text
+PowerShell\MainWindow.xaml
+PowerShell\OrcaRouterChat.ps1
+PowerShell\OrcaRouterWorker.ps1
+```
+
+
 ---
 
 # 6. Excel VBA版
