@@ -772,7 +772,9 @@ Public Function ExtractAssistantContent(ByVal responseJson As String) As String
     'array of parts, for example: [{"type":"text","text":"hello"}].
     'For this lightweight learning sample, use the first text string as a
     'fallback so Answer is still populated for that common shape.
-    If TryExtractAssistantStringProperty(messageJson, "text", decodedValue) Then
+    decodedValue = ExtractAssistantTextParts(messageJson)
+
+    If Len(decodedValue) > 0 Then
         ExtractAssistantContent = decodedValue
         Exit Function
     End If
@@ -817,6 +819,57 @@ Private Function TryExtractAssistantStringProperty( _
         decodedValue = JsonUnescape(matches(0).SubMatches(0))
         TryExtractAssistantStringProperty = True
     End If
+
+    Set matches = Nothing
+    Set regularExpression = Nothing
+
+End Function
+
+Private Function ExtractAssistantTextParts(ByVal messageJson As String) As String
+
+    Dim regularExpression As Object
+    Dim matches As Object
+    Dim oneMatch As Object
+    Dim pattern As String
+    Dim result As String
+    Dim decodedPart As String
+
+    Set regularExpression = CreateObject("VBScript.RegExp")
+
+    pattern = _
+        Chr$(34) & "text" & Chr$(34) & _
+        Chr$(92) & "s*:" & Chr$(92) & "s*" & _
+        Chr$(34) & _
+        "((" & Chr$(92) & Chr$(92) & ".|[^" & _
+        Chr$(34) & Chr$(92) & Chr$(92) & "])*)" & _
+        Chr$(34)
+
+    With regularExpression
+        .Global = True
+        .IgnoreCase = False
+        .MultiLine = True
+        .Pattern = pattern
+    End With
+
+    Set matches = regularExpression.Execute(messageJson)
+
+    For Each oneMatch In matches
+
+        decodedPart = JsonUnescape(oneMatch.SubMatches(0))
+
+        If Len(decodedPart) > 0 Then
+
+            If Len(result) > 0 Then
+                result = result & vbCrLf
+            End If
+
+            result = result & decodedPart
+
+        End If
+
+    Next oneMatch
+
+    ExtractAssistantTextParts = result
 
     Set matches = Nothing
     Set regularExpression = Nothing
