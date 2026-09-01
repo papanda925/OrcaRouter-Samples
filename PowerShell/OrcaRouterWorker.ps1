@@ -488,9 +488,7 @@ function Invoke-Streaming {
 
     $body = [ordered]@{
         model = $Model
-        messages = @(
-            [ordered]@{ role = 'user'; content = $Question }
-        )
+        messages = @(New-ConversationMessages -CurrentQuestion $Question)
         stream = $true
         stream_options = [ordered]@{ include_usage = $true }
     }
@@ -549,6 +547,7 @@ function Invoke-Streaming {
         $answer = [System.Text.StringBuilder]::new()
         $eventCount = 0
         $usage = $null
+        $latestChunk = $null
 
         while (-not $reader.EndOfStream) {
             $line = $reader.ReadLine()
@@ -569,6 +568,7 @@ function Invoke-Streaming {
 
             try {
                 $chunk = $payload | ConvertFrom-Json
+                $latestChunk = $chunk
             }
             catch {
                 Add-WorkerTrace -Step 'STEP 4' -Direction 'STREAM' -Title 'JSON化できないSSE data' -Data $payload
@@ -617,7 +617,24 @@ function Invoke-Streaming {
             Usage = if ($null -ne $usage) { $usage } else { '(usage not returned)' }
         }
 
-        return $answer.ToString()
+        $actualModel = Get-PropertyValue -Object $latestChunk -Name 'model'
+        if ([string]::IsNullOrWhiteSpace([string]$actualModel)) {
+            $actualModel = $Model
+        }
+
+        return [pscustomobject]@{
+            Answer = $answer.ToString()
+            Usage = $usage
+            Request = $body
+            Response = [pscustomobject]@{
+                stream = $true
+                latest_event = $latestChunk
+                usage = $usage
+                note = 'Streaming uses SSE; latest_event is the final parsed event observed by this sample.'
+            }
+            HttpStatus = $status
+            ActualModel = [string]$actualModel
+        }
     }
     finally {
         if ($null -ne $reader) { $reader.Dispose() }
