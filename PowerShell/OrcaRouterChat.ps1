@@ -339,7 +339,7 @@ $statusText = $window.FindName('StatusText')
 $viewModel = [OrcaRouterViewModel]::new()
 $viewModel.Model = 'orcarouter/free'
 $viewModel.Mode = 'Chat'
-$questionBox.Text = '日本語で「こんにちは。PowerShell版Chatのテストです。」とだけ答えてください。'
+$viewModel.Question = '日本語で「こんにちは。PowerShell版Chatのテストです。」とだけ答えてください。'
 $viewModel.Answer = 'ここに回答が表示されます。'
 $viewModel.StatusText = 'Ready'
 $window.DataContext = $viewModel
@@ -1008,8 +1008,17 @@ $questionBox.Add_PreviewKeyDown({
 
 if ($UiBindingCheck) {
     try {
+        # CI uses a deterministic restored size. The normal application starts
+        # maximized and can be restored/resized by the user.
+        $window.WindowState = [System.Windows.WindowState]::Normal
+        $window.Width = 1200
+        $window.Height = 900
         $window.Show()
         $window.UpdateLayout()
+
+        if ($window.ResizeMode -ne [System.Windows.ResizeMode]::CanResizeWithGrip) {
+            throw 'Window must support normal resize/minimize/maximize behavior.'
+        }
 
         if ($questionBox.IsReadOnly) {
             throw 'QuestionBox must be editable.'
@@ -1023,8 +1032,16 @@ if ($UiBindingCheck) {
             throw 'QuestionBox must be focusable.'
         }
 
-        if ($questionBox.MinHeight -lt 100) {
-            throw 'QuestionBox is too small for a multiline question editor.'
+        if ($questionBox.ActualHeight -lt 80) {
+            throw "QuestionBox layout is too small: $($questionBox.ActualHeight)"
+        }
+
+        if ($answerBox.ActualHeight -lt 80) {
+            throw "AnswerBox layout is too small: $($answerBox.ActualHeight)"
+        }
+
+        if ($traceBox.ActualHeight -lt 100) {
+            throw "TraceBox layout is too small: $($traceBox.ActualHeight)"
         }
 
         # Verify the visible TextBox is the input source and that TextChanged
