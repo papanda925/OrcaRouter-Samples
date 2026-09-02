@@ -432,6 +432,33 @@ function Set-DeveloperPendingInformation {
         'Request / Response will appear when the worker reports them.'
     ) -join [Environment]::NewLine
 }
+function Show-RequestError {
+    param(
+        [Parameter(Mandatory = $true)][string]$Message,
+        [string]$ExceptionType = '',
+        $WorkerEvent = $null
+    )
+
+    $safeMessage = Protect-LocalTraceText -Text $Message
+    $errorAnswer = Get-ConversationTranscript -PendingQuestion $script:currentQuestion -PendingAnswer ("ERROR: " + $safeMessage)
+
+    Set-ViewModelValue -Name 'Answer' -Value $errorAnswer
+
+    if ($null -eq $WorkerEvent) {
+        $WorkerEvent = [pscustomobject]@{
+            Message = $safeMessage
+            ExceptionType = $ExceptionType
+            ActualModel = [string]$viewModel.Row['Model']
+        }
+    }
+
+    Set-DeveloperInformation -WorkerEvent $WorkerEvent
+    Set-ViewModelValue -Name 'StatusText' -Value 'Error - 回答欄にエラーを表示しました'
+    $statusText.Foreground = '#B42318'
+
+    # The primary result remains visible; Developer / Trace are optional diagnostics.
+    $resultTabs.SelectedIndex = 0
+}
 function Set-UiBusy {
     param([bool]$Busy)
 
@@ -538,11 +565,7 @@ function Complete-OrcaRouterWorker {
             Message = $safeMessage
         }
 
-        $errorAnswer = Get-ConversationTranscript -PendingQuestion $script:currentQuestion -PendingAnswer ("ERROR: " + $safeMessage)
-        Set-ViewModelValue -Name 'Answer' -Value $errorAnswer
-        Set-ViewModelValue -Name 'StatusText' -Value 'Error - 回答欄にエラーを表示しました'
-        $statusText.Foreground = '#B42318'
-        $resultTabs.SelectedIndex = 0
+        Show-RequestError -Message $safeMessage -ExceptionType $_.Exception.GetType().FullName
     }
     finally {
         try {
@@ -607,15 +630,7 @@ function Process-OrcaRouterWorkerEvents {
                     HttpStatus = Get-WorkerEventValue -WorkerEvent $workerEvent -Name 'HttpStatus' -DefaultValue '-'
                 }
 
-                $errorAnswer = Get-ConversationTranscript -PendingQuestion $script:currentQuestion -PendingAnswer ("ERROR: " + $safeMessage)
-                Set-ViewModelValue -Name 'Answer' -Value $errorAnswer
-                Set-DeveloperInformation -WorkerEvent $workerEvent
-                Set-ViewModelValue -Name 'StatusText' -Value 'Error - 回答欄にエラーを表示しました'
-                $statusText.Foreground = '#B42318'
-
-                # Do not move the user away from the answer automatically.
-                # Developer / Trace remain available when more detail is needed.
-                $resultTabs.SelectedIndex = 0
+                Show-RequestError -Message $safeMessage -ExceptionType $exceptionType -WorkerEvent $workerEvent
                 Set-UiBusy -Busy $false
                 $script:workerFinishedInUi = $true
             }
