@@ -554,7 +554,8 @@ Public Sub UpdateOrcaRouterDeveloperInformation( _
     ByVal elapsedSeconds As Double, _
     ByVal requestedModel As String, _
     ByVal requestJson As String, _
-    ByVal responseJson As String)
+    ByVal responseJson As String, _
+    Optional ByVal additionalResponseJson As String = "")
 
     Dim promptTokens As Double
     Dim completionTokens As Double
@@ -576,34 +577,85 @@ Public Sub UpdateOrcaRouterDeveloperInformation( _
         ws.Range("O18").Value = requestedModel
     End If
 
-    If TryExtractJsonNumberProperty(responseJson, "prompt_tokens", promptTokens) Then
+    If SumJsonNumberProperties( _
+           responseJson, _
+           additionalResponseJson, _
+           "prompt_tokens", _
+           promptTokens) Then
         ws.Range("K19").Value = promptTokens
     Else
         ws.Range("K19").Value = "-"
     End If
 
-    If TryExtractJsonNumberProperty(responseJson, "completion_tokens", completionTokens) Then
+    If SumJsonNumberProperties( _
+           responseJson, _
+           additionalResponseJson, _
+           "completion_tokens", _
+           completionTokens) Then
         ws.Range("M19").Value = completionTokens
     Else
         ws.Range("M19").Value = "-"
     End If
 
-    If TryExtractJsonNumberProperty(responseJson, "total_tokens", totalTokens) Then
+    If SumJsonNumberProperties( _
+           responseJson, _
+           additionalResponseJson, _
+           "total_tokens", _
+           totalTokens) Then
         ws.Range("O19").Value = totalTokens
     Else
         ws.Range("O19").Value = "-"
     End If
 
-    If TryExtractJsonNumberProperty(responseJson, "cost_usd", costUsd) Then
+    If SumJsonNumberProperties( _
+           responseJson, _
+           additionalResponseJson, _
+           "cost_usd", _
+           costUsd) Then
         ws.Range("K20").Value = "$" & Format$(costUsd, "0.000000")
     Else
         ws.Range("K20").Value = "(not returned)"
     End If
 
-    ws.Range("J22").Value = Left$(requestJson, RAW_JSON_MAX_TEXT)
+    If Len(requestJson) > 0 Then
+        ws.Range("J22").Value = Left$(requestJson, RAW_JSON_MAX_TEXT)
+    Else
+        ws.Range("J22").Value = "{}"
+    End If
+
     UpdateVbaHistoryStatus ws
 
 End Sub
+
+Private Function SumJsonNumberProperties( _
+    ByVal primaryJson As String, _
+    ByVal additionalJson As String, _
+    ByVal propertyName As String, _
+    ByRef totalValue As Double) As Boolean
+
+    Dim oneValue As Double
+    Dim foundValue As Boolean
+
+    totalValue = 0
+    foundValue = False
+
+    If TryExtractJsonNumberProperty(primaryJson, propertyName, oneValue) Then
+        totalValue = totalValue + oneValue
+        foundValue = True
+    End If
+
+    oneValue = 0
+
+    If Len(additionalJson) > 0 Then
+        If TryExtractJsonNumberProperty(additionalJson, propertyName, oneValue) Then
+            totalValue = totalValue + oneValue
+            foundValue = True
+        End If
+    End If
+
+    SumJsonNumberProperties = foundValue
+
+End Function
 
 Private Function TryExtractJsonNumberProperty( _
     ByVal jsonText As String, _
