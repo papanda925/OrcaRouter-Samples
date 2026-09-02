@@ -659,18 +659,20 @@ function Invoke-OrcaRouterChat {
         Assert-Inputs -ApiKey $apiKey -Model $model -Question $question -Mode $mode
     }
     catch {
+        $script:currentQuestion = $question
         $safeMessage = Protect-LocalTraceText -Text $_.Exception.Message
-        Set-ViewModelValue -Name 'Answer' -Value "ERROR: $safeMessage"
-        Set-ViewModelValue -Name 'StatusText' -Value 'Error - 入力値を確認してください'
-        $statusText.Foreground = '#B42318'
+        Show-RequestError -Message $safeMessage -ExceptionType $_.Exception.GetType().FullName
         return
     }
 
     $resultTabs.SelectedIndex = 0
     $script:currentQuestion = $question
-    $pendingTranscript = Get-ConversationTranscript -PendingQuestion $question
-    Set-ViewModelValue -Name 'Answer' -Value $pendingTranscript
-    Set-ViewModelValue -Name 'StatusText' -Value 'Processing...'
+
+    # Permanent UI contract:
+    # while waiting, keep the committed conversation unchanged.
+    # Do not flash the submitted question in the Answer tab before a response exists.
+    Set-ViewModelValue -Name 'Answer' -Value (Get-ConversationTranscript)
+    Set-ViewModelValue -Name 'StatusText' -Value '送信中...'
     $statusText.Foreground = '#64748B'
     Set-UiBusy -Busy $true
 
@@ -746,15 +748,9 @@ $applyPromptExampleButton.Add_Click({
 $modeBox.Add_SelectionChanged({
     $mode = Get-SelectedMode
 
-    if ($mode -eq 'Tool Calling') {
-        $questionBox.Text = 'calculate_sum ツールを使って 123 と 456 を足し、その結果を日本語で説明してください。'
-    }
-    elseif ($mode -eq 'Streaming') {
-        $questionBox.Text = '日本語で「こんにちは。Streamingのテストです。」と短く答えてください。'
-    }
-    elseif ($mode -eq 'Chat') {
-        $questionBox.Text = '日本語で「こんにちは。PowerShell版Chatのテストです。」とだけ答えてください。'
-    }
+    # Changing Mode must never destroy a question the user is editing.
+    Set-ViewModelValue -Name 'StatusText' -Value "Mode: $mode"
+    $statusText.Foreground = '#64748B'
 })
 
 $questionBox.Add_TextChanged({
@@ -853,6 +849,20 @@ if ($UiBindingCheck) {
         if ($null -eq $applyPromptExampleButton) {
             throw 'ApplyPromptExampleButton was not found.'
         }
+
+        # Changing Mode must not overwrite the user's question.
+        $questionBox.Text = 'Mode change must not overwrite this text'
+        $modeBox.SelectedIndex = 1
+        $window.Dispatcher.Invoke(
+            [System.Action]{ },
+            [System.Windows.Threading.DispatcherPriority]::Background
+        )
+
+        if ($questionBox.Text -ne 'Mode change must not overwrite this text') {
+            throw 'Changing Mode must not overwrite QuestionBox.'
+        }
+
+        $modeBox.SelectedIndex = 0
 
         # Selecting a prompt example must not overwrite the user's question.
         $questionBox.Text = 'Prompt selection must not overwrite this text'
