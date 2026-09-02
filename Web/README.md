@@ -15,7 +15,7 @@ Model欄は自由入力なので、`orcarouter/free` から利用可能な有料
 1画面で次を確認できます。
 
 - 最大10往復の会話とOrcaRouterからの回答
-- Prompt example
+- プロンプト例（任意）+ 明示的な「質問欄に挿入」
 - Developer Information（HTTP Status / Elapsed / Token / Cost）
 - Request JSON / Response JSON
 - APIから返ったRaw JSON
@@ -29,7 +29,8 @@ Raw JSON欄はVBA版と同じ考え方で、Chatではレスポンス本文全�
 
 - `index.html` - 画面
 - `style.css` - モダンでシンプルなUI
-- `app.js` - API呼び出し、6ステップの処理、トレース、エラー処理
+- `app.js` - API呼び出し、6ステップの処理、会話履歴、トレース、エラー処理
+- `ui-contract.test.js` - Prompt / Mode / Send / Error表示の回帰テスト
 - `start-server.ps1` - Python不要のWindows用ローカルHTTPサーバー
 
 ## Quick start
@@ -112,11 +113,19 @@ Tool Callingでは、モデルや無料ルーターのQuota状況によってロ
 
 3方式共通の手順とモード比較は [はじめて使うときの手順](../docs/getting-started.md) を参照してください。
 
-## Multi-turn Chat / New Chat / Developer Information
+## Multi-turn Chat / New Chat / Prompt examples / Developer Information
 
-通常Chatでは、API側に会話を保存させるのではなく、ブラウザ内の配列に直近10往復を保持し、次回の `messages` に user / assistant 履歴を再送します。**New chat** はこのローカル履歴だけを消します。
+Chat / Streaming / Tool Calling は、API側へ会話を保存させるのではなく、ブラウザ内の配列に直近10往復の成功済み user / assistant を保持し、次回の `messages` へ再送します。**New chat** はこのローカル履歴だけを消し、API Key / Model / Modeは変更しません。
 
-Developer Information は折りたたみ式です。通常利用では閉じたまま使え、開くと HTTP Status、処理時間、Token数、Cost、Request JSON、Response JSON を確認できます。Costは `X-OrcaRouter-Include-Cost: true` で取得を依頼し、APIが `usage.cost_usd` を返さない場合は推測せず `(not returned)` と表示します。
+**プロンプト例（任意）** は、プルダウンを選択しただけではQuestionを書き換えません。例を選び **「質問欄に挿入」** を押したときだけ定型文をQuestionへ入れます。挿入後に自由に編集してから送信します。Modeを変更しても入力中のQuestionは上書きしません。
+
+送信直後は、未確定のQuestionを会話欄へ一瞬だけ表示することはせず、成功済みの会話をそのまま残してStatusを「送信中」にします。Streamingだけは実際にAssistantのdeltaを受信し始めた時点から、今回Questionと途中回答を表示します。
+
+成功時は今回のQuestion + Assistantを履歴へ確定します。APIエラー、timeout、JSON解析エラー、入力検証エラーは履歴へ確定しませんが、**今回Question + ERROR内容を会話欄へ残す**ため、結果が消えたように見えません。
+
+Developer Information は折りたたみ式です。正常時だけでなくエラー時も、取得できた HTTP Status、Elapsed、Model、Request JSON、Response/Error body を残します。Token / Cost が返った場合はそれも表示します。Costは `X-OrcaRouter-Include-Cost: true` で取得を依頼し、APIが `usage.cost_usd` を返さない場合は推測せず `(not returned)` と表示します。
+
+3実装共通の状態遷移ルールは [UI behavior contract](../docs/ui-behavior-contract.md) を参照してください。
 
 ## Common processing steps
 

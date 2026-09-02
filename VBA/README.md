@@ -15,7 +15,7 @@ Excel VBA から OrcaRouter の Chat Completions API を呼び出し、**Chat / 
 | Model | B4 |
 | Mode | B5:D5 |
 | Question | B6:H9 |
-| Prompt example | B10:D10 |
+| Prompt template (optional) | B10:D10 |
 | Conversation | B11:H15 |
 | Raw JSON title/status | J1:P2 |
 | Response JSON | J3:P15 |
@@ -161,32 +161,36 @@ Authorization: Bearer <API_KEY>
 Content-Type: application/json
 ```
 
-## Answer / Raw JSON
+## Conversation / Raw JSON
 
-APIからHTTPレスポンスを受信すると、同じレスポンスを2つの見方で表示します。
+APIからHTTPレスポンスを受信すると、同じ結果を利用者向け表示と開発者向けRaw JSONの2つの見方で確認できます。
 
-- **Answer（B11:H15）**: `choices[0].message.content` からユーザー向け回答本文を取り出して表示
-- **Raw JSON（J3:P15）**: APIから受信したレスポンス本文を、解析前の文字列のまま表示
+- **Conversation（B11:H15）**: 成功済みの user / assistant 履歴と、今回の回答またはエラーを表示
+- **Raw JSON（J3:P15）**: APIから受信したレスポンス本文または最新SSEイベントを、解析前の内容として表示
 
-通常Chatでは受信したJSON全体をRaw JSONへ表示してからAnswerを解析します。そのため、Answer抽出でエラーになった場合でもRaw JSONを見ればAPIが実際に何を返したか確認できます。
+通常Chatでは受信したJSON全体をRaw JSONへ表示してからAssistant本文を解析します。そのため、本文抽出でエラーになった場合でもRaw JSONを見ればAPIが実際に何を返したか確認できます。
 
 Answer抽出は、レスポンス全体から単純に最初の `content` を探すのではなく、`choices` → `message` の位置を確認してから `content` を取得します。また、`content` が文字列ではなくテキストパーツ配列の場合は、最初の `text` をフォールバックとして使用します。
 
-Tool Callingでは1回目のTool CallレスポンスをRaw JSONへ表示し、2回目の最終レスポンス受信後にRaw JSON欄を最終レスポンスへ更新します。Answerには2回目の `message.content` を表示します。
+Tool Callingでは1回目のTool CallレスポンスをRaw JSONへ表示し、2回目の最終レスポンス受信後にRaw JSON欄を最終レスポンスへ更新します。Conversationには成功時に2回目の `message.content` をAssistantとして確定します。
 
-Streamingでは1つのJSONレスポンスではなくSSEイベントが連続します。`XMLHTTP.responseText` を `readyState = 3 (LOADING)` の間から差分読取し、`data: {...}` 行を順次解析します。Raw JSON欄には最後に受信したJSON形式のSSEイベントを表示し、Answer欄には各SSEイベントの `delta.content` を連結して逐次表示します。MSXMLがHTTPレスポンスをUnicode文字列へ変換した後にセルへ書くため、コンソール標準出力経由の文字化けを避けられます。
+Streamingでは1つのJSONレスポンスではなくSSEイベントが連続します。`XMLHTTP.responseText` を `readyState = 3 (LOADING)` の間から差分読取し、`data: {...}` 行を順次解析します。Raw JSON欄には最後に受信したJSON形式のSSEイベントを表示し、Conversationには各SSEイベントの `delta.content` を連結して今回Questionとともに逐次表示します。MSXMLがHTTPレスポンスをUnicode文字列へ変換した後にセルへ書くため、コンソール標準出力経由の文字化けを避けられます。
 
 Raw JSONはExcelセルの上限と可読性を考慮し、非常に長い場合は約30,000文字で切り詰めます。Traceには従来どおりHTTP Status、Headers、Raw response等も記録します。
 
-## Multi-turn Chat / New chat / Prompt example / Developer Information
+## Multi-turn Chat / New chat / Prompt template / Developer Information
 
-通常ChatではVBAモジュール内に直近10往復の user / assistant を保持し、次回の `messages` JSONへ再び含めます。シート上の **New chat** ボタンは履歴だけをクリアします。
+Chat / Streaming / Tool Calling は、VBAモジュール内の**同じ成功済み会話履歴**を使います。直近10往復の user / assistant を保持し、次回の `messages` JSONへ再び含めます。シート上の **New chat** ボタンは履歴だけをクリアし、API Key / Model / Modeは残します。
 
-B10:D10のPrompt exampleを選んで **Apply prompt** を押すと、要約・初心者向け説明・コードレビュー・JSON・翻訳の雛形をQuestionへ入れられます。
+B10:D10 は **Prompt template (optional)** です。最初は `(select)` で、テンプレートを選んだだけではQuestionは変わりません。選択後に **Insert prompt** を押したときだけ、要約・初心者向け説明・コードレビュー・JSON・翻訳の雛形をQuestionへ入れます。
 
-Developer Informationでは HTTP Status、Elapsed、Model、Prompt / Completion / Total Tokens、Costを確認できます。Request JSONはJ22:P30、Response JSONは従来のRaw JSON領域J3:P15で確認します。Cost取得には `X-OrcaRouter-Include-Cost: true` を使い、APIが値を返さない場合は推測しません。
+通常Chat / Tool Callingでは、Send直後に未確定QuestionをConversationへ点滅表示せず、成功済み履歴を維持します。Streamingは実際にdeltaを受信した時点から、今回Question + 途中回答をConversationへ表示します。
 
-> 現段階で10往復履歴を再送する対象は通常Chatです。既存のStreaming / Tool Callingサンプルは従来どおり独立した検証モードとして残しています。
+成功時だけ今回Question + Assistantを履歴へ確定します。APIエラー、timeout、入力検証エラーは履歴へ追加しませんが、**今回Question + ERROR内容をConversationに残します**。Streaming途中で失敗した場合は、受信済みのpartial answerも残したうえでERRORを追記します。
+
+Developer Informationでは HTTP Status、Elapsed、Model、Prompt / Completion / Total Tokens、Costを確認できます。Request JSONはJ22:P30、Response JSON / Error bodyはRaw JSON領域J3:P15で確認します。Chat / Streaming / Tool Callingの成功・失敗の両方で、取得できた診断情報を更新します。Tool Callingでは2回のAPIレスポンスにUsage/Costがある場合、それらを合算します。Cost取得には `X-OrcaRouter-Include-Cost: true` を使い、APIが値を返さない場合は推測しません。
+
+3実装共通の状態遷移ルールは [UI behavior contract](../docs/ui-behavior-contract.md) を参照してください。
 
 ## Trace / debug
 

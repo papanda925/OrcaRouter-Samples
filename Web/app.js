@@ -28,6 +28,7 @@ const statusText = document.getElementById("statusText");
 const traceItemTemplate = document.getElementById("traceItemTemplate");
 const newChatButton = document.getElementById("newChatButton");
 const promptExampleInput = document.getElementById("promptExample");
+const applyPromptExampleButton = document.getElementById("applyPromptExampleButton");
 const historyStatus = document.getElementById("historyStatus");
 const firstRunHelp = document.getElementById("firstRunHelp");
 const devHttpStatus = document.getElementById("devHttpStatus");
@@ -42,6 +43,7 @@ const devRequestJson = document.getElementById("devRequestJson");
 const devResponseJson = document.getElementById("devResponseJson");
 
 const conversationHistory = [];
+let transientAssistantText = "";
 
 apiKeyInput.value = DEFAULT_API_KEY;
 
@@ -99,9 +101,10 @@ function renderConversation(pendingQuestion = "", pendingAssistant = "") {
 
   if (pendingQuestion) {
     messages.push({ role: "user", content: pendingQuestion });
-    if (pendingAssistant) {
-      messages.push({ role: "assistant", content: pendingAssistant });
-    }
+  }
+
+  if (pendingAssistant) {
+    messages.push({ role: "assistant", content: pendingAssistant });
   }
 
   if (messages.length === 0) {
@@ -136,6 +139,7 @@ function addConversationTurn(question, assistant) {
 
 function startNewChat() {
   conversationHistory.length = 0;
+  transientAssistantText = "";
   updateHistoryStatus();
   renderConversation();
   setStatus("New chat - 履歴をクリアしました");
@@ -407,7 +411,9 @@ function buildErrorDetails(status, statusText, headers, rawBody) {
     errorMessage: message,
     retryAfter,
     metadata: error.metadata ?? null,
-    guidance
+    guidance,
+    headers: headers ?? {},
+    responseBody: parsed ?? rawBody ?? ""
   };
 }
 
@@ -489,11 +495,29 @@ async function postJson(
       throw error;
     }
 
+    let json;
+
+    try {
+      json = rawBody ? JSON.parse(rawBody) : {};
+    } catch (parseError) {
+      const error = new Error(
+        `HTTP ${response.status} のレスポンスJSONを解析できません: ${parseError.message}`
+      );
+      error.details = {
+        httpStatus: response.status,
+        httpStatusText: response.statusText,
+        headers,
+        responseBody: rawBody,
+        guidance: "Raw JSON / Trace を確認してください。"
+      };
+      throw error;
+    }
+
     return {
       response,
       headers,
       rawBody,
-      json: rawBody ? JSON.parse(rawBody) : {}
+      json
     };
   } finally {
     window.clearTimeout(timeoutId);
@@ -690,9 +714,13 @@ async function runStreaming(apiKey, model, question, startedAt) {
             `Streaming error: ${chunk.error.message ?? "unknown error"}`
           );
           error.details = {
+            httpStatus: response.status,
+            httpStatusText: response.statusText,
             errorType: chunk.error.type ?? "",
             errorCode: chunk.error.code ?? "",
-            metadata: chunk.error.metadata ?? null
+            metadata: chunk.error.metadata ?? null,
+            headers,
+            responseBody: chunk
           };
           throw error;
         }
@@ -701,6 +729,7 @@ async function runStreaming(apiKey, model, question, startedAt) {
 
         if (typeof delta === "string" && delta.length > 0) {
           answer += delta;
+          transientAssistantText = answer;
           renderConversation(question, answer);
         }
 
@@ -730,6 +759,7 @@ async function runStreaming(apiKey, model, question, startedAt) {
             const delta = chunk?.choices?.[0]?.delta?.content;
             if (typeof delta === "string" && delta.length > 0) {
               answer += delta;
+              transientAssistantText = answer;
               renderConversation(question, answer);
             }
             if (chunk.usage) usage = chunk.usage;
@@ -943,15 +973,25 @@ async function sendChat() {
         ? "Raw JSON - Tool Calling"
         : "Raw JSON - Chat"
   );
-  setStatus("Processing...");
+  setStatus("送信中...");
   sendButton.disabled = true;
   newChatButton.disabled = true;
+  promptExampleInput.disabled = true;
+  applyPromptExampleButton.disabled = true;
+  transientAssistantText = "";
+
+  // Developer Information must describe the current attempt, not a previous one.
+  resetDeveloperInfo();
 
   const startedAt = performance.now();
 
   try {
     validateInputs(apiKey, model, question, mode);
-    renderConversation(question, "");
+
+    // Permanent UI contract:
+    // while waiting, keep the committed conversation unchanged.
+    // Do not flash the submitted question in the result area before a response exists.
+    renderConversation();
 
     let result;
 
@@ -964,6 +1004,7 @@ async function sendChat() {
     }
 
     addConversationTurn(question, result.assistantText);
+    transientAssistantText = "";
 
     const elapsedMs = performance.now() - startedAt;
     updateDeveloperInfo({
@@ -998,7 +1039,14 @@ async function sendChat() {
       stack: error?.stack ?? "(stack not available)"
     });
 
-    renderConversation();
+    const errorText = transientAssistantText
+      ? `${transientAssistantText}\n\n[ERROR]\n${message}`
+      : `ERROR: ${message}`;
+
+    // Keep the submitted question and the error visible without committing
+    // the failed turn to conversation history.
+    renderConversation(question, errorText);
+
     let requestForDisplay = {};
     try {
       requestForDisplay = JSON.parse(devRequestJson.textContent || "{}");
@@ -1015,34 +1063,47 @@ async function sendChat() {
       response: error?.details ?? { error: message }
     });
 
-    setStatus("Error - Trace を確認してください", true);
+    setStatus("Error - 会話欄とDeveloper / Traceを確認してください", true);
   } finally {
     sendButton.disabled = false;
     newChatButton.disabled = false;
+    promptExampleInput.disabled = false;
+    applyPromptExampleButton.disabled = false;
   }
 }
 
 modeInput.addEventListener("change", () => {
-  if (modeInput.value === "tools") {
-    questionInput.value =
-      "calculate_sum ツールを使って 123 と 456 を足し、その結果を日本語で説明してください。";
-  } else if (modeInput.value === "stream") {
-    questionInput.value =
-      "日本語で「こんにちは。Streamingのテストです。」と短く答えてください。";
-  } else {
-    questionInput.value =
-      "日本語で「こんにちは。Web版Chatのテストです。」とだけ答えてください。";
-  }
+  // Changing Mode must never destroy a question the user is editing.
+  setStatus(`Mode: ${modeInput.options[modeInput.selectedIndex]?.text ?? modeInput.value}`);
 });
 
 apiKeyInput.addEventListener("input", updateFirstRunHelp);
 
 promptExampleInput.addEventListener("change", () => {
-  const prompt = PROMPT_EXAMPLES[promptExampleInput.value];
-  if (prompt) {
-    questionInput.value = prompt;
-    questionInput.focus();
+  if (!promptExampleInput.value) {
+    setStatus("Ready");
+    return;
   }
+
+  const label =
+    promptExampleInput.options[promptExampleInput.selectedIndex]?.text ??
+    promptExampleInput.value;
+
+  setStatus(`プロンプト例「${label}」を選択しました。［質問欄に挿入］を押してください。`);
+});
+
+applyPromptExampleButton.addEventListener("click", () => {
+  const prompt = PROMPT_EXAMPLES[promptExampleInput.value];
+
+  if (!prompt) {
+    setStatus("プロンプト例を選択してください。", true);
+    return;
+  }
+
+  questionInput.value = prompt;
+  questionInput.focus();
+  questionInput.setSelectionRange(questionInput.value.length, questionInput.value.length);
+  setStatus("プロンプト例を質問欄に挿入しました。内容を編集してから送信してください。");
 });
 
 newChatButton.addEventListener("click", startNewChat);

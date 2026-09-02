@@ -18,7 +18,7 @@ OrcaRouter API を **Web / PowerShell / Excel VBA** から呼び出す、学習�
 | Cross-environment | Web / PowerShell-WPF-XAML / Excel VBA の3方式を同じ考え方で比較 |
 | OrcaRouter integration | `/v1/chat/completions` を直接利用し、既定モデルは `orcarouter/free` |
 | API features | Chat / Streaming / Tool Calling |
-| Observability | HTTP Status / Elapsed / Token / Cost / Request JSON / Response JSON / HTTP Trace を確認可能 |
+| Observability | 成功/失敗の両方で HTTP Status / Elapsed / Token / Cost / Request JSON / Response JSON / HTTP Trace を確認可能 |
 | PowerShell UI | Data Binding / `INotifyPropertyChanged` / Background Runspace |
 | Safety | 実APIキーをソースへ保存しない設計、CIで秘密情報・個人パスを検査 |
 | License | MIT License |
@@ -63,10 +63,13 @@ OrcaRouter API を **Web / PowerShell / Excel VBA** から呼び出す、学習�
 - **Multi-turn Chat** - アプリ側が会話履歴を保持し、次回の `messages` に再送
 - **10-turn limit** - user + assistant を1往復として、直近10往復のみ保持
 - **New chat** - APIへリセット電文は送らず、アプリ側の履歴だけをクリア
-- **Prompt examples** - 要約、初心者向け説明、コードレビュー、JSON、翻訳
-- **Developer Information** - HTTP Status、Elapsed、Model、Prompt Tokens、Completion Tokens、Total Tokens、Cost、Request JSON、Response JSON
+- **Prompt examples** - 選択だけではQuestionを書き換えず、明示的なInsert/Applyで要約、説明、コードレビュー、JSON、翻訳を挿入
+- **Stable request state** - 送信中は成功済み履歴を維持し、成功時のみturnをcommit。失敗時はQuestion + ERRORを残す
+- **Developer Information** - 成功/失敗の両方でHTTP Status、Elapsed、Model、Prompt Tokens、Completion Tokens、Total Tokens、Cost、Request JSON、Response/Error body
 
 Cost取得では OrcaRouter のChat Completions仕様にある `X-OrcaRouter-Include-Cost: true` を使用します。APIから `usage.cost_usd` が返らない場合は、推測せず `(not returned)` と表示します。
+
+Web / PowerShell / VBA で共通に守る送信中・成功・失敗・New Chat・Prompt/Mode変更のルールを [UI behavior contract](docs/ui-behavior-contract.md) に明文化しています。CIもこの状態遷移契約を検査します。
 
 ## Chat / Streaming / Tool Calling
 
@@ -197,11 +200,13 @@ OrcaRouter-Samples/
 │  ├─ getting-started.md
 │  ├─ processing-flow.md
 │  ├─ advanced-features.md
-│  └─ api-key-setup.md
+│  ├─ api-key-setup.md
+│  └─ ui-behavior-contract.md
 ├─ Web/
 │  ├─ index.html
 │  ├─ style.css
 │  ├─ app.js
+│  ├─ ui-contract.test.js
 │  └─ README.md
 ├─ PowerShell/
 │  ├─ MainWindow.xaml

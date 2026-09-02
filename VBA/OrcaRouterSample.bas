@@ -155,16 +155,17 @@ Public Sub SetupOrcaRouterSample()
     End With
 
     'Prompt example selector
-    ws.Range("A10").Value = "Prompt example"
+    ws.Range("A10").Value = "Prompt template (optional)"
     With ws.Range("B10:D10")
         .Merge
-        .Value = "Summary"
+        .Value = "(select)"
         .Interior.Color = RGB(251, 253, 255)
         .Borders.Color = RGB(217, 225, 236)
         .Validation.Delete
         .Validation.Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, _
                         Operator:=xlBetween, _
-                        Formula1:="Summary" & listSeparator & _
+                        Formula1:="(select)" & listSeparator & _
+                                 "Summary" & listSeparator & _
                                  "Explain" & listSeparator & _
                                  "Code review" & listSeparator & _
                                  "JSON" & listSeparator & _
@@ -306,7 +307,7 @@ Public Sub SetupOrcaRouterSample()
 
     With applyPromptButton
         .Name = "btnApplyPromptExample"
-        .TextFrame2.TextRange.Text = "Apply prompt"
+        .TextFrame2.TextRange.Text = "Insert prompt"
         .Fill.ForeColor.RGB = RGB(255, 255, 255)
         .Line.ForeColor.RGB = RGB(217, 225, 236)
         .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(23, 32, 51)
@@ -349,7 +350,7 @@ Public Sub SetupOrcaRouterSample()
 
     ClearConversationHistoryState
     UpdateVbaHistoryStatus ws
-    ResetVbaDeveloperInformation ws
+    ResetOrcaRouterDeveloperInformation ws
 
     AddTrace ws, "READY", "LOCAL", "Created sample UI", _
              "Endpoint: " & API_ENDPOINT & vbCrLf & _
@@ -420,6 +421,13 @@ Public Sub ApplyOrcaRouterPromptExample()
     Set ws = ThisWorkbook.Worksheets(SAMPLE_SHEET_NAME)
     exampleName = Trim$(CStr(ws.Range("B10").Value))
 
+    If Len(exampleName) = 0 Or exampleName = "(select)" Then
+        MsgBox "Select a prompt template first.", _
+               vbInformation, _
+               "OrcaRouter Sample"
+        GoTo CleanExit
+    End If
+
     Select Case exampleName
         Case "Summary"
             promptText = "Summarize the following text in three concise bullet points:"
@@ -432,7 +440,10 @@ Public Sub ApplyOrcaRouterPromptExample()
         Case "Translate"
             promptText = "Translate the following Japanese text into natural English:"
         Case Else
-            promptText = "Summarize the following text in three concise bullet points:"
+            MsgBox "Unknown prompt template: " & exampleName, _
+                   vbExclamation, _
+                   "OrcaRouter Sample"
+            GoTo CleanExit
     End Select
 
     ws.Range("B6").Value = promptText & vbCrLf & vbCrLf & "Paste content here."
@@ -462,7 +473,7 @@ Private Sub ClearConversationHistoryState()
 
 End Sub
 
-Private Sub AddConversationTurn(ByVal userText As String, ByVal assistantText As String)
+Public Sub CommitOrcaRouterConversationTurn(ByVal userText As String, ByVal assistantText As String)
 
     Dim i As Long
 
@@ -480,7 +491,7 @@ Private Sub AddConversationTurn(ByVal userText As String, ByVal assistantText As
 
 End Sub
 
-Private Function BuildConversationDisplay( _
+Public Function GetOrcaRouterConversationDisplay( _
     Optional ByVal pendingQuestion As String = "", _
     Optional ByVal pendingAnswer As String = "") As String
 
@@ -497,11 +508,11 @@ Private Function BuildConversationDisplay( _
     If Len(pendingQuestion) > 0 Then
         result = result & "YOU" & vbCrLf
         result = result & pendingQuestion & vbCrLf & vbCrLf
+    End If
 
-        If Len(pendingAnswer) > 0 Then
-            result = result & "ASSISTANT" & vbCrLf
-            result = result & pendingAnswer & vbCrLf & vbCrLf
-        End If
+    If Len(pendingAnswer) > 0 Then
+        result = result & "ASSISTANT" & vbCrLf
+        result = result & pendingAnswer & vbCrLf & vbCrLf
     End If
 
     If Len(result) = 0 Then
@@ -513,7 +524,7 @@ Private Function BuildConversationDisplay( _
                  Right$(result, RAW_JSON_MAX_TEXT - 40)
     End If
 
-    BuildConversationDisplay = result
+    GetOrcaRouterConversationDisplay = result
 
 End Function
 
@@ -523,7 +534,7 @@ Private Sub UpdateVbaHistoryStatus(ByVal ws As Worksheet)
 
 End Sub
 
-Private Sub ResetVbaDeveloperInformation(ByVal ws As Worksheet)
+Public Sub ResetOrcaRouterDeveloperInformation(ByVal ws As Worksheet)
 
     ws.Range("K18").Value = "-"
     ws.Range("M18").Value = "-"
@@ -537,13 +548,14 @@ Private Sub ResetVbaDeveloperInformation(ByVal ws As Worksheet)
 
 End Sub
 
-Private Sub UpdateVbaDeveloperInformation( _
+Public Sub UpdateOrcaRouterDeveloperInformation( _
     ByVal ws As Worksheet, _
     ByVal httpStatus As Long, _
     ByVal elapsedSeconds As Double, _
     ByVal requestedModel As String, _
     ByVal requestJson As String, _
-    ByVal responseJson As String)
+    ByVal responseJson As String, _
+    Optional ByVal additionalResponseJson As String = "")
 
     Dim promptTokens As Double
     Dim completionTokens As Double
@@ -551,7 +563,11 @@ Private Sub UpdateVbaDeveloperInformation( _
     Dim costUsd As Double
     Dim actualModel As String
 
-    ws.Range("K18").Value = httpStatus
+    If httpStatus > 0 Then
+        ws.Range("K18").Value = httpStatus
+    Else
+        ws.Range("K18").Value = "(not available)"
+    End If
     ws.Range("M18").Value = Format$(elapsedSeconds, "0.000") & " sec"
 
     actualModel = requestedModel
@@ -561,34 +577,85 @@ Private Sub UpdateVbaDeveloperInformation( _
         ws.Range("O18").Value = requestedModel
     End If
 
-    If TryExtractJsonNumberProperty(responseJson, "prompt_tokens", promptTokens) Then
+    If SumJsonNumberProperties( _
+           responseJson, _
+           additionalResponseJson, _
+           "prompt_tokens", _
+           promptTokens) Then
         ws.Range("K19").Value = promptTokens
     Else
         ws.Range("K19").Value = "-"
     End If
 
-    If TryExtractJsonNumberProperty(responseJson, "completion_tokens", completionTokens) Then
+    If SumJsonNumberProperties( _
+           responseJson, _
+           additionalResponseJson, _
+           "completion_tokens", _
+           completionTokens) Then
         ws.Range("M19").Value = completionTokens
     Else
         ws.Range("M19").Value = "-"
     End If
 
-    If TryExtractJsonNumberProperty(responseJson, "total_tokens", totalTokens) Then
+    If SumJsonNumberProperties( _
+           responseJson, _
+           additionalResponseJson, _
+           "total_tokens", _
+           totalTokens) Then
         ws.Range("O19").Value = totalTokens
     Else
         ws.Range("O19").Value = "-"
     End If
 
-    If TryExtractJsonNumberProperty(responseJson, "cost_usd", costUsd) Then
+    If SumJsonNumberProperties( _
+           responseJson, _
+           additionalResponseJson, _
+           "cost_usd", _
+           costUsd) Then
         ws.Range("K20").Value = "$" & Format$(costUsd, "0.000000")
     Else
         ws.Range("K20").Value = "(not returned)"
     End If
 
-    ws.Range("J22").Value = Left$(requestJson, RAW_JSON_MAX_TEXT)
+    If Len(requestJson) > 0 Then
+        ws.Range("J22").Value = Left$(requestJson, RAW_JSON_MAX_TEXT)
+    Else
+        ws.Range("J22").Value = "{}"
+    End If
+
     UpdateVbaHistoryStatus ws
 
 End Sub
+
+Private Function SumJsonNumberProperties( _
+    ByVal primaryJson As String, _
+    ByVal additionalJson As String, _
+    ByVal propertyName As String, _
+    ByRef totalValue As Double) As Boolean
+
+    Dim oneValue As Double
+    Dim foundValue As Boolean
+
+    totalValue = 0
+    foundValue = False
+
+    If TryExtractJsonNumberProperty(primaryJson, propertyName, oneValue) Then
+        totalValue = totalValue + oneValue
+        foundValue = True
+    End If
+
+    oneValue = 0
+
+    If Len(additionalJson) > 0 Then
+        If TryExtractJsonNumberProperty(additionalJson, propertyName, oneValue) Then
+            totalValue = totalValue + oneValue
+            foundValue = True
+        End If
+    End If
+
+    SumJsonNumberProperties = foundValue
+
+End Function
 
 Private Function TryExtractJsonNumberProperty( _
     ByVal jsonText As String, _
@@ -669,6 +736,9 @@ Public Sub SendOrcaRouterChat()
     mode = Trim$(CStr(ws.Range("B5").Value))
     question = Trim$(CStr(ws.Range("B6").Value))
 
+    'Developer Information must describe this request attempt, not the previous one.
+    ResetOrcaRouterDeveloperInformation ws
+
     If StrComp(mode, "Streaming", vbTextCompare) = 0 Then
         SendOrcaRouterStreaming
         GoTo CleanExit
@@ -679,7 +749,10 @@ Public Sub SendOrcaRouterChat()
         GoTo CleanExit
     End If
 
-    ws.Range("B11").Value = BuildConversationDisplay(question)
+    'Permanent UI contract:
+    'while waiting, keep committed conversation unchanged.
+    'Do not flash the submitted question before a response exists.
+    ws.Range("B11").Value = GetOrcaRouterConversationDisplay()
     PrepareRawResponse ws, "Raw JSON Response - " & mode
 
     'STEP 1: Validate inputs.
@@ -788,9 +861,9 @@ Public Sub SendOrcaRouterChat()
              "Answer length: " & Len(assistantText)
 
     'STEP 6: Update UI and trace.
-    AddConversationTurn question, assistantText
-    ws.Range("B11").Value = BuildConversationDisplay()
-    UpdateVbaDeveloperInformation _
+    CommitOrcaRouterConversationTurn question, assistantText
+    ws.Range("B11").Value = GetOrcaRouterConversationDisplay()
+    UpdateOrcaRouterDeveloperInformation _
         ws, _
         httpStatus, _
         elapsedTimeSeconds, _
@@ -819,7 +892,25 @@ ErrorHandler:
 
     If Not ws Is Nothing Then
 
-        ws.Range("B11").Value = "ERROR: " & errorDescription
+        'Show the submitted question and error without committing the failed turn.
+        ws.Range("B11").Value = _
+            GetOrcaRouterConversationDisplay( _
+                question, _
+                "ERROR: " & errorDescription)
+
+        If startedAt > 0 Then
+            elapsedTimeSeconds = ElapsedSeconds(startedAt)
+        Else
+            elapsedTimeSeconds = 0
+        End If
+
+        UpdateOrcaRouterDeveloperInformation _
+            ws, _
+            httpStatus, _
+            elapsedTimeSeconds, _
+            model, _
+            requestBody, _
+            responseText
 
         AddTrace ws, "ERROR", "ERROR", "An error occurred", _
                  "Err.Number: " & errorNumber & vbCrLf & _
@@ -945,6 +1036,7 @@ Public Sub RunOrcaRouterVbaSelfTests()
     Dim encodedText As String
     Dim decodedText As String
     Dim requestJson As String
+    Dim displayText As String
     Dim utf8Bytes As Variant
     Dim byteCount As Long
 
@@ -969,7 +1061,7 @@ Public Sub RunOrcaRouterVbaSelfTests()
                   "BuildRequestJson produced an unexpected result."
     End If
 
-    AddConversationTurn "first question", "first answer"
+    CommitOrcaRouterConversationTurn "first question", "first answer"
     requestJson = BuildRequestJson("orcarouter/free", "second question")
 
     If InStr(1, requestJson, """role"":""assistant""", vbBinaryCompare) = 0 Or _
@@ -978,6 +1070,20 @@ Public Sub RunOrcaRouterVbaSelfTests()
 
         Err.Raise vbObjectError + 3005, "RunOrcaRouterVbaSelfTests", _
                   "Conversation history was not included in BuildRequestJson."
+    End If
+
+    'Advanced builders must reuse the same committed history.
+    RunOrcaRouterAdvancedSelfTests True
+
+    displayText = GetOrcaRouterConversationDisplay( _
+                      "failed question", _
+                      "ERROR: synthetic failure")
+
+    If InStr(1, displayText, "failed question", vbBinaryCompare) = 0 Or _
+       InStr(1, displayText, "ERROR: synthetic failure", vbBinaryCompare) = 0 Then
+
+        Err.Raise vbObjectError + 3006, "RunOrcaRouterVbaSelfTests", _
+                  "Failed requests must keep the submitted question and error visible."
     End If
 
     ClearConversationHistoryState
@@ -994,8 +1100,6 @@ Public Sub RunOrcaRouterVbaSelfTests()
         Err.Raise vbObjectError + 3004, "RunOrcaRouterVbaSelfTests", _
                   "UTF-8 conversion produced an unexpected byte count."
     End If
-
-    RunOrcaRouterAdvancedSelfTests
 
     MsgBox "All local VBA self-tests passed.", _
            vbInformation, _
@@ -1055,17 +1159,14 @@ Private Function GetOrCreateSampleSheet() As Worksheet
 
 End Function
 
-Private Function BuildRequestJson(ByVal model As String, ByVal question As String) As String
+Public Function BuildOrcaRouterConversationMessageItemsJson( _
+    ByVal question As String) As String
 
     Dim i As Long
     Dim result As String
 
-    result = "{"
-    result = result & """model"":""" & JsonEscape(model) & ""","
-    result = result & """messages"":["
-
     For i = 1 To conversationCount
-        If i > 1 Then
+        If Len(result) > 0 Then
             result = result & ","
         End If
 
@@ -1075,12 +1176,25 @@ Private Function BuildRequestJson(ByVal model As String, ByVal question As Strin
                  JsonEscape(conversationAssistants(i)) & """}"
     Next i
 
-    If conversationCount > 0 Then
+    If Len(result) > 0 Then
         result = result & ","
     End If
 
     result = result & "{""role"":""user"",""content"":""" & _
              JsonEscape(question) & """}"
+
+    BuildOrcaRouterConversationMessageItemsJson = result
+
+End Function
+
+Private Function BuildRequestJson(ByVal model As String, ByVal question As String) As String
+
+    Dim result As String
+
+    result = "{"
+    result = result & """model"":""" & JsonEscape(model) & ""","
+    result = result & """messages"":["
+    result = result & BuildOrcaRouterConversationMessageItemsJson(question)
     result = result & "]"
     result = result & "}"
 

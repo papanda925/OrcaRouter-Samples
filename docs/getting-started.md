@@ -210,7 +210,7 @@ PageScrollViewer
 
 ウィンドウの高さが足りない場合は、右側にページ全体用の縦スクロールバーが自動表示され、下部まで移動できます。「回答」「Developer」「トレース」はタブで切り替え、長い回答やHTTPトレースは各タブ内部のスクロールバーで内容だけを移動します。
 
-送信すると「回答」タブを表示し、エラーが発生した場合は「トレース」タブへ自動で切り替わります。INPUTとRESULTの境界はマウスで上下にドラッグして高さを変更できます。
+送信すると「回答」タブを表示します。**エラー時も回答タブを維持**し、今回のQuestionとERROR内容を残します。Developer / トレースは必要に応じて利用者が開きます。INPUTとRESULTの境界はマウスで上下にドラッグして高さを変更できます。
 
 ## PowerShell版が画面を固めない仕組み
 
@@ -294,7 +294,7 @@ VBEで次を実行します。
 SetupOrcaRouterSample
 ```
 
-これで `OrcaRouter Chat` シートと、入力欄・Conversation・Prompt example・Developer Information・Request/Response JSON・Trace・Send/New chatボタンが作成されます。
+これで `OrcaRouter Chat` シートと、入力欄・Conversation・Prompt template (optional)・Developer Information・Request/Response JSON・Trace・Send/New chatボタンが作成されます。
 
 **BASファイルをインポートしただけでは、操作用シートは完成しません。最初にSetupを実行してください。**
 
@@ -342,9 +342,18 @@ Modeを選択してQuestionを入力し、**Send** を押します。
 
 # Priority 1 の使い方
 
+## 送信中・成功・失敗の表示
+
+3方式とも、通常Chat / Tool Callingの送信直後は成功済み会話をそのまま残し、未確定のQuestionを結果欄へ一瞬だけ表示しません。Streamingは実際にAssistantのdeltaを受信した時点から今回Question + 途中回答を表示します。
+
+成功時だけ今回Question + Assistantを履歴へ確定します。エラー時は履歴へ確定せず、今回Question + ERRORを結果欄に一時表示します。
+
+詳しい共通ルールと再発防止テストは [UI behavior contract](ui-behavior-contract.md) を参照してください。
+
+
 ## 会話履歴
 
-`/v1/chat/completions` へリセット電文を送るのではなく、アプリ側が会話を保持します。通常のChatでは次回Requestの `messages` へ、直近10往復の user / assistant を再送します。
+`/v1/chat/completions` へリセット電文を送るのではなく、アプリ側が会話を保持します。Web / PowerShell / VBA の Chat / Streaming / Tool Calling は、成功済みの直近10往復の user / assistant を次回Requestの `messages` へ再送します。
 
 ```text
 1回目: user
@@ -355,11 +364,11 @@ Modeを選択してQuestionを入力し、**Send** を押します。
 
 **New chat / 新しいチャット** はこのローカル履歴を空にします。API KeyとModelは消しません。
 
-## Prompt example
+## Prompt example / template
 
-PowerShell版では「プロンプト例」のプルダウンで種類を選び、**質問欄に挿入** を押したときだけ定型文を質問欄へ入れます。選択しただけでは、入力済みの質問を上書きしません。自動送信もしません。
+Web / PowerShell / VBA の3方式とも、**例を選択しただけではQuestionを書き換えません**。明示的な「質問欄に挿入 / Insert prompt」を実行したときだけ定型文をQuestionへ入れます。自動送信もしません。
 
-要約、初心者向け説明、コードレビュー、JSON、翻訳の例を用意しています。挿入後に、対象の文章やコードへ書き換えて使います。
+要約、初心者向け説明、コードレビュー、JSON、翻訳の例を用意しています。挿入後に、対象の文章やコードへ書き換えて使います。Modeを変更しても入力中のQuestionは上書きしません。
 
 ## Developer Information
 
@@ -379,7 +388,7 @@ PowerShell版では「プロンプト例」のプルダウンで種類を選び�
 
 Cost取得ではOrcaRouterの `X-OrcaRouter-Include-Cost: true` を利用します。APIが `usage.cost_usd` を返さない場合は金額を推測しません。
 
-PowerShell版は、APIエラー時も回答タブに「送信した質問」とエラーメッセージを残します。トレースタブへ自動遷移しないため、まず回答欄で結果を確認し、必要に応じてDeveloper / Traceを開けます。Developerにはエラー時も可能な範囲でHTTP Status、Request、Response/Error bodyを残します。
+3方式とも、APIエラー時に結果を消しません。今回Question + ERRORを結果欄へ残し、失敗turnは会話履歴へ確定しません。PowerShellはTraceへ自動遷移しません。Web / PowerShell / VBAはいずれも、Developer領域へ可能な範囲でHTTP Status、Elapsed、Request、Response/Error bodyを残します。
 
 ---
 

@@ -58,15 +58,19 @@
         </select>
       </div>
       <div class="field prompt-example-field">
-        <label for="promptExample">Prompt example</label>
-        <select id="promptExample">
-          <option value="">-- 例を選択 --</option>
-          <option value="summary">要約</option>
-          <option value="explain">初心者向け説明</option>
-          <option value="review">コードレビュー</option>
-          <option value="json">JSON形式で整理</option>
-          <option value="translate">英訳</option>
-        </select>
+        <label for="promptExample">プロンプト例（任意）</label>
+        <div class="prompt-example-row">
+          <select id="promptExample">
+            <option value="">-- 例を選択 --</option>
+            <option value="summary">要約</option>
+            <option value="explain">初心者向け説明</option>
+            <option value="review">コードレビュー</option>
+            <option value="json">JSON形式で整理</option>
+            <option value="translate">英訳</option>
+          </select>
+          <button id="applyPromptExampleButton" class="secondary-button" type="button">質問欄に挿入</button>
+        </div>
+        <p class="field-help">選択しただけでは質問欄を書き換えません。挿入後に内容を編集してから送信してください。</p>
       </div>
     </section>
 

@@ -107,7 +107,7 @@ RESULTは `TabControl` です。**回答**、**Developer**、**トレース** �
 
 `ResizeMode="CanResizeWithGrip"` を指定し、INPUTとRESULTの間には `GridSplitter` を配置しています。質問欄を広くしたい場合、または結果欄を広くしたい場合は境界を上下にドラッグできます。
 
-送信時は「回答」タブを表示します。エラー時は「トレース」タブへ自動で切り替え、診断情報をすぐ確認できるようにしています。
+送信時は「回答」タブを表示します。**エラー時も回答タブを維持**し、今回のQuestionとERROR内容を残します。Developer / トレースは利用者が必要に応じて開く診断領域とし、エラーだからといって自動で別タブへ移動しません。
 
 ## Question入力欄 / MVVM
 
@@ -129,7 +129,7 @@ PowerShell + `XamlReader` では、主要な入力欄までData Bindingだけに
 
 また、API待機中もQuestion欄は無効化しません。応答を待ちながら次の質問を入力できます。
 
-CIではWindows PowerShell 5.1上で、QuestionBoxの編集性、ResultTabsに「回答」「トレース」の2タブがあること、1200×900で各タブの表示領域が十分な高さを持つことに加え、ウィンドウを低くしたときにPageScrollViewerへ実際のスクロール範囲が生まれ、下部まで移動できることを確認します。さらに、`DataRowView` の `INotifyPropertyChanged`、Answer / Status のData Binding、Background Runspace自己テストも検証します。
+CIではWindows PowerShell 5.1上で、QuestionBoxの編集性、ResultTabsに「回答」「Developer」「トレース」の3タブがあること、Prompt example選択だけではQuestionを上書きしないこと、Mode変更でQuestionを上書きしないこと、エラー時に回答タブを維持してQuestion + ERRORを残すこと、Developerへ診断情報が入ることを確認します。さらに1200×900で各タブの表示領域、ページスクロール、`DataRowView` の `INotifyPropertyChanged`、Answer / Status のData Binding、Background Runspace自己テストも検証します。
 
 参考: PowerShell / WPF / MVVMの考え方
 - https://papanda925.com/?p=2187
@@ -145,11 +145,13 @@ Model欄は自由入力なので、無料ルーターと有料モデルで同じ
 
 ## 画面
 
-1画面で次の3点を確認できます。
+1画面で次を確認できます。
 
 - 質問
-- OrcaRouterからの回答（「回答」タブ）
+- 最大10往復の会話とOrcaRouterからの回答（「回答」タブ）
+- HTTP Status / Elapsed / Token / Cost / Request / Response（「Developer」タブ）
 - 処理ステップとHTTPトレース（「トレース」タブ）
+- プロンプト例（任意）と明示的な「質問欄に挿入」
 
 トレースには、APIキーを伏せたリクエスト情報、Request JSON、HTTPステータス、Response headers、Raw response、例外情報などを表示します。
 
@@ -204,9 +206,11 @@ WPF側で直近10往復の user / assistant 履歴を保持し、Background Runs
 
 「プロンプト例」で要約、初心者向け説明、コードレビュー、JSON、英訳を選び、**質問欄に挿入** を押すと雛形をQuestionへ入れられます。プルダウンを選択しただけでは質問欄を書き換えず、自動送信もしません。
 
-送信直後は回答タブに質問を表示したまま処理します。成功時は回答タブにAssistantの回答を追加し、Developerタブへ HTTP Status、Elapsed、Model、Prompt / Completion / Total Tokens、Cost、Request JSON、Response JSON を表示します。
+送信直後は、未確定のQuestionを回答タブへ仮表示せず、**成功済み会話をそのまま維持してStatusだけを「送信中」にします**。Streamingでは実際にAssistantのdeltaを受信した時点から、今回Questionと途中回答を表示します。成功時に初めて今回Question + Assistantを履歴へ確定します。
 
-APIエラーが発生した場合も回答タブを自動的に消したりトレースへ強制移動したりせず、**質問 + ERROR内容** を回答タブに残します。Developerタブにも取得できたHTTP Status、Request、Response/Error bodyを表示するため、原因を追いやすくしています。CostはOrcaRouterの `X-OrcaRouter-Include-Cost: true` を利用し、返らない場合は `(not returned)` と表示します。
+APIエラー、timeout、入力検証エラーでは失敗turnを履歴へ追加しませんが、**今回Question + ERROR内容** を回答タブに一時表示して残します。回答タブを消したりトレースへ強制移動したりしません。Developerタブにも取得できたHTTP Status、Elapsed、Model、Request、Response/Error bodyを表示するため、原因を追いやすくしています。CostはOrcaRouterの `X-OrcaRouter-Include-Cost: true` を利用し、返らない場合は `(not returned)` と表示します。
+
+Mode変更は通信方式の選択だけとし、入力中のQuestionを書き換えません。3実装共通の状態遷移ルールは [UI behavior contract](../docs/ui-behavior-contract.md) を参照してください。
 
 ## Common processing steps
 
