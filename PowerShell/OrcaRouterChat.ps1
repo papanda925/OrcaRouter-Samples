@@ -413,6 +413,25 @@ function Set-DeveloperInformation {
     $developerBox.Text = $lines -join [Environment]::NewLine
 }
 
+function Set-DeveloperPendingInformation {
+    param([string]$Model)
+
+    $developerBox.Text = @(
+        'Developer Information'
+        ('=' * 72)
+        'Result           : SENDING'
+        'HTTP Status      : -'
+        'Elapsed          : -'
+        "Model            : $Model"
+        'Prompt Tokens    : -'
+        'Completion Tokens: -'
+        'Total Tokens     : -'
+        'Cost             : (not returned)'
+        "History          : $($script:conversationHistory.Count) / $($script:MaxHistoryTurns) turns"
+        ''
+        'Request / Response will appear when the worker reports them.'
+    ) -join [Environment]::NewLine
+}
 function Set-UiBusy {
     param([bool]$Busy)
 
@@ -674,6 +693,7 @@ function Invoke-OrcaRouterChat {
     Set-ViewModelValue -Name 'Answer' -Value (Get-ConversationTranscript)
     Set-ViewModelValue -Name 'StatusText' -Value '送信中...'
     $statusText.Foreground = '#64748B'
+    Set-DeveloperPendingInformation -Model $model
     Set-UiBusy -Busy $true
 
     Add-Trace -Step 'ASYNC' -Direction 'LOCAL' -Title 'バックグラウンドRunspaceを開始' -Data @{
