@@ -76,7 +76,7 @@ StreamingではWorker側がSSEを読み取り、途中経過のAnswerを一定�
 
 画面全体はWPFのGridでウィンドウサイズに追従します。**ページ全体を長文化するScrollViewerは使いません。**
 
-長いQuestionやAnswerは、それぞれのTextBox内部だけをスクロールします。
+長いQuestionやAnswerは、それぞれのTextBox内部だけをスクロールします。Question入力欄は初期表示でも複数行を入力できる高さを確保し、「ここに質問を入力してください（複数行・長文可）」と案内を表示します。
 
 ```text
 Window
