@@ -29,7 +29,7 @@ Prompt example / Mode変更にも同じ種類の問題がありました。
 
 3実装はRequestの状態を同じ意味で扱います。**conversation historyはAPIへ渡す内部状態であり、回答欄へそのまま連結表示する必要はありません。**
 
-PowerShell版では、長文時の可読性と応答性を優先し、「回答」には最新のAssistant出力だけを表示します。Request / Response等の診断情報はDeveloper / Traceへ分離します。
+3実装とも、長文時の可読性と応答性を優先し、主結果領域には最新のAssistant出力だけを表示します。conversation historyは次回API Request用に内部保持し、Request / Response等の診断情報はDeveloper / Raw / Traceへ分離します。
 
 | State | 内部Conversation state | 主表示 | Status |
 |---|---|---|---|
@@ -44,7 +44,7 @@ PowerShell版では、長文時の可読性と応答性を優先し、「回答�
 
 ### 3.1 Send直後に未確定の質問を回答欄へ表示しない
 
-SendしたことはStatusで示します。PowerShell版では送信時に前回Answerをクリアし、「送信済み・回答待ち...」を表示します。
+SendしたことはStatusで示します。3実装とも送信時に前回Answerをクリアし、回答待ち状態を表示します。
 
 Streamingは実際にAssistantのdeltaを受信した時点からpartial answerを表示します。質問文そのものを回答欄へ繰り返し表示しません。
 
@@ -53,11 +53,11 @@ Streamingは実際にAssistantのdeltaを受信した時点からpartial answer�
 APIエラー、timeout、JSON parse error、入力検証エラーは、
 次回APIへ送るconversation historyへ追加しません。
 
-ただし利用者が原因を確認できるよう、ERROR内容は主結果領域へ表示します。質問文自体はQuestion欄に残っているため、PowerShell版のAnswerへ重複表示しません。
+ただし利用者が原因を確認できるよう、ERROR内容は主結果領域へ表示します。質問文自体はQuestion欄に残っているため、Answerへ重複表示しません。
 
 ### 3.3 Errorでも結果画面を消さない
 
-エラー発生時に主結果領域を空のままにしません。PowerShell版では回答欄にERROR内容だけを表示します。
+エラー発生時に主結果領域を空のままにしません。回答欄にはERROR内容だけを表示します。
 
 表示例:
 
@@ -129,7 +129,7 @@ conversation historyだけを空にします。
 
 ## 4. 履歴
 
-履歴はアプリ側が保持する**内部Conversation state**で、最大10往復です。PowerShell版では履歴全体を回答欄へ連結表示しません。
+履歴はアプリ側が保持する**内部Conversation state**で、最大10往復です。Web / PowerShell / VBAのいずれも履歴全体を回答欄へ連結表示しません。
 
 ```text
 turn = user + assistant
@@ -167,10 +167,11 @@ Workerで例外が発生した場合は、MessageだけでなくScript line / Po
 10. 11回成功 → 内部履歴は最大10往復
 11. 長文Question / Answer → 各TextBox内部でスクロールし、本文量だけでフォーム全体を無制限に伸ばさない
 12. 画面の高さが足りない → 右側のページスクロールでRESULT / Statusまで到達できる
-13. 回答待ち → Busy表示が見え、WPF UIは操作可能なまま
+13. 回答待ち → Busy / Status表示が見え、利用者に処理中であることが分かる
+14. Web / PowerShell / VBA → Answerへ過去のQuestion / Assistant履歴を連結表示しない
 
 PowerShellはWPFの実UI自己テストでも確認します。
-Web/VBAはCIのUI contract検査と各実装の自己テスト可能部分で確認します。
+WebはDOM契約テスト、VBAはローカルSelfTestとCIの静的契約検査でも確認します。
 
 ## 6. レビュー観点
 
