@@ -11,6 +11,7 @@
 
 param(
     [switch]$SelfTest,
+    [switch]$PipelineSelfTest,
     [string]$ApiKey = '',
     [string]$Model = 'orcarouter/free',
     [string]$Question = '',
@@ -444,6 +445,54 @@ function Invoke-JsonRequest {
 
         Add-WorkerTrace -Step 'STEP 3' -Direction 'REQUEST' -Title $TraceTitle -Data @{
             TimeoutSeconds = $requestTimeoutSeconds
+        }
+
+        if ($PipelineSelfTest) {
+            $json = [pscustomobject]@{
+                id = 'mock-chat-completion'
+                object = 'chat.completion'
+                created = 0
+                model = 'mock/provider-model'
+                choices = @(
+                    [pscustomobject]@{
+                        index = 0
+                        message = [pscustomobject]@{
+                            role = 'assistant'
+                            content = 'mock pipeline answer'
+                        }
+                        finish_reason = 'stop'
+                    }
+                )
+                usage = [pscustomobject]@{
+                    prompt_tokens = 10
+                    completion_tokens = 5
+                    total_tokens = 15
+                }
+            }
+
+            $rawResponse = $json | ConvertTo-Json -Depth 30 -Compress
+            $headers = [ordered]@{ 'X-Orca-Test' = 'pipeline-self-test' }
+            $status = 200
+
+            $script:lastHttpStatus = $status
+            $script:lastResponse = $json
+            $script:lastUsage = $json.usage
+            $script:lastActualModel = $json.model
+
+            Add-WorkerTrace -Step 'STEP 4' -Direction 'RESPONSE' -Title 'Mock HTTPレスポンスを受信' -Data @{
+                Status = $status
+                StatusText = 'OK'
+                ElapsedMs = $Stopwatch.ElapsedMilliseconds
+                Headers = $headers
+                RawBody = $rawResponse
+            }
+
+            return [pscustomobject]@{
+                Json = $json
+                RawBody = $rawResponse
+                Headers = $headers
+                Status = $status
+            }
         }
 
         $client = New-HttpClient
