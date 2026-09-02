@@ -325,6 +325,11 @@ jobs:
               "Web must not flash pending question before a response.",
           )
 
+          require(
+              "function Show-RequestError" in ps,
+              "PowerShell shared error renderer function is missing.",
+          )
+
           mode_start = ps.find("$modeBox.Add_SelectionChanged({")
           mode_end = ps.find("$questionBox.Add_TextChanged({", mode_start)
           require(mode_start >= 0 and mode_end > mode_start, "PowerShell Mode handler not found.")
