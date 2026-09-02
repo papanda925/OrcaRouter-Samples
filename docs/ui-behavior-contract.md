@@ -165,8 +165,9 @@ Workerで例外が発生した場合は、MessageだけでなくScript line / Po
 8. Mode変更 → Questionは変わらない
 9. New Chat → 内部履歴だけ消える
 10. 11回成功 → 内部履歴は最大10往復
-11. 長文Question / Answer → フォーム全体を押し広げず各TextBox内部でスクロールする
-12. 回答待ち → Busy表示が見え、WPF UIは操作可能なまま
+11. 長文Question / Answer → 各TextBox内部でスクロールし、本文量だけでフォーム全体を無制限に伸ばさない
+12. 画面の高さが足りない → 右側のページスクロールでRESULT / Statusまで到達できる
+13. 回答待ち → Busy表示が見え、WPF UIは操作可能なまま
 
 PowerShellはWPFの実UI自己テストでも確認します。
 Web/VBAはCIのUI contract検査と各実装の自己テスト可能部分で確認します。
