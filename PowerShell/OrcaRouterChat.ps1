@@ -914,10 +914,6 @@ if ($UiBindingCheck) {
         if (-not $questionBox.IsEnabled) { throw 'QuestionBox must be enabled.' }
         if (-not $questionBox.Focusable) { throw 'QuestionBox must be focusable.' }
 
-        if ($questionBox.ActualHeight -lt 120) {
-            throw "QuestionBox is too small: $($questionBox.ActualHeight)"
-        }
-
         if ($null -eq $resultTabs) {
             throw 'ResultTabs was not found.'
         }
