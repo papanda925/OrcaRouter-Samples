@@ -379,10 +379,16 @@ ErrorHandler:
             developerResponse = latestJsonPayload
         End If
 
+        If startedAt > 0 Then
+            elapsedSecondsValue = ElapsedSeconds(startedAt)
+        Else
+            elapsedSecondsValue = 0
+        End If
+
         UpdateOrcaRouterDeveloperInformation _
             ws, _
             httpStatus, _
-            IIf(startedAt > 0, ElapsedSeconds(startedAt), 0), _
+            elapsedSecondsValue, _
             model, _
             requestBody, _
             developerResponse
@@ -536,6 +542,10 @@ Public Sub SendOrcaRouterToolCalling()
     Dim secondHeaders As String
     Dim secondStatus As Long
     Dim assistantText As String
+    Dim developerRequest As String
+    Dim developerResponse As String
+    Dim developerStatus As Long
+    Dim elapsedSecondsValue As Double
 
     Dim startedAt As Double
 
@@ -551,7 +561,8 @@ Public Sub SendOrcaRouterToolCalling()
     model = Trim$(CStr(ws.Range("B4").Value))
     question = Trim$(CStr(ws.Range("B6").Value))
 
-    ws.Range("B11").Value = vbNullString
+    'Keep committed conversation visible while the request is pending.
+    ws.Range("B11").Value = GetOrcaRouterConversationDisplay()
     PrepareRawResponse ws, "Raw JSON - Tool Calling"
 
     'STEP 1: Validate inputs.
@@ -681,7 +692,21 @@ Public Sub SendOrcaRouterToolCalling()
              "Answer length: " & Len(assistantText)
 
     'STEP 6: Update UI and trace.
-    ws.Range("B11").Value = assistantText
+    CommitOrcaRouterConversationTurn question, assistantText
+    ws.Range("B11").Value = GetOrcaRouterConversationDisplay()
+
+    developerRequest = _
+        "{""request_1"":" & firstRequest & _
+        ",""request_2"":" & secondRequest & "}"
+
+    UpdateOrcaRouterDeveloperInformation _
+        ws, _
+        secondStatus, _
+        ElapsedSeconds(startedAt), _
+        model, _
+        developerRequest, _
+        secondResponse, _
+        firstResponse
 
     AddTrace ws, "STEP 6", "LOCAL", "Display answer in worksheet", _
              "Mode: Tool Calling" & vbCrLf & _
@@ -703,7 +728,40 @@ ErrorHandler:
 
     If Not ws Is Nothing Then
 
-        ws.Range("B11").Value = "ERROR: " & errorDescription
+        ws.Range("B11").Value = _
+            GetOrcaRouterConversationDisplay( _
+                question, _
+                "ERROR: " & errorDescription)
+
+        If secondStatus > 0 Then
+            developerStatus = secondStatus
+            developerResponse = secondResponse
+        Else
+            developerStatus = firstStatus
+            developerResponse = firstResponse
+        End If
+
+        If Len(secondRequest) > 0 Then
+            developerRequest = _
+                "{""request_1"":" & firstRequest & _
+                ",""request_2"":" & secondRequest & "}"
+        Else
+            developerRequest = firstRequest
+        End If
+
+        If startedAt > 0 Then
+            elapsedSecondsValue = ElapsedSeconds(startedAt)
+        Else
+            elapsedSecondsValue = 0
+        End If
+
+        UpdateOrcaRouterDeveloperInformation _
+            ws, _
+            developerStatus, _
+            elapsedSecondsValue, _
+            model, _
+            developerRequest, _
+            developerResponse
 
         AddTrace ws, "ERROR", "ERROR", "Tool Calling error", _
                  "Err.Number: " & errorNumber & vbCrLf & _
@@ -851,16 +909,18 @@ Private Function BuildStreamingRequestJson( _
     ByVal model As String, _
     ByVal question As String) As String
 
-    BuildStreamingRequestJson = _
-        "{" & _
-        """model"":""" & JsonEscape(model) & """," & _
-        """messages"":[{" & _
-            """role"":""user""," & _
-            """content"":""" & JsonEscape(question) & """" & _
-        "}]," & _
-        """stream"":true," & _
-        """stream_options"":{""include_usage"":true}" & _
-        "}"
+    Dim result As String
+
+    result = "{"
+    result = result & """model"":""" & JsonEscape(model) & ""","
+    result = result & """messages"":["
+    result = result & BuildOrcaRouterConversationMessageItemsJson(question)
+    result = result & "],"
+    result = result & """stream"":true,"
+    result = result & """stream_options"":{""include_usage"":true}"
+    result = result & "}"
+
+    BuildStreamingRequestJson = result
 
 End Function
 
@@ -879,10 +939,7 @@ Private Function BuildToolRequestJson( _
     result = result & """role"":""system"","
     result = result & """content"":""This is a Tool Calling learning demo. Call calculate_sum. If the user did not provide two numbers, use 123 and 456."""
     result = result & "},"
-    result = result & "{"
-    result = result & """role"":""user"","
-    result = result & """content"":""" & JsonEscape(question) & """"
-    result = result & "}"
+    result = result & BuildOrcaRouterConversationMessageItemsJson(question)
     result = result & "],"
     result = result & """tools"":[{"
     result = result & """type"":""function"","
@@ -929,10 +986,8 @@ Private Function BuildToolResultRequestJson( _
     result = result & """role"":""system"","
     result = result & """content"":""This is a Tool Calling learning demo. Call calculate_sum. If the user did not provide two numbers, use 123 and 456."""
     result = result & "},"
-    result = result & "{"
-    result = result & """role"":""user"","
-    result = result & """content"":""" & JsonEscape(question) & """"
-    result = result & "},"
+    result = result & BuildOrcaRouterConversationMessageItemsJson(question)
+    result = result & ","
     result = result & "{"
     result = result & """role"":""assistant"","
     result = result & """content"":null,"
