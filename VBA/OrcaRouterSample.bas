@@ -694,7 +694,10 @@ Public Sub SendOrcaRouterChat()
         GoTo CleanExit
     End If
 
-    ws.Range("B11").Value = GetOrcaRouterConversationDisplay(question)
+    'Permanent UI contract:
+    'while waiting, keep committed conversation unchanged.
+    'Do not flash the submitted question before a response exists.
+    ws.Range("B11").Value = GetOrcaRouterConversationDisplay()
     PrepareRawResponse ws, "Raw JSON Response - " & mode
 
     'STEP 1: Validate inputs.
@@ -834,7 +837,25 @@ ErrorHandler:
 
     If Not ws Is Nothing Then
 
-        ws.Range("B11").Value = "ERROR: " & errorDescription
+        'Show the submitted question and error without committing the failed turn.
+        ws.Range("B11").Value = _
+            GetOrcaRouterConversationDisplay( _
+                question, _
+                "ERROR: " & errorDescription)
+
+        If startedAt > 0 Then
+            elapsedTimeSeconds = ElapsedSeconds(startedAt)
+        Else
+            elapsedTimeSeconds = 0
+        End If
+
+        UpdateOrcaRouterDeveloperInformation _
+            ws, _
+            httpStatus, _
+            elapsedTimeSeconds, _
+            model, _
+            requestBody, _
+            responseText
 
         AddTrace ws, "ERROR", "ERROR", "An error occurred", _
                  "Err.Number: " & errorNumber & vbCrLf & _
@@ -960,6 +981,7 @@ Public Sub RunOrcaRouterVbaSelfTests()
     Dim encodedText As String
     Dim decodedText As String
     Dim requestJson As String
+    Dim displayText As String
     Dim utf8Bytes As Variant
     Dim byteCount As Long
 
@@ -984,7 +1006,7 @@ Public Sub RunOrcaRouterVbaSelfTests()
                   "BuildRequestJson produced an unexpected result."
     End If
 
-    AddConversationTurn "first question", "first answer"
+    CommitOrcaRouterConversationTurn "first question", "first answer"
     requestJson = BuildRequestJson("orcarouter/free", "second question")
 
     If InStr(1, requestJson, """role"":""assistant""", vbBinaryCompare) = 0 Or _
@@ -993,6 +1015,17 @@ Public Sub RunOrcaRouterVbaSelfTests()
 
         Err.Raise vbObjectError + 3005, "RunOrcaRouterVbaSelfTests", _
                   "Conversation history was not included in BuildRequestJson."
+    End If
+
+    displayText = GetOrcaRouterConversationDisplay( _
+                      "failed question", _
+                      "ERROR: synthetic failure")
+
+    If InStr(1, displayText, "failed question", vbBinaryCompare) = 0 Or _
+       InStr(1, displayText, "ERROR: synthetic failure", vbBinaryCompare) = 0 Then
+
+        Err.Raise vbObjectError + 3006, "RunOrcaRouterVbaSelfTests", _
+                  "Failed requests must keep the submitted question and error visible."
     End If
 
     ClearConversationHistoryState
