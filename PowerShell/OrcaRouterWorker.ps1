@@ -72,7 +72,40 @@ function Add-WorkerTrace {
 }
 
 
+function Get-HistoryTurnCount {
+    param([object[]]$Items)
+
+    $count = 0
+
+    foreach ($turn in @($Items)) {
+        if ($null -eq $turn) {
+            continue
+        }
+
+        $count += 1
+    }
+
+    return $count
+}
+
 if ($SelfTest) {
+    if ((Get-HistoryTurnCount -Items @()) -ne 0) {
+        throw 'History count self-test failed for an empty array.'
+    }
+
+    if ((Get-HistoryTurnCount -Items @($null)) -ne 0) {
+        throw 'History count self-test failed for a null placeholder.'
+    }
+
+    $historyTestTurn = [pscustomobject]@{
+        User = 'test user'
+        Assistant = 'test assistant'
+    }
+
+    if ((Get-HistoryTurnCount -Items @($historyTestTurn)) -ne 1) {
+        throw 'History count self-test failed for one turn.'
+    }
+
     Add-WorkerEvent -Type 'Trace' -Values @{
         Step = 'SELFTEST'
         Direction = 'LOCAL'
@@ -475,7 +508,7 @@ function Invoke-Chat {
     Add-WorkerTrace -Step 'STEP 2' -Direction 'REQUEST' -Title '通常Chatリクエストを組み立て' -Data @{
         Endpoint = $apiEndpoint
         Authorization = 'Bearer {0}' -f (Mask-ApiKey -Value $ApiKey)
-        HistoryTurns = @($History).Count
+        HistoryTurns = (Get-HistoryTurnCount -Items $History)
         IncludeCost = $true
         Body = $body
     }
@@ -491,7 +524,7 @@ function Invoke-Chat {
 
     Add-WorkerTrace -Step 'STEP 5' -Direction 'LOCAL' -Title 'Assistantメッセージを解析' -Data @{
         AnswerChars = $answer.Length
-        HistoryTurns = @($History).Count
+        HistoryTurns = (Get-HistoryTurnCount -Items $History)
         Usage = if ($null -ne $usage) { $usage } else { '(usage not returned)' }
     }
 
@@ -799,7 +832,7 @@ function Invoke-ToolCalling {
 
     Add-WorkerTrace -Step 'STEP 5' -Direction 'LOCAL' -Title 'Tool Calling後の最終回答を解析' -Data @{
         AnswerChars = $answer.Length
-        HistoryTurns = @($History).Count
+        HistoryTurns = (Get-HistoryTurnCount -Items $History)
         Usage = if ($null -ne $usage) { $usage } else { '(usage not returned)' }
     }
 
@@ -849,7 +882,7 @@ try {
     Add-WorkerTrace -Step 'STEP 6' -Direction 'LOCAL' -Title 'バックグラウンド処理を完了' -Data @{
         Mode = $Mode
         Completed = $true
-        HistoryTurns = @($History).Count
+        HistoryTurns = (Get-HistoryTurnCount -Items $History)
         TotalElapsedMs = $stopwatch.ElapsedMilliseconds
     }
 
@@ -867,6 +900,9 @@ catch {
     Add-WorkerEvent -Type 'Error' -Values @{
         Message = $_.Exception.Message
         ExceptionType = $_.Exception.GetType().FullName
+        ScriptLineNumber = $_.InvocationInfo.ScriptLineNumber
+        PositionMessage = $_.InvocationInfo.PositionMessage
+        ScriptStackTrace = $_.ScriptStackTrace
         TotalElapsedMs = $stopwatch.ElapsedMilliseconds
         HttpStatus = $script:lastHttpStatus
         Usage = $script:lastUsage
