@@ -357,7 +357,9 @@ Modeを選択してQuestionを入力し、**Send** を押します。
 
 ## Prompt example
 
-要約、初心者向け説明、コードレビュー、JSON、翻訳の例を用意しています。例をそのまま送るのではなく、必要な文章やコードへ書き換えて使います。
+PowerShell版では「プロンプト例」のプルダウンで種類を選び、**質問欄に挿入** を押したときだけ定型文を質問欄へ入れます。選択しただけでは、入力済みの質問を上書きしません。自動送信もしません。
+
+要約、初心者向け説明、コードレビュー、JSON、翻訳の例を用意しています。挿入後に、対象の文章やコードへ書き換えて使います。
 
 ## Developer Information
 
@@ -376,6 +378,8 @@ Modeを選択してQuestionを入力し、**Send** を押します。
 - Response JSON
 
 Cost取得ではOrcaRouterの `X-OrcaRouter-Include-Cost: true` を利用します。APIが `usage.cost_usd` を返さない場合は金額を推測しません。
+
+PowerShell版は、APIエラー時も回答タブに「送信した質問」とエラーメッセージを残します。トレースタブへ自動遷移しないため、まず回答欄で結果を確認し、必要に応じてDeveloper / Traceを開けます。Developerにはエラー時も可能な範囲でHTTP Status、Request、Response/Error bodyを残します。
 
 ---
 

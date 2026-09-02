@@ -202,9 +202,11 @@ Tool Callingはモデル対応状況やQuotaによって、ローカル関数を
 
 WPF側で直近10往復の user / assistant 履歴を保持し、Background Runspaceへスナップショットを渡して次回の `messages` に再送します。**新しいチャット** はこのローカル履歴だけをクリアし、ModelやAPI Keyは残します。
 
-Prompt exampleから要約、初心者向け説明、コードレビュー、JSON、英訳の雛形をQuestionへ入れられます。
+「プロンプト例」で要約、初心者向け説明、コードレビュー、JSON、英訳を選び、**質問欄に挿入** を押すと雛形をQuestionへ入れられます。プルダウンを選択しただけでは質問欄を書き換えず、自動送信もしません。
 
-Developerタブには HTTP Status、Elapsed、Model、Prompt / Completion / Total Tokens、Cost、Request JSON、Response JSON を表示します。CostはOrcaRouterの `X-OrcaRouter-Include-Cost: true` を利用し、返らない場合は `(not returned)` と表示します。
+送信直後は回答タブに質問を表示したまま処理します。成功時は回答タブにAssistantの回答を追加し、Developerタブへ HTTP Status、Elapsed、Model、Prompt / Completion / Total Tokens、Cost、Request JSON、Response JSON を表示します。
+
+APIエラーが発生した場合も回答タブを自動的に消したりトレースへ強制移動したりせず、**質問 + ERROR内容** を回答タブに残します。Developerタブにも取得できたHTTP Status、Request、Response/Error bodyを表示するため、原因を追いやすくしています。CostはOrcaRouterの `X-OrcaRouter-Include-Cost: true` を利用し、返らない場合は `(not returned)` と表示します。
 
 ## Common processing steps
 

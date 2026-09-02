@@ -30,6 +30,14 @@ $apiEndpoint = 'https://api.orcarouter.ai/v1/chat/completions'
 $requestTimeoutSeconds = 120
 $maxStreamTraceEvents = 50
 
+# Keep the latest request/response metadata so an Error event can still
+# populate the Answer and Developer tabs instead of losing diagnostic data.
+$script:lastRequest = $null
+$script:lastResponse = $null
+$script:lastHttpStatus = $null
+$script:lastUsage = $null
+$script:lastActualModel = $Model
+
 function Add-WorkerEvent {
     param(
         [Parameter(Mandatory = $true)][string]$Type,
@@ -395,6 +403,11 @@ function Invoke-JsonRequest {
 
     try {
         $requestJson = $Body | ConvertTo-Json -Depth 30 -Compress
+        $script:lastRequest = $Body
+        $script:lastResponse = $null
+        $script:lastHttpStatus = $null
+        $script:lastUsage = $null
+        $script:lastActualModel = $Model
 
         Add-WorkerTrace -Step 'STEP 3' -Direction 'REQUEST' -Title $TraceTitle -Data @{
             TimeoutSeconds = $requestTimeoutSeconds
@@ -407,6 +420,8 @@ function Invoke-JsonRequest {
         $rawResponse = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
         $headers = Get-ResponseHeaders -Response $response
         $status = [int]$response.StatusCode
+        $script:lastHttpStatus = $status
+        $script:lastResponse = $rawResponse
 
         Add-WorkerTrace -Step 'STEP 4' -Direction 'RESPONSE' -Title 'HTTPレスポンスを受信' -Data @{
             Status = $status
@@ -426,6 +441,13 @@ function Invoke-JsonRequest {
         }
         catch {
             throw "レスポンスJSONの解析に失敗しました: $($_.Exception.Message)"
+        }
+
+        $script:lastResponse = $json
+        $script:lastUsage = Get-PropertyValue -Object $json -Name 'usage'
+        $modelValue = Get-PropertyValue -Object $json -Name 'model'
+        if (-not [string]::IsNullOrWhiteSpace([string]$modelValue)) {
+            $script:lastActualModel = [string]$modelValue
         }
 
         return [pscustomobject]@{
@@ -845,6 +867,12 @@ catch {
     Add-WorkerEvent -Type 'Error' -Values @{
         Message = $_.Exception.Message
         ExceptionType = $_.Exception.GetType().FullName
+        TotalElapsedMs = $stopwatch.ElapsedMilliseconds
+        HttpStatus = $script:lastHttpStatus
+        Usage = $script:lastUsage
+        Request = $script:lastRequest
+        Response = $script:lastResponse
+        ActualModel = $script:lastActualModel
     }
 }
 finally {

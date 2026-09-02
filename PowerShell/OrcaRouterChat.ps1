@@ -134,6 +134,7 @@ $historyStatusText = $window.FindName('HistoryStatusText')
 $developerBox = $window.FindName('DeveloperBox')
 $newChatButton = $window.FindName('NewChatButton')
 $promptExampleBox = $window.FindName('PromptExampleBox')
+$applyPromptExampleButton = $window.FindName('ApplyPromptExampleButton')
 $referralButton = $window.FindName('ReferralButton')
 $firstRunPanel = $window.FindName('FirstRunPanel')
 
@@ -320,10 +321,36 @@ function Get-HistorySnapshot {
     return $snapshot
 }
 
+function Get-WorkerEventValue {
+    param(
+        $WorkerEvent,
+        [Parameter(Mandatory = $true)][string]$Name,
+        $DefaultValue = $null
+    )
+
+    if ($null -eq $WorkerEvent) {
+        return $DefaultValue
+    }
+
+    $property = $WorkerEvent.PSObject.Properties[$Name]
+    if ($null -eq $property) {
+        return $DefaultValue
+    }
+
+    return $property.Value
+}
+
 function Set-DeveloperInformation {
     param($WorkerEvent)
 
-    $usage = $WorkerEvent.Usage
+    $usage = Get-WorkerEventValue -WorkerEvent $WorkerEvent -Name 'Usage'
+    $httpStatus = Get-WorkerEventValue -WorkerEvent $WorkerEvent -Name 'HttpStatus' -DefaultValue '-'
+    $elapsedMs = Get-WorkerEventValue -WorkerEvent $WorkerEvent -Name 'TotalElapsedMs' -DefaultValue '-'
+    $actualModel = Get-WorkerEventValue -WorkerEvent $WorkerEvent -Name 'ActualModel' -DefaultValue ([string]$viewModel.Row['Model'])
+    $requestValue = Get-WorkerEventValue -WorkerEvent $WorkerEvent -Name 'Request'
+    $responseValue = Get-WorkerEventValue -WorkerEvent $WorkerEvent -Name 'Response'
+    $errorMessage = Get-WorkerEventValue -WorkerEvent $WorkerEvent -Name 'Message' -DefaultValue ''
+
     $promptTokens = '-'
     $completionTokens = '-'
     $totalTokens = '-'
@@ -348,33 +375,42 @@ function Set-DeveloperInformation {
     }
 
     $requestText = '{}'
-    if ($null -ne $WorkerEvent.Request) {
-        $requestText = ConvertTo-TraceText -Data $WorkerEvent.Request
+    if ($null -ne $requestValue) {
+        $requestText = ConvertTo-TraceText -Data $requestValue
     }
 
     $responseText = '{}'
-    if ($null -ne $WorkerEvent.Response) {
-        $responseText = ConvertTo-TraceText -Data $WorkerEvent.Response
+    if ($null -ne $responseValue) {
+        $responseText = ConvertTo-TraceText -Data $responseValue
     }
 
-    $developerBox.Text = @(
+    $lines = @(
         'Developer Information'
         ('=' * 72)
-        "HTTP Status      : $($WorkerEvent.HttpStatus)"
-        "Elapsed          : $($WorkerEvent.TotalElapsedMs) ms"
-        "Model            : $($WorkerEvent.ActualModel)"
+        "HTTP Status      : $httpStatus"
+        "Elapsed          : $elapsedMs ms"
+        "Model            : $actualModel"
         "Prompt Tokens    : $promptTokens"
         "Completion Tokens: $completionTokens"
         "Total Tokens     : $totalTokens"
         "Cost             : $costText"
         "History          : $($script:conversationHistory.Count) / $($script:MaxHistoryTurns) turns"
-        ''
-        '--- Request JSON ---'
-        $requestText
-        ''
-        '--- Response JSON ---'
-        $responseText
-    ) -join [Environment]::NewLine
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace([string]$errorMessage)) {
+        $lines += ''
+        $lines += '--- Error ---'
+        $lines += (Protect-LocalTraceText -Text ([string]$errorMessage))
+    }
+
+    $lines += ''
+    $lines += '--- Request JSON ---'
+    $lines += $requestText
+    $lines += ''
+    $lines += '--- Response JSON / Error body ---'
+    $lines += $responseText
+
+    $developerBox.Text = $lines -join [Environment]::NewLine
 }
 
 function Set-UiBusy {
@@ -386,6 +422,7 @@ function Set-UiBusy {
     $modelBox.IsEnabled = -not $Busy
     $modeBox.IsEnabled = -not $Busy
     $promptExampleBox.IsEnabled = -not $Busy
+    $applyPromptExampleButton.IsEnabled = -not $Busy
 
     # The user can prepare the next question while the current request runs.
     $questionBox.IsEnabled = $true
@@ -482,10 +519,11 @@ function Complete-OrcaRouterWorker {
             Message = $safeMessage
         }
 
-        Set-ViewModelValue -Name 'Answer' -Value (Get-ConversationTranscript)
-        Set-ViewModelValue -Name 'StatusText' -Value 'Error - Trace を確認してください'
+        $errorAnswer = Get-ConversationTranscript -PendingQuestion $script:currentQuestion -PendingAnswer ("ERROR: " + $safeMessage)
+        Set-ViewModelValue -Name 'Answer' -Value $errorAnswer
+        Set-ViewModelValue -Name 'StatusText' -Value 'Error - 回答欄にエラーを表示しました'
         $statusText.Foreground = '#B42318'
-        $resultTabs.SelectedIndex = 2
+        $resultTabs.SelectedIndex = 0
     }
     finally {
         try {
@@ -532,22 +570,33 @@ function Process-OrcaRouterWorkerEvents {
                 Set-DeveloperInformation -WorkerEvent $workerEvent
                 Set-ViewModelValue -Name 'StatusText' -Value 'Completed'
                 $statusText.Foreground = '#0F766E'
+
+                # Completion returns the user to the conversation so the answer
+                # is immediately visible. Developer / Trace remain one click away.
+                $resultTabs.SelectedIndex = 0
                 Set-UiBusy -Busy $false
                 $script:workerFinishedInUi = $true
             }
 
             'Error' {
-                $safeMessage = Protect-LocalTraceText -Text ([string]$workerEvent.Message)
+                $safeMessage = Protect-LocalTraceText -Text ([string](Get-WorkerEventValue -WorkerEvent $workerEvent -Name 'Message' -DefaultValue 'Unknown error'))
+                $exceptionType = [string](Get-WorkerEventValue -WorkerEvent $workerEvent -Name 'ExceptionType' -DefaultValue '(unknown)')
 
                 Add-Trace -Step 'ERROR' -Direction 'ERROR' -Title 'バックグラウンド処理でエラー' -Data @{
                     Message = $safeMessage
-                    Type = [string]$workerEvent.ExceptionType
+                    Type = $exceptionType
+                    HttpStatus = Get-WorkerEventValue -WorkerEvent $workerEvent -Name 'HttpStatus' -DefaultValue '-'
                 }
 
-                Set-ViewModelValue -Name 'Answer' -Value (Get-ConversationTranscript)
-                Set-ViewModelValue -Name 'StatusText' -Value 'Error - Trace を確認してください'
+                $errorAnswer = Get-ConversationTranscript -PendingQuestion $script:currentQuestion -PendingAnswer ("ERROR: " + $safeMessage)
+                Set-ViewModelValue -Name 'Answer' -Value $errorAnswer
+                Set-DeveloperInformation -WorkerEvent $workerEvent
+                Set-ViewModelValue -Name 'StatusText' -Value 'Error - 回答欄にエラーを表示しました'
                 $statusText.Foreground = '#B42318'
-                $resultTabs.SelectedIndex = 2
+
+                # Do not move the user away from the answer automatically.
+                # Developer / Trace remain available when more detail is needed.
+                $resultTabs.SelectedIndex = 0
                 Set-UiBusy -Busy $false
                 $script:workerFinishedInUi = $true
             }
@@ -660,8 +709,10 @@ $apiKeyBox.Add_PasswordChanged({
     Update-FirstRunPanel
 })
 
-$promptExampleBox.Add_SelectionChanged({
+$applyPromptExampleButton.Add_Click({
     if ($promptExampleBox.SelectedIndex -le 0) {
+        Set-ViewModelValue -Name 'StatusText' -Value 'プロンプト例を選択してください'
+        $statusText.Foreground = '#64748B'
         return
     }
 
@@ -686,7 +737,10 @@ $promptExampleBox.Add_SelectionChanged({
         }
     }
 
+    Set-ViewModelValue -Name 'StatusText' -Value ("プロンプト例「" + $selectedText + "」を質問欄に挿入しました")
+    $statusText.Foreground = '#64748B'
     [void]$questionBox.Focus()
+    $questionBox.CaretIndex = $questionBox.Text.Length
 })
 
 $modeBox.Add_SelectionChanged({
@@ -796,6 +850,22 @@ if ($UiBindingCheck) {
             throw 'PromptExampleBox was not found.'
         }
 
+        if ($null -eq $applyPromptExampleButton) {
+            throw 'ApplyPromptExampleButton was not found.'
+        }
+
+        # Selecting a prompt example must not overwrite the user's question.
+        $questionBox.Text = 'Prompt selection must not overwrite this text'
+        $promptExampleBox.SelectedIndex = 1
+        $window.Dispatcher.Invoke(
+            [System.Action]{ },
+            [System.Windows.Threading.DispatcherPriority]::Background
+        )
+
+        if ($questionBox.Text -ne 'Prompt selection must not overwrite this text') {
+            throw 'Selecting PromptExampleBox must not change QuestionBox until Apply is clicked.'
+        }
+
         $resultTabs.SelectedIndex = 0
         $window.UpdateLayout()
 
@@ -856,6 +926,55 @@ if ($UiBindingCheck) {
         if ([string]$viewModel.Row['Question'] -ne 'Question editor input test') {
             throw 'QuestionBox TextChanged did not update the ViewModel.'
         }
+
+        # Regression test: an API/worker error must remain visible in Answer,
+        # must populate Developer, and must not force the Trace tab.
+        $script:currentQuestion = 'Synthetic question'
+        $script:workerEventQueue = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
+        $script:workerAsyncResult = $null
+        $script:workerFinishedInUi = $false
+
+        $script:workerEventQueue.Enqueue(
+            [pscustomobject]@{
+                Type = 'Error'
+                Message = 'Synthetic API error'
+                ExceptionType = 'System.Exception'
+                TotalElapsedMs = 42
+                HttpStatus = 429
+                Usage = $null
+                Request = [pscustomobject]@{ model = 'orcarouter/free' }
+                Response = [pscustomobject]@{ error = 'quota' }
+                ActualModel = 'orcarouter/free'
+            }
+        )
+
+        Process-OrcaRouterWorkerEvents
+        $window.Dispatcher.Invoke(
+            [System.Action]{ },
+            [System.Windows.Threading.DispatcherPriority]::DataBind
+        )
+
+        if ($answerBox.Text -notmatch 'Synthetic question') {
+            throw 'Error rendering lost the submitted question.'
+        }
+
+        if ($answerBox.Text -notmatch 'Synthetic API error') {
+            throw 'Error rendering did not show the API error in Answer.'
+        }
+
+        if ($developerBox.Text -notmatch 'HTTP Status\s+: 429') {
+            throw 'Developer Information did not receive error HTTP status.'
+        }
+
+        if ($developerBox.Text -notmatch 'Synthetic API error') {
+            throw 'Developer Information did not show error details.'
+        }
+
+        if ($resultTabs.SelectedIndex -ne 0) {
+            throw 'Error handling must keep the Answer tab selected.'
+        }
+
+        $script:workerEventQueue = $null
     }
     finally {
         $window.Close()

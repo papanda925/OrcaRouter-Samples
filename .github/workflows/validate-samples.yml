@@ -83,6 +83,10 @@ jobs:
             throw 'PromptExampleBox was not found in MainWindow.xaml'
           }
 
+          if ($null -eq $window.FindName('ApplyPromptExampleButton')) {
+            throw 'ApplyPromptExampleButton was not found in MainWindow.xaml'
+          }
+
           $pageScrollViewer = $window.FindName('PageScrollViewer')
 
           if ($null -eq $pageScrollViewer) {
