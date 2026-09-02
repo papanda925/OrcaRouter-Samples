@@ -412,6 +412,9 @@ function Set-DeveloperInformation {
 function Set-DeveloperPendingInformation {
     param([string]$Model)
 
+    # A new request must not reopen the previous request's diagnostics.
+    $script:latestDeveloperEvent = $null
+
     $developerBox.Text = @(
         'Developer Information'
         ('=' * 72)
