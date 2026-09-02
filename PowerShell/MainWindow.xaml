@@ -42,9 +42,9 @@
             <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="2*" MinHeight="140"/>
+            <RowDefinition Height="290" MinHeight="260"/>
             <RowDefinition Height="8"/>
-            <RowDefinition Height="3*" MinHeight="220"/>
+            <RowDefinition Height="*" MinHeight="220"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
@@ -156,7 +156,8 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*" MinHeight="120"/>
                 </Grid.RowDefinitions>
                 <Grid Grid.Row="0" Margin="0,0,0,10">
                     <Grid.ColumnDefinitions>
@@ -234,10 +235,17 @@
                         FontSize="12"/>
                 </Grid>
 
+                <TextBlock
+                    Grid.Row="2"
+                    Margin="0,0,0,6"
+                    Text="ここに質問を入力してください（複数行・長文可）"
+                    Foreground="#64748B"
+                    FontSize="12"/>
+
                 <TextBox
                     x:Name="QuestionBox"
-                    Grid.Row="2"
-                    MinHeight="80"
+                    Grid.Row="3"
+                    MinHeight="120"
                     Padding="12"
                     FontSize="15"
                     AcceptsReturn="True"
@@ -253,10 +261,13 @@
                     IsUndoEnabled="True"
                     SpellCheck.IsEnabled="False"
                     InputMethod.IsInputMethodEnabled="True"
-                    Background="White"
+                    Background="#FFFFFF"
+                    BorderBrush="#94A3B8"
+                    BorderThickness="2"
                     Foreground="#172033"
                     CaretBrush="#172033"
-                    SelectionBrush="#B7D7FF"/>
+                    SelectionBrush="#B7D7FF"
+                    ToolTip="ここに質問を入力します。長文は入力欄のスクロールバーで確認できます。"/>
             </Grid>
         </Border>
 
