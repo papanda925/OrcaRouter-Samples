@@ -92,17 +92,34 @@ jobs:
             throw 'ApplyPromptExampleButton was not found in MainWindow.xaml'
           }
 
-          $pageScrollViewer = $window.FindName('PageScrollViewer')
+          if ($null -ne $window.FindName('PageScrollViewer')) {
+            throw 'The page-level ScrollViewer must not return; long text belongs inside editor scrollbars.'
+          }
 
-          if ($null -eq $pageScrollViewer) {
-            throw 'PageScrollViewer was not found in MainWindow.xaml'
+          $busyProgressBar = $window.FindName('BusyProgressBar')
+          if ($null -eq $busyProgressBar) {
+            throw 'BusyProgressBar was not found in MainWindow.xaml'
+          }
+
+          $questionBox = $window.FindName('QuestionBox')
+          $answerBox = $window.FindName('AnswerBox')
+
+          if (
+            $questionBox.VerticalScrollBarVisibility -ne
+            [System.Windows.Controls.ScrollBarVisibility]::Auto
+          ) {
+            throw 'QuestionBox must use its own automatic vertical scrollbar.'
           }
 
           if (
-            $pageScrollViewer.VerticalScrollBarVisibility -ne
+            $answerBox.VerticalScrollBarVisibility -ne
             [System.Windows.Controls.ScrollBarVisibility]::Auto
           ) {
-            throw 'PageScrollViewer must use an automatic vertical scrollbar.'
+            throw 'AnswerBox must use its own automatic vertical scrollbar.'
+          }
+
+          if ($window.ResizeMode -ne [System.Windows.ResizeMode]::CanResizeWithGrip) {
+            throw 'Window must remain freely resizable.'
           }
 
       - name: Execute script parser through Windows PowerShell 5.1
