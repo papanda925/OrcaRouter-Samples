@@ -88,8 +88,9 @@ Public Sub SendOrcaRouterStreaming()
     model = Trim$(CStr(ws.Range("B4").Value))
     question = Trim$(CStr(ws.Range("B6").Value))
 
-    'Keep committed conversation visible while the request is pending.
-    ws.Range("B11").Value = GetOrcaRouterConversationDisplay()
+    'Primary result is answer-only. Keep conversation history internal.
+    ws.Range("B11").Value = vbNullString
+    SetOrcaRouterUiStatus ws, "Waiting for OrcaRouter Streaming response..."
     PrepareRawResponse ws, "Raw JSON - Streaming (latest SSE event)"
 
     'STEP 1: Validate inputs.
@@ -321,7 +322,8 @@ Public Sub SendOrcaRouterStreaming()
 
     'STEP 6: Update UI and trace.
     CommitOrcaRouterConversationTurn question, answerText
-    ws.Range("B11").Value = GetOrcaRouterConversationDisplay()
+    ws.Range("B11").Value = GetOrcaRouterAnswerDisplay(answerText)
+    SetOrcaRouterUiStatus ws, "Completed"
 
     If Len(latestJsonPayload) > 0 Then
         developerResponse = latestJsonPayload
@@ -366,8 +368,8 @@ ErrorHandler:
             errorDisplayText = "ERROR: " & errorDescription
         End If
 
-        ws.Range("B11").Value = _
-            GetOrcaRouterConversationDisplay(question, errorDisplayText)
+        ws.Range("B11").Value = GetOrcaRouterAnswerDisplay(errorDisplayText)
+        SetOrcaRouterUiStatus ws, "Error - check Answer / Developer / Trace", True
 
         If httpStatus = 0 And Not httpRequest Is Nothing Then
             httpStatus = httpRequest.Status
@@ -480,9 +482,12 @@ Private Sub ProcessStreamingSseLine( _
 
         If Len(contentPart) > 0 Then
 
+            If Len(answerText) = 0 Then
+                SetOrcaRouterUiStatus ws, "Receiving Streaming answer..."
+            End If
+
             answerText = answerText & contentPart
-            ws.Range("B11").Value = _
-                GetOrcaRouterConversationDisplay(question, answerText)
+            ws.Range("B11").Value = GetOrcaRouterAnswerDisplay(answerText)
 
             YieldToExcel
 
@@ -562,8 +567,9 @@ Public Sub SendOrcaRouterToolCalling()
     model = Trim$(CStr(ws.Range("B4").Value))
     question = Trim$(CStr(ws.Range("B6").Value))
 
-    'Keep committed conversation visible while the request is pending.
-    ws.Range("B11").Value = GetOrcaRouterConversationDisplay()
+    'Primary result is answer-only. Keep conversation history internal.
+    ws.Range("B11").Value = vbNullString
+    SetOrcaRouterUiStatus ws, "Waiting for Tool Calling response..."
     PrepareRawResponse ws, "Raw JSON - Tool Calling"
 
     'STEP 1: Validate inputs.
@@ -606,6 +612,8 @@ Public Sub SendOrcaRouterToolCalling()
     If firstStatus < 200 Or firstStatus >= 300 Then
         RaiseOrcaRouterHttpError firstStatus, firstHeaders, firstResponse
     End If
+
+    SetOrcaRouterUiStatus ws, "Tool call received - processing result..."
 
     'STEP 5A: Parse tool call.
     toolSection = GetToolCallsSection(firstResponse)
@@ -694,7 +702,8 @@ Public Sub SendOrcaRouterToolCalling()
 
     'STEP 6: Update UI and trace.
     CommitOrcaRouterConversationTurn question, assistantText
-    ws.Range("B11").Value = GetOrcaRouterConversationDisplay()
+    ws.Range("B11").Value = GetOrcaRouterAnswerDisplay(assistantText)
+    SetOrcaRouterUiStatus ws, "Completed"
 
     developerRequest = _
         "{""request_1"":" & firstRequest & _
@@ -730,9 +739,8 @@ ErrorHandler:
     If Not ws Is Nothing Then
 
         ws.Range("B11").Value = _
-            GetOrcaRouterConversationDisplay( _
-                question, _
-                "ERROR: " & errorDescription)
+            GetOrcaRouterAnswerDisplay("ERROR: " & errorDescription)
+        SetOrcaRouterUiStatus ws, "Error - check Answer / Developer / Trace", True
 
         If secondStatus > 0 Then
             developerStatus = secondStatus
