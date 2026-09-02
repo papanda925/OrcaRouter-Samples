@@ -161,20 +161,20 @@ Authorization: Bearer <API_KEY>
 Content-Type: application/json
 ```
 
-## Answer / Raw JSON
+## Conversation / Raw JSON
 
-APIからHTTPレスポンスを受信すると、同じレスポンスを2つの見方で表示します。
+APIからHTTPレスポンスを受信すると、同じ結果を利用者向け表示と開発者向けRaw JSONの2つの見方で確認できます。
 
-- **Answer（B11:H15）**: `choices[0].message.content` からユーザー向け回答本文を取り出して表示
-- **Raw JSON（J3:P15）**: APIから受信したレスポンス本文を、解析前の文字列のまま表示
+- **Conversation（B11:H15）**: 成功済みの user / assistant 履歴と、今回の回答またはエラーを表示
+- **Raw JSON（J3:P15）**: APIから受信したレスポンス本文または最新SSEイベントを、解析前の内容として表示
 
-通常Chatでは受信したJSON全体をRaw JSONへ表示してからAnswerを解析します。そのため、Answer抽出でエラーになった場合でもRaw JSONを見ればAPIが実際に何を返したか確認できます。
+通常Chatでは受信したJSON全体をRaw JSONへ表示してからAssistant本文を解析します。そのため、本文抽出でエラーになった場合でもRaw JSONを見ればAPIが実際に何を返したか確認できます。
 
 Answer抽出は、レスポンス全体から単純に最初の `content` を探すのではなく、`choices` → `message` の位置を確認してから `content` を取得します。また、`content` が文字列ではなくテキストパーツ配列の場合は、最初の `text` をフォールバックとして使用します。
 
-Tool Callingでは1回目のTool CallレスポンスをRaw JSONへ表示し、2回目の最終レスポンス受信後にRaw JSON欄を最終レスポンスへ更新します。Answerには2回目の `message.content` を表示します。
+Tool Callingでは1回目のTool CallレスポンスをRaw JSONへ表示し、2回目の最終レスポンス受信後にRaw JSON欄を最終レスポンスへ更新します。Conversationには成功時に2回目の `message.content` をAssistantとして確定します。
 
-Streamingでは1つのJSONレスポンスではなくSSEイベントが連続します。`XMLHTTP.responseText` を `readyState = 3 (LOADING)` の間から差分読取し、`data: {...}` 行を順次解析します。Raw JSON欄には最後に受信したJSON形式のSSEイベントを表示し、Answer欄には各SSEイベントの `delta.content` を連結して逐次表示します。MSXMLがHTTPレスポンスをUnicode文字列へ変換した後にセルへ書くため、コンソール標準出力経由の文字化けを避けられます。
+Streamingでは1つのJSONレスポンスではなくSSEイベントが連続します。`XMLHTTP.responseText` を `readyState = 3 (LOADING)` の間から差分読取し、`data: {...}` 行を順次解析します。Raw JSON欄には最後に受信したJSON形式のSSEイベントを表示し、Conversationには各SSEイベントの `delta.content` を連結して今回Questionとともに逐次表示します。MSXMLがHTTPレスポンスをUnicode文字列へ変換した後にセルへ書くため、コンソール標準出力経由の文字化けを避けられます。
 
 Raw JSONはExcelセルの上限と可読性を考慮し、非常に長い場合は約30,000文字で切り詰めます。Traceには従来どおりHTTP Status、Headers、Raw response等も記録します。
 
