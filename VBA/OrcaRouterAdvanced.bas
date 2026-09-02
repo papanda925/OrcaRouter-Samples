@@ -62,6 +62,8 @@ Public Sub SendOrcaRouterStreaming()
     Dim contentPart As String
     Dim answerText As String
     Dim responseHeaders As String
+    Dim developerResponse As String
+    Dim errorDisplayText As String
 
     Dim processedChars As Long
     Dim lineFeedPosition As Long
@@ -86,7 +88,8 @@ Public Sub SendOrcaRouterStreaming()
     model = Trim$(CStr(ws.Range("B4").Value))
     question = Trim$(CStr(ws.Range("B6").Value))
 
-    ws.Range("B11").Value = vbNullString
+    'Keep committed conversation visible while the request is pending.
+    ws.Range("B11").Value = GetOrcaRouterConversationDisplay()
     PrepareRawResponse ws, "Raw JSON - Streaming (latest SSE event)"
 
     'STEP 1: Validate inputs.
@@ -185,6 +188,7 @@ Public Sub SendOrcaRouterStreaming()
                         ProcessStreamingSseLine _
                             ws, _
                             lineText, _
+                            question, _
                             answerText, _
                             latestJsonPayload, _
                             eventCount
@@ -250,6 +254,7 @@ Public Sub SendOrcaRouterStreaming()
         ProcessStreamingSseLine _
             ws, _
             pendingText, _
+            question, _
             answerText, _
             latestJsonPayload, _
             eventCount
@@ -315,7 +320,22 @@ Public Sub SendOrcaRouterStreaming()
     End If
 
     'STEP 6: Update UI and trace.
-    ws.Range("B11").Value = answerText
+    CommitOrcaRouterConversationTurn question, answerText
+    ws.Range("B11").Value = GetOrcaRouterConversationDisplay()
+
+    If Len(latestJsonPayload) > 0 Then
+        developerResponse = latestJsonPayload
+    Else
+        developerResponse = httpRequest.responseText
+    End If
+
+    UpdateOrcaRouterDeveloperInformation _
+        ws, _
+        httpStatus, _
+        ElapsedSeconds(startedAt), _
+        model, _
+        requestBody, _
+        developerResponse
 
     AddTrace ws, "STEP 6", "LOCAL", _
              "Display answer in worksheet", _
@@ -339,7 +359,41 @@ ErrorHandler:
 
     If Not ws Is Nothing Then
 
-        ws.Range("B11").Value = "ERROR: " & errorDescription
+        If Len(answerText) > 0 Then
+            errorDisplayText = answerText & vbCrLf & vbCrLf & _
+                               "[ERROR]" & vbCrLf & errorDescription
+        Else
+            errorDisplayText = "ERROR: " & errorDescription
+        End If
+
+        ws.Range("B11").Value = _
+            GetOrcaRouterConversationDisplay(question, errorDisplayText)
+
+        If httpStatus = 0 And Not httpRequest Is Nothing Then
+            httpStatus = httpRequest.Status
+        End If
+
+        If Len(currentResponseText) > 0 Then
+            developerResponse = currentResponseText
+        Else
+            developerResponse = latestJsonPayload
+        End If
+
+        UpdateOrcaRouterDeveloperInformation _
+            ws, _
+            httpStatus, _
+            IIf(startedAt > 0, ElapsedSeconds(startedAt), 0), _
+            model, _
+            requestBody, _
+            developerResponse
+
+        If Len(developerResponse) > 0 Then
+            DisplayRawResponse _
+                ws, _
+                developerResponse, _
+                "Raw JSON - Streaming error", _
+                httpStatus
+        End If
 
         AddTrace ws, "ERROR", "ERROR", _
                  "Streaming error", _
@@ -365,6 +419,7 @@ End Sub
 Private Sub ProcessStreamingSseLine( _
     ByVal ws As Worksheet, _
     ByVal lineText As String, _
+    ByVal question As String, _
     ByRef answerText As String, _
     ByRef latestJsonPayload As String, _
     ByRef eventCount As Long)
@@ -420,7 +475,8 @@ Private Sub ProcessStreamingSseLine( _
         If Len(contentPart) > 0 Then
 
             answerText = answerText & contentPart
-            ws.Range("B11").Value = answerText
+            ws.Range("B11").Value = _
+                GetOrcaRouterConversationDisplay(question, answerText)
 
             YieldToExcel
 
