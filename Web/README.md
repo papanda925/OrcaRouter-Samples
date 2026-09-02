@@ -14,7 +14,7 @@ Model欄は自由入力なので、`orcarouter/free` から利用可能な有料
 
 1画面で次を確認できます。
 
-- 最大10往復の会話とOrcaRouterからの回答
+- OrcaRouterからの最新回答（最大10往復の履歴は次回Request用にブラウザ内で保持）
 - プロンプト例（任意）+ 明示的な「質問欄に挿入」
 - Developer Information（HTTP Status / Elapsed / Token / Cost）
 - Request JSON / Response JSON
@@ -29,7 +29,7 @@ Raw JSON欄はVBA版と同じ考え方で、Chatではレスポンス本文全�
 
 - `index.html` - 画面
 - `style.css` - モダンでシンプルなUI
-- `app.js` - API呼び出し、6ステップの処理、会話履歴、トレース、エラー処理
+- `app.js` - API呼び出し、6ステップの処理、内部会話履歴、回答表示、トレース、エラー処理
 - `ui-contract.test.js` - Prompt / Mode / Send / Error表示の回帰テスト
 - `start-server.ps1` - Python不要のWindows用ローカルHTTPサーバー
 
@@ -119,9 +119,9 @@ Chat / Streaming / Tool Calling は、API側へ会話を保存させるのでは
 
 **プロンプト例（任意）** は、プルダウンを選択しただけではQuestionを書き換えません。例を選び **「質問欄に挿入」** を押したときだけ定型文をQuestionへ入れます。挿入後に自由に編集してから送信します。Modeを変更しても入力中のQuestionは上書きしません。
 
-送信直後は、未確定のQuestionを会話欄へ一瞬だけ表示することはせず、成功済みの会話をそのまま残してStatusを「送信中」にします。Streamingだけは実際にAssistantのdeltaを受信し始めた時点から、今回Questionと途中回答を表示します。
+送信直後はAnswer欄をクリアし、Statusを「送信済み・回答待ち...」にしてBusy表示を出します。Question欄は編集可能なままです。StreamingではAssistantのdeltaを受信し始めた時点から、途中回答だけをAnswerへ逐次表示します。
 
-成功時は今回のQuestion + Assistantを履歴へ確定します。APIエラー、timeout、JSON解析エラー、入力検証エラーは履歴へ確定しませんが、**今回Question + ERROR内容を会話欄へ残す**ため、結果が消えたように見えません。
+成功時は今回のQuestion + Assistantを内部履歴へ確定し、Answer欄には最新のAssistant回答だけを表示します。APIエラー、timeout、JSON解析エラー、入力検証エラーは履歴へ確定せず、Answer欄にはERROR内容だけを表示します。Question自体は入力欄に残るため、回答欄へ重複表示しません。
 
 Developer Information は折りたたみ式です。正常時だけでなくエラー時も、取得できた HTTP Status、Elapsed、Model、Request JSON、Response/Error body を残します。Token / Cost が返った場合はそれも表示します。Costは `X-OrcaRouter-Include-Cost: true` で取得を依頼し、APIが `usage.cost_usd` を返さない場合は推測せず `(not returned)` と表示します。
 
