@@ -1069,6 +1069,9 @@ Public Sub RunOrcaRouterVbaSelfTests()
                   "Conversation history was not included in BuildRequestJson."
     End If
 
+    'Advanced builders must reuse the same committed history.
+    RunOrcaRouterAdvancedSelfTests True
+
     displayText = GetOrcaRouterConversationDisplay( _
                       "failed question", _
                       "ERROR: synthetic failure")
@@ -1094,8 +1097,6 @@ Public Sub RunOrcaRouterVbaSelfTests()
         Err.Raise vbObjectError + 3004, "RunOrcaRouterVbaSelfTests", _
                   "UTF-8 conversion produced an unexpected byte count."
     End If
-
-    RunOrcaRouterAdvancedSelfTests
 
     MsgBox "All local VBA self-tests passed.", _
            vbInformation, _
