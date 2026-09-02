@@ -350,7 +350,7 @@ Public Sub SetupOrcaRouterSample()
 
     ClearConversationHistoryState
     UpdateVbaHistoryStatus ws
-    ResetVbaDeveloperInformation ws
+    ResetOrcaRouterDeveloperInformation ws
 
     AddTrace ws, "READY", "LOCAL", "Created sample UI", _
              "Endpoint: " & API_ENDPOINT & vbCrLf & _
@@ -534,7 +534,7 @@ Private Sub UpdateVbaHistoryStatus(ByVal ws As Worksheet)
 
 End Sub
 
-Private Sub ResetVbaDeveloperInformation(ByVal ws As Worksheet)
+Public Sub ResetOrcaRouterDeveloperInformation(ByVal ws As Worksheet)
 
     ws.Range("K18").Value = "-"
     ws.Range("M18").Value = "-"
@@ -735,6 +735,9 @@ Public Sub SendOrcaRouterChat()
     model = Trim$(CStr(ws.Range("B4").Value))
     mode = Trim$(CStr(ws.Range("B5").Value))
     question = Trim$(CStr(ws.Range("B6").Value))
+
+    'Developer Information must describe this request attempt, not the previous one.
+    ResetOrcaRouterDeveloperInformation ws
 
     If StrComp(mode, "Streaming", vbTextCompare) = 0 Then
         SendOrcaRouterStreaming
