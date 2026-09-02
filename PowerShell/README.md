@@ -72,27 +72,33 @@ AnswerBox を更新
 
 StreamingではWorker側がSSEを読み取り、途中経過のAnswerを一定間隔・一定文字数ごとにQueueへ渡します。UI側も1回のDispatcher tickで処理するイベント数を制限し、複数のAnswer更新は最新値へまとめてからData Bindingで回答欄へ反映します。長文StreamingでUIスレッドを更新処理だけに占有させないための対策です。
 
-## Resizable window layout / fixed editor areas / Result tabs
+## Resizable window layout / page scroll / fixed editor areas / Result tabs
 
-画面全体はWPFのGridでウィンドウサイズに追従します。**ページ全体を長文化するScrollViewerは使いません。**
+画面全体はWPFのGridで構成し、その外側に**ページ全体用の縦ScrollViewer**を置いています。画面の高さが足りない場合は右側のスクロールバーでINPUTからRESULT、Statusまで移動できます。
 
 長いQuestionやAnswerは、それぞれのTextBox内部だけをスクロールします。Question入力欄は初期表示でも複数行を入力できる高さを確保し、「ここに質問を入力してください（複数行・長文可）」と案内を表示します。
 
 ```text
 Window
-  └─ Grid
-       ├─ Header / API settings
-       ├─ INPUT
-       │    └─ QuestionBox（内部スクロール）
-       ├─ GridSplitter
-       ├─ RESULT
-       │    ├─ 回答 Tab（内部スクロール）
-       │    ├─ Developer Tab
-       │    └─ トレース Tab
-       └─ Status / Busy indicator
+  └─ PageScrollViewer（フォーム全体）
+       └─ Grid
+            ├─ Header / API settings
+            ├─ INPUT
+            │    └─ QuestionBox（内部スクロール）
+            ├─ GridSplitter
+            ├─ RESULT
+            │    ├─ 回答 Tab（内部スクロール）
+            │    ├─ Developer Tab
+            │    └─ トレース Tab
+            └─ Status / Busy indicator
 ```
 
-質問や回答が何万文字になっても、その文字数を理由にフォーム全体の高さは伸ばしません。INPUTとRESULTの間は `GridSplitter` で上下に調整でき、ウィンドウ自体は `ResizeMode="CanResizeWithGrip"` により、最小化・最大化・元に戻す・任意サイズへの変更ができます。
+スクロールは役割を分けています。
+
+- 右端のページスクロール: フォーム全体を上下移動
+- Question / Answer内部スクロール: 長文本文だけを移動
+
+Question / Answer / RESULTの表示領域には上限を持たせているため、質問や回答が何万文字になっても、その文字数を理由にフォーム全体が無制限に伸びることはありません。ウィンドウ自体は `ResizeMode="CanResizeWithGrip"` により、最小化・最大化・元に戻す・任意サイズへの変更ができます。
 
 送信中は画面下部にインジケーターと「送信済み・回答待ち...」を表示します。Streamingで本文を受信し始めると「回答受信中...」へ変わります。HTTP処理はBackground Runspaceで行うため、待機中もQuestion欄の編集やウィンドウ操作を継続できます。
 
