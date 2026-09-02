@@ -33,6 +33,8 @@ Raw JSON欄はVBA版と同じ考え方で、Chatではレスポンス本文全�
 - `ui-contract.test.js` - Prompt / Mode / Send / Error表示の回帰テスト
 - `start-server.ps1` - Python不要のWindows用ローカルHTTPサーバー
 
+画面右上の **Common flow** は、ローカルサーバーの公開範囲外にある `docs/processing-flow.md` を直接参照せず、GitHub上の同ドキュメントを新しいタブで開きます。
+
 ## Quick start
 
 まずローカルHTTPサーバーを起動してからブラウザで開きます。HTMLファイルを直接ダブルクリックするより、`start-server.ps1` または `python -m http.server` を使う方法を推奨します。
