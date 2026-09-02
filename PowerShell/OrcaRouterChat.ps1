@@ -1102,6 +1102,10 @@ if ($UiBindingCheck) {
         }
 
         Process-OrcaRouterWorkerEvents
+        $window.Dispatcher.Invoke(
+            [System.Action]{ },
+            [System.Windows.Threading.DispatcherPriority]::DataBind
+        )
 
         if ($script:workerEventQueue.IsEmpty) {
             throw 'One UI tick drained the entire event burst; responsiveness guard failed.'
