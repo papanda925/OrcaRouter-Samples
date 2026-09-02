@@ -1065,6 +1065,54 @@ if ($UiBindingCheck) {
             throw 'QuestionBox TextChanged did not update the ViewModel.'
         }
 
+        # Regression test: multiple successful turns are retained for API
+        # context, but the primary Answer area shows only the latest answer.
+        $script:conversationHistory.Clear()
+        Add-ConversationTurn -Question 'First question' -Assistant 'First answer'
+        Add-ConversationTurn -Question 'Second question' -Assistant 'Second answer'
+        $window.Dispatcher.Invoke(
+            [System.Action]{ },
+            [System.Windows.Threading.DispatcherPriority]::DataBind
+        )
+
+        if ($answerBox.Text -ne 'Second answer') {
+            throw 'Answer must show only the latest assistant response.'
+        }
+
+        if ($answerBox.Text -match 'First question|Second question|First answer') {
+            throw 'Answer must not concatenate prior conversation turns.'
+        }
+
+        if ($script:conversationHistory.Count -ne 2) {
+            throw 'Answer-only rendering must not discard internal conversation history.'
+        }
+
+        Clear-ConversationHistory
+
+        # Regression test: one Dispatcher tick must not drain an unbounded
+        # Streaming event burst.
+        $script:workerEventQueue = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
+        foreach ($index in 1..100) {
+            $script:workerEventQueue.Enqueue(
+                [pscustomobject]@{
+                    Type = 'Answer'
+                    Text = "partial $index"
+                }
+            )
+        }
+
+        Process-OrcaRouterWorkerEvents
+
+        if ($script:workerEventQueue.IsEmpty) {
+            throw 'One UI tick drained the entire event burst; responsiveness guard failed.'
+        }
+
+        if ($answerBox.Text -ne 'partial 40') {
+            throw 'Streaming Answer events were not coalesced to the latest value in the UI tick.'
+        }
+
+        $script:workerEventQueue = $null
+
         # Regression test: an API/worker error must remain visible in Answer,
         # must populate Developer, and must not force the Trace tab.
         $script:currentQuestion = 'Synthetic question'
