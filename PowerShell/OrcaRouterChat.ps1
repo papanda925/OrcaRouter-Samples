@@ -134,6 +134,7 @@ $historyStatusText = $window.FindName('HistoryStatusText')
 $developerBox = $window.FindName('DeveloperBox')
 $newChatButton = $window.FindName('NewChatButton')
 $promptExampleBox = $window.FindName('PromptExampleBox')
+$applyPromptExampleButton = $window.FindName('ApplyPromptExampleButton')
 $referralButton = $window.FindName('ReferralButton')
 $firstRunPanel = $window.FindName('FirstRunPanel')
 
