@@ -906,11 +906,15 @@ if ($UiBindingCheck) {
         }
 
 
+        if ($questionBox.ActualHeight -lt 120) {
+            throw "QuestionBox must remain visibly multi-line: $($questionBox.ActualHeight)"
+        }
+
         if ($questionBox.IsReadOnly) { throw 'QuestionBox must be editable.' }
         if (-not $questionBox.IsEnabled) { throw 'QuestionBox must be enabled.' }
         if (-not $questionBox.Focusable) { throw 'QuestionBox must be focusable.' }
 
-        if ($questionBox.ActualHeight -lt 80) {
+        if ($questionBox.ActualHeight -lt 120) {
             throw "QuestionBox is too small: $($questionBox.ActualHeight)"
         }
 
