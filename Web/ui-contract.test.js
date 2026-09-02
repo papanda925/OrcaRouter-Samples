@@ -19,6 +19,18 @@ assert(
   "Web UI must have an explicit prompt-example apply button."
 );
 
+assert(
+  html.includes(
+    'href="https://github.com/papanda925/OrcaRouter-Samples/blob/main/docs/processing-flow.md"'
+  ),
+  "Common flow must use a URL that works from the Web-only local server."
+);
+
+assert(
+  !html.includes('href="../docs/processing-flow.md"'),
+  "Common flow must not point outside the Web server root."
+);
+
 const promptSelection = extractHandler(
   app,
   'promptExampleInput.addEventListener("change"',
