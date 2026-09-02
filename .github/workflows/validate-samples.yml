@@ -317,6 +317,10 @@ jobs:
               "Web error result must keep question/error visible.",
           )
           require(
+              "resetDeveloperInfo();" in web,
+              "Web must reset Developer Information for each request attempt.",
+          )
+          require(
               'renderConversation(question, "");' not in web,
               "Web must not flash pending question before a response.",
           )
@@ -343,6 +347,10 @@ jobs:
                   "Show-RequestError" in invoke,
                   "PowerShell input errors must use the shared visible error renderer.",
               )
+              require(
+                  "Set-DeveloperPendingInformation -Model $model" in invoke,
+                  "PowerShell must reset Developer Information for the current request.",
+              )
 
           require(
               'Prompt template (optional)' in vba
@@ -357,6 +365,10 @@ jobs:
               'GetOrcaRouterConversationDisplay( _' in vba
               and '"ERROR: " & errorDescription' in vba,
               "VBA Chat error must keep submitted Question/error visible.",
+          )
+          require(
+              "ResetOrcaRouterDeveloperInformation ws" in vba,
+              "VBA must reset Developer Information for each request attempt.",
           )
           require(
               vba_adv.count("BuildOrcaRouterConversationMessageItemsJson(question)") >= 3,
