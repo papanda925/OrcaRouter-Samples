@@ -263,12 +263,12 @@ function Get-ConversationTranscript {
         $lines.Add('YOU')
         $lines.Add($PendingQuestion)
         $lines.Add('')
+    }
 
-        if (-not [string]::IsNullOrWhiteSpace($PendingAnswer)) {
-            $lines.Add('ASSISTANT')
-            $lines.Add($PendingAnswer)
-            $lines.Add('')
-        }
+    if (-not [string]::IsNullOrWhiteSpace($PendingAnswer)) {
+        $lines.Add('ASSISTANT')
+        $lines.Add($PendingAnswer)
+        $lines.Add('')
     }
 
     if ($lines.Count -eq 0) {
