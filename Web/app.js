@@ -980,6 +980,9 @@ async function sendChat() {
   applyPromptExampleButton.disabled = true;
   transientAssistantText = "";
 
+  // Developer Information must describe the current attempt, not a previous one.
+  resetDeveloperInfo();
+
   const startedAt = performance.now();
 
   try {
