@@ -145,6 +145,14 @@ turn = user + assistant
 Web / PowerShell / VBAのChat、Streaming、Tool Callingは、
 可能な範囲で同じ成功済み履歴を次回Requestの `messages` へ含めます。
 
+## 4.1 PowerShell Runspace境界のCollectionを正規化する
+
+PowerShell版では、UI RunspaceからBackground Runspaceへ渡した値が、空・単一要素・配列で形を変える可能性を考慮します。
+
+特に `History` 件数は `@($History).Count` のような直接参照に頼らず、nullを除外して数える共通Helperを使います。
+
+Workerで例外が発生した場合は、MessageだけでなくScript line / Position / Script stackもDeveloper / Traceへ残し、HTTP処理とローカル後処理のどちらで失敗したか判別できるようにします。
+
 ## 5. 再発防止
 
 レビューでは「コントロールが存在するか」「関数名があるか」だけでなく、

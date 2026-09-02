@@ -350,6 +350,10 @@ function Set-DeveloperInformation {
     $requestValue = Get-WorkerEventValue -WorkerEvent $WorkerEvent -Name 'Request'
     $responseValue = Get-WorkerEventValue -WorkerEvent $WorkerEvent -Name 'Response'
     $errorMessage = Get-WorkerEventValue -WorkerEvent $WorkerEvent -Name 'Message' -DefaultValue ''
+    $exceptionType = Get-WorkerEventValue -WorkerEvent $WorkerEvent -Name 'ExceptionType' -DefaultValue ''
+    $scriptLineNumber = Get-WorkerEventValue -WorkerEvent $WorkerEvent -Name 'ScriptLineNumber' -DefaultValue ''
+    $positionMessage = Get-WorkerEventValue -WorkerEvent $WorkerEvent -Name 'PositionMessage' -DefaultValue ''
+    $scriptStackTrace = Get-WorkerEventValue -WorkerEvent $WorkerEvent -Name 'ScriptStackTrace' -DefaultValue ''
 
     $promptTokens = '-'
     $completionTokens = '-'
@@ -401,6 +405,23 @@ function Set-DeveloperInformation {
         $lines += ''
         $lines += '--- Error ---'
         $lines += (Protect-LocalTraceText -Text ([string]$errorMessage))
+
+        if (-not [string]::IsNullOrWhiteSpace([string]$exceptionType)) {
+            $lines += "Type: $exceptionType"
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace([string]$scriptLineNumber)) {
+            $lines += "Script line: $scriptLineNumber"
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace([string]$positionMessage)) {
+            $lines += (Protect-LocalTraceText -Text ([string]$positionMessage))
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace([string]$scriptStackTrace)) {
+            $lines += '--- Script stack ---'
+            $lines += (Protect-LocalTraceText -Text ([string]$scriptStackTrace))
+        }
     }
 
     $lines += ''
@@ -628,6 +649,9 @@ function Process-OrcaRouterWorkerEvents {
                     Message = $safeMessage
                     Type = $exceptionType
                     HttpStatus = Get-WorkerEventValue -WorkerEvent $workerEvent -Name 'HttpStatus' -DefaultValue '-'
+                    ScriptLineNumber = Get-WorkerEventValue -WorkerEvent $workerEvent -Name 'ScriptLineNumber' -DefaultValue '-'
+                    PositionMessage = Get-WorkerEventValue -WorkerEvent $workerEvent -Name 'PositionMessage' -DefaultValue ''
+                    ScriptStackTrace = Get-WorkerEventValue -WorkerEvent $workerEvent -Name 'ScriptStackTrace' -DefaultValue ''
                 }
 
                 Show-RequestError -Message $safeMessage -ExceptionType $exceptionType -WorkerEvent $workerEvent

@@ -227,6 +227,21 @@ Web版・VBA版と同じ6ステップにそろえています。
 
 詳細は [Common processing flow](../docs/processing-flow.md) を参照してください。
 
+## PowerShell 5.1 / Runspace collection normalization
+
+Background Runspaceへ渡した `History` は、空・単一要素・配列のどの形でも同じ意味になるよう、件数を `Get-HistoryTurnCount` で正規化して数えます。
+
+Windows PowerShell 5.1 + `Set-StrictMode -Version Latest` では、Runspace境界を通った値に対してCollection型であることを前提に `.Count` を直接参照すると、値の形によって `PropertyNotFoundException` になる余地があります。そのため、`History` に対する直接の `.Count` は使用しません。
+
+WorkerエラーにはDeveloper / Traceへ可能な範囲で次も残します。
+
+- Exception Type
+- Script line
+- Position message
+- Script stack trace
+
+これにより、HTTP 200を受信した後のローカル処理エラーも、APIエラーと区別して追跡できます。
+
 ## Error handling / debug information
 
 学習用として、通常のサンプルより診断情報を多めに残します。

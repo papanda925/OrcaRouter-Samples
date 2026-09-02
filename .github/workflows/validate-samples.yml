@@ -160,6 +160,10 @@ jobs:
             throw 'Background runspace did not emit a Completed event.'
           }
 
+          if ($events | Where-Object Type -eq 'Error') {
+            throw 'Background runspace self-test emitted an unexpected Error event.'
+          }
+
   safety:
     name: Source safety checks
     runs-on: ubuntu-latest
@@ -191,6 +195,14 @@ jobs:
           grep -q 'System.Data.DataTable' PowerShell/OrcaRouterChat.ps1
           grep -q 'INotifyPropertyChanged' PowerShell/OrcaRouterChat.ps1
           grep -q 'BeginInvoke' PowerShell/OrcaRouterChat.ps1
+
+          if grep -F -n '@($History).Count' PowerShell/OrcaRouterWorker.ps1; then
+            echo 'Do not count runspace-bound History with a direct .Count expression.'
+            exit 1
+          fi
+
+          grep -q 'function Get-HistoryTurnCount' PowerShell/OrcaRouterWorker.ps1
+          grep -q 'ScriptStackTrace' PowerShell/OrcaRouterWorker.ps1
 
       - name: Check for accidental secrets and personal paths
         shell: bash
