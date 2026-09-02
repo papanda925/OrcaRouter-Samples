@@ -155,16 +155,17 @@ Public Sub SetupOrcaRouterSample()
     End With
 
     'Prompt example selector
-    ws.Range("A10").Value = "Prompt example"
+    ws.Range("A10").Value = "Prompt template (optional)"
     With ws.Range("B10:D10")
         .Merge
-        .Value = "Summary"
+        .Value = "(select)"
         .Interior.Color = RGB(251, 253, 255)
         .Borders.Color = RGB(217, 225, 236)
         .Validation.Delete
         .Validation.Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, _
                         Operator:=xlBetween, _
-                        Formula1:="Summary" & listSeparator & _
+                        Formula1:="(select)" & listSeparator & _
+                                 "Summary" & listSeparator & _
                                  "Explain" & listSeparator & _
                                  "Code review" & listSeparator & _
                                  "JSON" & listSeparator & _
@@ -306,7 +307,7 @@ Public Sub SetupOrcaRouterSample()
 
     With applyPromptButton
         .Name = "btnApplyPromptExample"
-        .TextFrame2.TextRange.Text = "Apply prompt"
+        .TextFrame2.TextRange.Text = "Insert prompt"
         .Fill.ForeColor.RGB = RGB(255, 255, 255)
         .Line.ForeColor.RGB = RGB(217, 225, 236)
         .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(23, 32, 51)
@@ -420,6 +421,13 @@ Public Sub ApplyOrcaRouterPromptExample()
     Set ws = ThisWorkbook.Worksheets(SAMPLE_SHEET_NAME)
     exampleName = Trim$(CStr(ws.Range("B10").Value))
 
+    If Len(exampleName) = 0 Or exampleName = "(select)" Then
+        MsgBox "Select a prompt template first.", _
+               vbInformation, _
+               "OrcaRouter Sample"
+        GoTo CleanExit
+    End If
+
     Select Case exampleName
         Case "Summary"
             promptText = "Summarize the following text in three concise bullet points:"
@@ -432,7 +440,10 @@ Public Sub ApplyOrcaRouterPromptExample()
         Case "Translate"
             promptText = "Translate the following Japanese text into natural English:"
         Case Else
-            promptText = "Summarize the following text in three concise bullet points:"
+            MsgBox "Unknown prompt template: " & exampleName, _
+                   vbExclamation, _
+                   "OrcaRouter Sample"
+            GoTo CleanExit
     End Select
 
     ws.Range("B6").Value = promptText & vbCrLf & vbCrLf & "Paste content here."
@@ -462,7 +473,7 @@ Private Sub ClearConversationHistoryState()
 
 End Sub
 
-Private Sub AddConversationTurn(ByVal userText As String, ByVal assistantText As String)
+Public Sub CommitOrcaRouterConversationTurn(ByVal userText As String, ByVal assistantText As String)
 
     Dim i As Long
 
@@ -480,7 +491,7 @@ Private Sub AddConversationTurn(ByVal userText As String, ByVal assistantText As
 
 End Sub
 
-Private Function BuildConversationDisplay( _
+Public Function GetOrcaRouterConversationDisplay( _
     Optional ByVal pendingQuestion As String = "", _
     Optional ByVal pendingAnswer As String = "") As String
 
@@ -513,7 +524,7 @@ Private Function BuildConversationDisplay( _
                  Right$(result, RAW_JSON_MAX_TEXT - 40)
     End If
 
-    BuildConversationDisplay = result
+    GetOrcaRouterConversationDisplay = result
 
 End Function
 
@@ -537,7 +548,7 @@ Private Sub ResetVbaDeveloperInformation(ByVal ws As Worksheet)
 
 End Sub
 
-Private Sub UpdateVbaDeveloperInformation( _
+Public Sub UpdateOrcaRouterDeveloperInformation( _
     ByVal ws As Worksheet, _
     ByVal httpStatus As Long, _
     ByVal elapsedSeconds As Double, _
@@ -551,7 +562,11 @@ Private Sub UpdateVbaDeveloperInformation( _
     Dim costUsd As Double
     Dim actualModel As String
 
-    ws.Range("K18").Value = httpStatus
+    If httpStatus > 0 Then
+        ws.Range("K18").Value = httpStatus
+    Else
+        ws.Range("K18").Value = "(not available)"
+    End If
     ws.Range("M18").Value = Format$(elapsedSeconds, "0.000") & " sec"
 
     actualModel = requestedModel
@@ -679,7 +694,7 @@ Public Sub SendOrcaRouterChat()
         GoTo CleanExit
     End If
 
-    ws.Range("B11").Value = BuildConversationDisplay(question)
+    ws.Range("B11").Value = GetOrcaRouterConversationDisplay(question)
     PrepareRawResponse ws, "Raw JSON Response - " & mode
 
     'STEP 1: Validate inputs.
@@ -788,9 +803,9 @@ Public Sub SendOrcaRouterChat()
              "Answer length: " & Len(assistantText)
 
     'STEP 6: Update UI and trace.
-    AddConversationTurn question, assistantText
-    ws.Range("B11").Value = BuildConversationDisplay()
-    UpdateVbaDeveloperInformation _
+    CommitOrcaRouterConversationTurn question, assistantText
+    ws.Range("B11").Value = GetOrcaRouterConversationDisplay()
+    UpdateOrcaRouterDeveloperInformation _
         ws, _
         httpStatus, _
         elapsedTimeSeconds, _
@@ -1055,17 +1070,14 @@ Private Function GetOrCreateSampleSheet() As Worksheet
 
 End Function
 
-Private Function BuildRequestJson(ByVal model As String, ByVal question As String) As String
+Public Function BuildOrcaRouterConversationMessageItemsJson( _
+    ByVal question As String) As String
 
     Dim i As Long
     Dim result As String
 
-    result = "{"
-    result = result & """model"":""" & JsonEscape(model) & ""","
-    result = result & """messages"":["
-
     For i = 1 To conversationCount
-        If i > 1 Then
+        If Len(result) > 0 Then
             result = result & ","
         End If
 
@@ -1075,12 +1087,25 @@ Private Function BuildRequestJson(ByVal model As String, ByVal question As Strin
                  JsonEscape(conversationAssistants(i)) & """}"
     Next i
 
-    If conversationCount > 0 Then
+    If Len(result) > 0 Then
         result = result & ","
     End If
 
     result = result & "{""role"":""user"",""content"":""" & _
              JsonEscape(question) & """}"
+
+    BuildOrcaRouterConversationMessageItemsJson = result
+
+End Function
+
+Private Function BuildRequestJson(ByVal model As String, ByVal question As String) As String
+
+    Dim result As String
+
+    result = "{"
+    result = result & """model"":""" & JsonEscape(model) & ""","
+    result = result & """messages"":["
+    result = result & BuildOrcaRouterConversationMessageItemsJson(question)
     result = result & "]"
     result = result & "}"
 
