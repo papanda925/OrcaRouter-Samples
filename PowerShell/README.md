@@ -70,44 +70,33 @@ AnswerBox を更新
 
 通常ChatやTool CallingでAPI応答を待っている間も、WPFのUIスレッドではHTTP待機をしません。そのため、ウィンドウの移動・最大化・リサイズ・Question入力などを継続できます。
 
-StreamingではWorker側がSSEを読み取り、途中経過のAnswerイベントをQueueへ渡します。UI側はQueueから受け取った文字列をViewModelの `Answer` へ設定し、Data Bindingで回答欄へ反映します。
+StreamingではWorker側がSSEを読み取り、途中経過のAnswerを一定間隔・一定文字数ごとにQueueへ渡します。UI側も1回のDispatcher tickで処理するイベント数を制限し、複数のAnswer更新は最新値へまとめてからData Bindingで回答欄へ反映します。長文StreamingでUIスレッドを更新処理だけに占有させないための対策です。
 
-## Responsive window layout / page scroll / Result tabs
+## Resizable window layout / fixed editor areas / Result tabs
 
-画面は **ウィンドウサイズに連動して伸縮** しつつ、高さが足りない場合は右側のページ全体用スクロールバーで下まで移動できる構成です。
+画面全体はWPFのGridでウィンドウサイズに追従します。**ページ全体を長文化するScrollViewerは使いません。**
+
+長いQuestionやAnswerは、それぞれのTextBox内部だけをスクロールします。
 
 ```text
 Window
-  └─ PageScrollViewer
+  └─ Grid
        ├─ Header / API settings
        ├─ INPUT
+       │    └─ QuestionBox（内部スクロール）
        ├─ GridSplitter
        ├─ RESULT
-       │    ├─ 回答 Tab
+       │    ├─ 回答 Tab（内部スクロール）
        │    ├─ Developer Tab
        │    └─ トレース Tab
-       └─ Status
+       └─ Status / Busy indicator
 ```
 
-`PageScrollViewer` は `VerticalScrollBarVisibility="Auto"` です。最大化・元に戻す・画面解像度・Windowsの表示倍率などによって縦方向に収まらない場合だけ、**ウィンドウ右側に縦スクロールバー**が表示されます。これで下部のRESULTやStatusまで移動できます。
+質問や回答が何万文字になっても、その文字数を理由にフォーム全体の高さは伸ばしません。INPUTとRESULTの間は `GridSplitter` で上下に調整でき、ウィンドウ自体は `ResizeMode="CanResizeWithGrip"` により、最小化・最大化・元に戻す・任意サイズへの変更ができます。
 
-RESULTは `TabControl` です。**回答**、**Developer**、**トレース** をタブで切り替えます。さらに長いAnswerやTraceは、各TextBox内部のスクロールバーで内容だけを移動できます。
+送信中は画面下部にインジケーターと「送信済み・回答待ち...」を表示します。Streamingで本文を受信し始めると「回答受信中...」へ変わります。HTTP処理はBackground Runspaceで行うため、待機中もQuestion欄の編集やウィンドウ操作を継続できます。
 
-つまりスクロールは役割を分けています。
-
-```text
-右端のページスクロール
-  → 画面全体を上下移動
-
-回答 / トレース内部のスクロール
-  → 長い本文だけを移動
-```
-
-通常起動時は最大化して表示します。タイトルバーの **最小化 / 元に戻す / 最大化** が使え、元に戻した後はウィンドウ端をドラッグして自由にサイズ変更できます。
-
-`ResizeMode="CanResizeWithGrip"` を指定し、INPUTとRESULTの間には `GridSplitter` を配置しています。質問欄を広くしたい場合、または結果欄を広くしたい場合は境界を上下にドラッグできます。
-
-送信時は「回答」タブを表示します。**エラー時も回答タブを維持**し、今回のQuestionとERROR内容を残します。Developer / トレースは利用者が必要に応じて開く診断領域とし、エラーだからといって自動で別タブへ移動しません。
+RESULTは `TabControl` です。**回答**には最新の回答だけを表示し、Request / Response等の診断情報は**Developer**、処理ステップとHTTP電文は**トレース**へ分離します。Developer / Traceの大きな診断文字列は、主回答画面を更新している間の負荷を抑えるため、必要なタブを開いたときに描画します。
 
 ## Question入力欄 / MVVM
 
@@ -129,7 +118,7 @@ PowerShell + `XamlReader` では、主要な入力欄までData Bindingだけに
 
 また、API待機中もQuestion欄は無効化しません。応答を待ちながら次の質問を入力できます。
 
-CIではWindows PowerShell 5.1上で、QuestionBoxの編集性、ResultTabsに「回答」「Developer」「トレース」の3タブがあること、Prompt example選択だけではQuestionを上書きしないこと、Mode変更でQuestionを上書きしないこと、エラー時に回答タブを維持してQuestion + ERRORを残すこと、Developerへ診断情報が入ることを確認します。さらに1200×900で各タブの表示領域、ページスクロール、`DataRowView` の `INotifyPropertyChanged`、Answer / Status のData Binding、Background Runspace自己テストも検証します。
+CIではWindows PowerShell 5.1上で、QuestionBoxの編集性、ResultTabsに「回答」「Developer」「トレース」の3タブがあること、Prompt example選択だけではQuestionを上書きしないこと、Mode変更でQuestionを上書きしないこと、Answerへ質問文を混在させないこと、Developerへ診断情報が入ることを確認します。さらに長文を入れてもQuestion/Answerの高さがフォーム全体を押し広げないこと、各TextBoxの内部スクロール、Busy表示、`DataRowView` の `INotifyPropertyChanged`、Answer / Status のData Binding、Background Runspace自己テストも検証します。
 
 参考: PowerShell / WPF / MVVMの考え方
 - https://papanda925.com/?p=2187
@@ -148,7 +137,7 @@ Model欄は自由入力なので、無料ルーターと有料モデルで同じ
 1画面で次を確認できます。
 
 - 質問
-- 最大10往復の会話とOrcaRouterからの回答（「回答」タブ）
+- OrcaRouterからの最新回答（「回答」タブ。最大10往復の履歴は次回Request用に内部保持）
 - HTTP Status / Elapsed / Token / Cost / Request / Response（「Developer」タブ）
 - 処理ステップとHTTPトレース（「トレース」タブ）
 - プロンプト例（任意）と明示的な「質問欄に挿入」
@@ -202,13 +191,27 @@ Tool Callingはモデル対応状況やQuotaによって、ローカル関数を
 
 ## Multi-turn Chat / New Chat / Prompt examples / Developer
 
-WPF側で直近10往復の user / assistant 履歴を保持し、Background Runspaceへスナップショットを渡して次回の `messages` に再送します。**新しいチャット** はこのローカル履歴だけをクリアし、ModelやAPI Keyは残します。
+WPF側で直近10往復の user / assistant 履歴を保持し、Background Runspaceへスナップショットを渡して次回の `messages` に再送します。**履歴はAPIの会話コンテキスト用であり、回答欄には連結表示しません。**
+
+「回答」タブに表示するのは常に今回のAssistant回答だけです。
+
+```text
+Send
+  ↓
+回答欄をクリア
+Status = 送信済み・回答待ち...
+  ↓
+Streamingなら partial answer のみ表示
+  ↓
+Success
+最新のAssistant回答だけ表示
+```
+
+APIエラー時も質問文を回答欄へ繰り返さず、`ERROR: ...` の内容だけを表示します。Request / Response / HTTP Status / Token / Cost等はDeveloper、詳細な処理電文はTraceへ分離しています。
+
+**新しいチャット** は内部の会話履歴だけをクリアし、ModelやAPI Keyは残します。
 
 「プロンプト例」で要約、初心者向け説明、コードレビュー、JSON、英訳を選び、**質問欄に挿入** を押すと雛形をQuestionへ入れられます。プルダウンを選択しただけでは質問欄を書き換えず、自動送信もしません。
-
-送信直後は、未確定のQuestionを回答タブへ仮表示せず、**成功済み会話をそのまま維持してStatusだけを「送信中」にします**。Streamingでは実際にAssistantのdeltaを受信した時点から、今回Questionと途中回答を表示します。成功時に初めて今回Question + Assistantを履歴へ確定します。
-
-APIエラー、timeout、入力検証エラーでは失敗turnを履歴へ追加しませんが、**今回Question + ERROR内容** を回答タブに一時表示して残します。回答タブを消したりトレースへ強制移動したりしません。Developerタブにも取得できたHTTP Status、Elapsed、Model、Request、Response/Error bodyを表示するため、原因を追いやすくしています。CostはOrcaRouterの `X-OrcaRouter-Include-Cost: true` を利用し、返らない場合は `(not returned)` と表示します。
 
 Mode変更は通信方式の選択だけとし、入力中のQuestionを書き換えません。3実装共通の状態遷移ルールは [UI behavior contract](../docs/ui-behavior-contract.md) を参照してください。
 

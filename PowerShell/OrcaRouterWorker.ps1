@@ -30,6 +30,8 @@ Add-Type -AssemblyName System.Net.Http
 $apiEndpoint = 'https://api.orcarouter.ai/v1/chat/completions'
 $requestTimeoutSeconds = 120
 $maxStreamTraceEvents = 50
+$streamPublishIntervalMs = 120
+$streamPublishCharStep = 256
 
 # Keep the latest request/response metadata so an Error event can still
 # populate the Answer and Developer tabs instead of losing diagnostic data.
@@ -56,6 +58,20 @@ function Add-WorkerEvent {
     $EventQueue.Enqueue([pscustomobject]$eventData)
 }
 
+function ConvertTo-WorkerTraceText {
+    param($Data)
+
+    if ($null -eq $Data) { return '' }
+    if ($Data -is [string]) { return $Data }
+
+    try {
+        return ($Data | ConvertTo-Json -Depth 30)
+    }
+    catch {
+        return [string]$Data
+    }
+}
+
 function Add-WorkerTrace {
     param(
         [string]$Step,
@@ -64,11 +80,13 @@ function Add-WorkerTrace {
         $Data
     )
 
+    # Format potentially large request/response diagnostics in the worker
+    # runspace so the WPF UI thread only appends plain text.
     Add-WorkerEvent -Type 'Trace' -Values @{
         Step = $Step
         Direction = $Direction
         Title = $Title
-        Data = $Data
+        Data = ConvertTo-WorkerTraceText -Data $Data
     }
 }
 
@@ -652,6 +670,8 @@ function Invoke-Streaming {
         $eventCount = 0
         $usage = $null
         $latestChunk = $null
+        $lastPublishedAtMs = $Stopwatch.ElapsedMilliseconds
+        $lastPublishedLength = 0
 
         while (-not $reader.EndOfStream) {
             $line = $reader.ReadLine()
@@ -707,13 +727,29 @@ function Invoke-Streaming {
 
                     if ($contentPart -is [string] -and $contentPart.Length -gt 0) {
                         [void]$answer.Append($contentPart)
-                        Add-WorkerEvent -Type 'Answer' -Values @{ Text = $answer.ToString() }
+
+                        $currentLength = $answer.Length
+                        $elapsedSincePublish = $Stopwatch.ElapsedMilliseconds - $lastPublishedAtMs
+                        $charsSincePublish = $currentLength - $lastPublishedLength
+
+                        if (
+                            $elapsedSincePublish -ge $streamPublishIntervalMs -or
+                            $charsSincePublish -ge $streamPublishCharStep
+                        ) {
+                            Add-WorkerEvent -Type 'Answer' -Values @{ Text = $answer.ToString() }
+                            $lastPublishedAtMs = $Stopwatch.ElapsedMilliseconds
+                            $lastPublishedLength = $currentLength
+                        }
                     }
                 }
             }
 
             $usageValue = Get-PropertyValue -Object $chunk -Name 'usage'
             if ($null -ne $usageValue) { $usage = $usageValue }
+        }
+
+        if ($answer.Length -gt $lastPublishedLength) {
+            Add-WorkerEvent -Type 'Answer' -Values @{ Text = $answer.ToString() }
         }
 
         Add-WorkerTrace -Step 'STEP 5' -Direction 'LOCAL' -Title 'Streaming結果を集約' -Data @{

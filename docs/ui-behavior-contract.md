@@ -27,46 +27,41 @@ Prompt example / Mode変更にも同じ種類の問題がありました。
 
 ## 2. 共通状態
 
-3実装は次の状態を同じ意味で扱います。
+3実装はRequestの状態を同じ意味で扱います。**conversation historyはAPIへ渡す内部状態であり、回答欄へそのまま連結表示する必要はありません。**
 
-| State | Conversation / Answer | Status | Developer / Trace |
+PowerShell版では、長文時の可読性と応答性を優先し、「回答」には最新のAssistant出力だけを表示します。Request / Response等の診断情報はDeveloper / Traceへ分離します。
+
+| State | 内部Conversation state | 主表示 | Status |
 |---|---|---|---|
-| Ready | 成功済み履歴だけを表示 | Ready | 前回結果を保持してよい |
-| Sending | 成功済み履歴をそのまま表示 | 送信中 | Requestを記録開始 |
-| Streaming | 成功済み履歴 + 今回Question + 受信済みpartial answer | 受信中 | SSE/Request/Responseを更新 |
-| Success | 今回のQuestion + Assistantを履歴へcommitして表示 | Completed | HTTP/Token/Cost/Request/Response |
-| Error | 成功済み履歴 + 今回Question + ERRORを一時表示 | Error | 取得できたHTTP/Request/Response/Error |
-| New Chat | 履歴だけを空にする | Ready/New chat | API Key / Modelは保持 |
+| Ready | 成功済み履歴を保持 | 前回結果または初期表示 | Ready |
+| Sending | まだ今回turnをcommitしない | 未確定Questionを回答として表示しない | 回答待ち |
+| Streaming | まだ今回turnをcommitしない | 受信済みpartial Assistant | 受信中 |
+| Success | Question + Assistantを履歴へcommit | 今回のAssistant結果 | Completed |
+| Error | 失敗turnはcommitしない | ERROR内容 | Error |
+| New Chat | 履歴を空にする | 初期表示 | Ready/New chat |
 
 ## 3. 必須ルール
 
-### 3.1 Send直後に未確定の質問を回答欄へ点滅表示しない
+### 3.1 Send直後に未確定の質問を回答欄へ表示しない
 
-通常Chat / Tool Callingでは、HTTP応答が来るまでは成功済み履歴を維持します。
-SendしたことはStatusで示します。
+SendしたことはStatusで示します。PowerShell版では送信時に前回Answerをクリアし、「送信済み・回答待ち...」を表示します。
 
-Streamingは実際にAssistantのdeltaを受信した時点から、
-今回Questionとpartial answerを表示して構いません。
+Streamingは実際にAssistantのdeltaを受信した時点からpartial answerを表示します。質問文そのものを回答欄へ繰り返し表示しません。
 
 ### 3.2 失敗したturnは履歴へcommitしない
 
 APIエラー、timeout、JSON parse error、入力検証エラーは、
 次回APIへ送るconversation historyへ追加しません。
 
-ただし利用者が原因を確認できるよう、
-画面には今回QuestionとERRORを一時表示します。
+ただし利用者が原因を確認できるよう、ERROR内容は主結果領域へ表示します。質問文自体はQuestion欄に残っているため、PowerShell版のAnswerへ重複表示しません。
 
 ### 3.3 Errorでも結果画面を消さない
 
-エラー発生時に結果欄を空にしたり、成功済み履歴だけへ戻したりしません。
+エラー発生時に主結果領域を空のままにしません。PowerShell版では回答欄にERROR内容だけを表示します。
 
 表示例:
 
 ```text
-YOU
-今回送信した質問
-
-ASSISTANT
 ERROR: HTTP 429 ...
 ```
 
@@ -134,7 +129,7 @@ conversation historyだけを空にします。
 
 ## 4. 履歴
 
-履歴はアプリ側が保持し、最大10往復です。
+履歴はアプリ側が保持する**内部Conversation state**で、最大10往復です。PowerShell版では履歴全体を回答欄へ連結表示しません。
 
 ```text
 turn = user + assistant
@@ -161,15 +156,17 @@ Workerで例外が発生した場合は、MessageだけでなくScript line / Po
 必須回帰シナリオ:
 
 1. Questionを入力してSend → 応答待ち中にQuestionが結果欄へ点滅しない
-2. 成功 → Question/Assistantが結果欄へ残る
-3. APIエラー → Question/ERRORが結果欄へ残る
+2. 成功 → 最新のAssistant回答が表示され、Questionを回答欄へ重複表示しない
+3. APIエラー → ERROR内容が結果欄へ残り、失敗turnを履歴へ追加しない
 4. Error → Traceへ勝手に遷移しない
 5. Error → Developerに取得可能な診断情報が残る
 6. Prompt exampleを選択 → Questionは変わらない
 7. Apply/Insert → 初めてQuestionが変わる
 8. Mode変更 → Questionは変わらない
-9. New Chat → 履歴だけ消える
-10. 11回成功 → 履歴は最大10往復
+9. New Chat → 内部履歴だけ消える
+10. 11回成功 → 内部履歴は最大10往復
+11. 長文Question / Answer → フォーム全体を押し広げず各TextBox内部でスクロールする
+12. 回答待ち → Busy表示が見え、WPF UIは操作可能なまま
 
 PowerShellはWPFの実UI自己テストでも確認します。
 Web/VBAはCIのUI contract検査と各実装の自己テスト可能部分で確認します。
