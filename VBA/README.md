@@ -15,7 +15,7 @@ Excel VBA から OrcaRouter の Chat Completions API を呼び出し、**Chat / 
 | Model | B4 |
 | Mode | B5:D5 |
 | Question | B6:H9 |
-| Prompt example | B10:D10 |
+| Prompt template (optional) | B10:D10 |
 | Conversation | B11:H15 |
 | Raw JSON title/status | J1:P2 |
 | Response JSON | J3:P15 |
@@ -178,15 +178,19 @@ Streamingでは1つのJSONレスポンスではなくSSEイベントが連続し
 
 Raw JSONはExcelセルの上限と可読性を考慮し、非常に長い場合は約30,000文字で切り詰めます。Traceには従来どおりHTTP Status、Headers、Raw response等も記録します。
 
-## Multi-turn Chat / New chat / Prompt example / Developer Information
+## Multi-turn Chat / New chat / Prompt template / Developer Information
 
-通常ChatではVBAモジュール内に直近10往復の user / assistant を保持し、次回の `messages` JSONへ再び含めます。シート上の **New chat** ボタンは履歴だけをクリアします。
+Chat / Streaming / Tool Calling は、VBAモジュール内の**同じ成功済み会話履歴**を使います。直近10往復の user / assistant を保持し、次回の `messages` JSONへ再び含めます。シート上の **New chat** ボタンは履歴だけをクリアし、API Key / Model / Modeは残します。
 
-B10:D10のPrompt exampleを選んで **Apply prompt** を押すと、要約・初心者向け説明・コードレビュー・JSON・翻訳の雛形をQuestionへ入れられます。
+B10:D10 は **Prompt template (optional)** です。最初は `(select)` で、テンプレートを選んだだけではQuestionは変わりません。選択後に **Insert prompt** を押したときだけ、要約・初心者向け説明・コードレビュー・JSON・翻訳の雛形をQuestionへ入れます。
 
-Developer Informationでは HTTP Status、Elapsed、Model、Prompt / Completion / Total Tokens、Costを確認できます。Request JSONはJ22:P30、Response JSONは従来のRaw JSON領域J3:P15で確認します。Cost取得には `X-OrcaRouter-Include-Cost: true` を使い、APIが値を返さない場合は推測しません。
+通常Chat / Tool Callingでは、Send直後に未確定QuestionをConversationへ点滅表示せず、成功済み履歴を維持します。Streamingは実際にdeltaを受信した時点から、今回Question + 途中回答をConversationへ表示します。
 
-> 現段階で10往復履歴を再送する対象は通常Chatです。既存のStreaming / Tool Callingサンプルは従来どおり独立した検証モードとして残しています。
+成功時だけ今回Question + Assistantを履歴へ確定します。APIエラー、timeout、入力検証エラーは履歴へ追加しませんが、**今回Question + ERROR内容をConversationに残します**。Streaming途中で失敗した場合は、受信済みのpartial answerも残したうえでERRORを追記します。
+
+Developer Informationでは HTTP Status、Elapsed、Model、Prompt / Completion / Total Tokens、Costを確認できます。Request JSONはJ22:P30、Response JSON / Error bodyはRaw JSON領域J3:P15で確認します。Chat / Streaming / Tool Callingの成功・失敗の両方で、取得できた診断情報を更新します。Tool Callingでは2回のAPIレスポンスにUsage/Costがある場合、それらを合算します。Cost取得には `X-OrcaRouter-Include-Cost: true` を使い、APIが値を返さない場合は推測しません。
+
+3実装共通の状態遷移ルールは [UI behavior contract](../docs/ui-behavior-contract.md) を参照してください。
 
 ## Trace / debug
 
