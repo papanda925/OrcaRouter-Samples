@@ -544,6 +544,7 @@ Public Sub SendOrcaRouterToolCalling()
     Dim assistantText As String
     Dim developerRequest As String
     Dim developerResponse As String
+    Dim developerAdditionalResponse As String
     Dim developerStatus As Long
     Dim elapsedSecondsValue As Double
 
@@ -736,9 +737,11 @@ ErrorHandler:
         If secondStatus > 0 Then
             developerStatus = secondStatus
             developerResponse = secondResponse
+            developerAdditionalResponse = firstResponse
         Else
             developerStatus = firstStatus
             developerResponse = firstResponse
+            developerAdditionalResponse = vbNullString
         End If
 
         If Len(secondRequest) > 0 Then
@@ -761,7 +764,8 @@ ErrorHandler:
             elapsedSecondsValue, _
             model, _
             developerRequest, _
-            developerResponse
+            developerResponse, _
+            developerAdditionalResponse
 
         AddTrace ws, "ERROR", "ERROR", "Tool Calling error", _
                  "Err.Number: " & errorNumber & vbCrLf & _
