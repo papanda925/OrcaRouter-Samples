@@ -107,7 +107,7 @@ RESULTは `TabControl` です。**回答**、**Developer**、**トレース** �
 
 `ResizeMode="CanResizeWithGrip"` を指定し、INPUTとRESULTの間には `GridSplitter` を配置しています。質問欄を広くしたい場合、または結果欄を広くしたい場合は境界を上下にドラッグできます。
 
-送信時は「回答」タブを表示します。エラー時は「トレース」タブへ自動で切り替え、診断情報をすぐ確認できるようにしています。
+送信時は「回答」タブを表示します。**エラー時も回答タブを維持**し、質問とエラー内容を回答欄に残します。詳しい診断はDeveloper / トレースを利用者が必要に応じて開く方式です。
 
 ## Question入力欄 / MVVM
 
@@ -129,7 +129,7 @@ PowerShell + `XamlReader` では、主要な入力欄までData Bindingだけに
 
 また、API待機中もQuestion欄は無効化しません。応答を待ちながら次の質問を入力できます。
 
-CIではWindows PowerShell 5.1上で、QuestionBoxの編集性、ResultTabsに「回答」「トレース」の2タブがあること、1200×900で各タブの表示領域が十分な高さを持つことに加え、ウィンドウを低くしたときにPageScrollViewerへ実際のスクロール範囲が生まれ、下部まで移動できることを確認します。さらに、`DataRowView` の `INotifyPropertyChanged`、Answer / Status のData Binding、Background Runspace自己テストも検証します。
+CIではWindows PowerShell 5.1上で、QuestionBoxの編集性、ResultTabsに「回答」「Developer」「トレース」の3タブがあること、Prompt exampleが選択だけで質問欄を上書きしないこと、エラー時も回答タブとエラー表示を維持すること、1200×900で各タブの表示領域が十分な高さを持つことに加え、ウィンドウを低くしたときにPageScrollViewerへ実際のスクロール範囲が生まれ、下部まで移動できることを確認します。さらに、`DataRowView` の `INotifyPropertyChanged`、Answer / Status のData Binding、Background Runspace自己テストも検証します。
 
 参考: PowerShell / WPF / MVVMの考え方
 - https://papanda925.com/?p=2187
@@ -202,9 +202,9 @@ Tool Callingはモデル対応状況やQuotaによって、ローカル関数を
 
 WPF側で直近10往復の user / assistant 履歴を保持し、Background Runspaceへスナップショットを渡して次回の `messages` に再送します。**新しいチャット** はこのローカル履歴だけをクリアし、ModelやAPI Keyは残します。
 
-Prompt exampleから要約、初心者向け説明、コードレビュー、JSON、英訳の雛形をQuestionへ入れられます。
+**プロンプト例（任意）** で要約、初心者向け説明、コードレビュー、JSON、英訳を選び、**［質問欄へ反映］** を押すと雛形がQuestionへ入ります。選択しただけでは質問欄を書き換えないため、意図せず入力中の質問を失いません。反映後に自由に編集してから送信します。
 
-Developerタブには HTTP Status、Elapsed、Model、Prompt / Completion / Total Tokens、Cost、Request JSON、Response JSON を表示します。CostはOrcaRouterの `X-OrcaRouter-Include-Cost: true` を利用し、返らない場合は `(not returned)` と表示します。
+Developerタブには HTTP Status、Elapsed、Model、Prompt / Completion / Total Tokens、Cost、Request JSON、Response JSON を表示します。**APIエラー時にもDeveloper情報を残し**、取得できたHTTP Status、Request、Response/Error bodyを確認できます。CostはOrcaRouterの `X-OrcaRouter-Include-Cost: true` を利用し、返らない場合は `(not returned)` と表示します。
 
 ## Common processing steps
 
