@@ -59,18 +59,18 @@ const sendHandler = extractHandler(
 );
 
 assert(
-  !sendHandler.includes('renderConversation(question, "");'),
-  "Send must not flash an unconfirmed Question in Conversation."
+  sendHandler.includes('renderAnswer("");'),
+  "Send must clear the previous Answer while waiting for the new response."
 );
 
 assert(
-  sendHandler.includes("renderConversation();"),
-  "Send must keep committed conversation visible while waiting."
+  !sendHandler.includes("renderConversation"),
+  "The Web result area must not render the conversation transcript."
 );
 
 assert(
-  sendHandler.includes("renderConversation(question, errorText);"),
-  "Errors must keep the submitted Question and error visible."
+  sendHandler.includes("renderAnswer(errorText);"),
+  "Errors must remain visible in the Answer area without repeating Question."
 );
 
 assert(
@@ -84,8 +84,20 @@ assert(
 );
 
 assert(
-  /if \(pendingAssistant\) \{\s*messages\.push\(\{ role: "assistant", content: pendingAssistant \}\);/m.test(app),
-  "Validation errors must remain visible even when Question is empty."
+  app.includes("function renderAnswer(answerText"),
+  "Web must have a dedicated answer-only renderer."
+);
+
+assert(
+  app.includes("setUiBusy(true)") &&
+    app.includes("setUiBusy(false)") &&
+    html.includes('id="busyIndicator"'),
+  "Web must show and clear a busy state around requests."
+);
+
+assert(
+  !app.includes("conversation-message"),
+  "Web result rendering must not recreate prior user/assistant transcript blocks."
 );
 
 console.log("Web UI behavior contract checks passed.");
