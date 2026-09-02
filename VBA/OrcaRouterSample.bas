@@ -172,14 +172,24 @@ Public Sub SetupOrcaRouterSample()
                                  "Translate"
     End With
 
-    'Answer / conversation
-    ws.Range("A11").Value = "Conversation"
+    'Answer. Conversation history remains internal for the next API request.
+    ws.Range("A11").Value = "Answer"
     With ws.Range("B11:H15")
         .Merge
-        .Value = "The conversation will appear here."
+        .Value = "The answer will appear here."
         .WrapText = True
         .VerticalAlignment = xlTop
         .Interior.Color = RGB(245, 247, 251)
+        .Borders.Color = RGB(217, 225, 236)
+    End With
+
+    'Request status
+    ws.Range("A16").Value = "Status"
+    With ws.Range("B16:H16")
+        .Merge
+        .Value = "Ready"
+        .Font.Color = RGB(71, 85, 105)
+        .Interior.Color = RGB(248, 250, 252)
         .Borders.Color = RGB(217, 225, 236)
     End With
 
@@ -276,6 +286,7 @@ Public Sub SetupOrcaRouterSample()
     ws.Rows("6:9").RowHeight = 26
     ws.Rows("10:10").RowHeight = 28
     ws.Rows("11:15").RowHeight = 26
+    ws.Rows("16:16").RowHeight = 24
 
     ws.Range("A2:A17").Font.Bold = True
     ws.Range("A2:A17").Font.Color = RGB(71, 85, 105)
@@ -395,7 +406,8 @@ Public Sub NewOrcaRouterChat()
 
     Set ws = ThisWorkbook.Worksheets(SAMPLE_SHEET_NAME)
     ClearConversationHistoryState
-    ws.Range("B11").Value = "The conversation will appear here."
+    ws.Range("B11").Value = "The answer will appear here."
+    SetOrcaRouterUiStatus ws, "New chat - history cleared"
     UpdateVbaHistoryStatus ws
 
 CleanExit:
@@ -491,42 +503,42 @@ Public Sub CommitOrcaRouterConversationTurn(ByVal userText As String, ByVal assi
 
 End Sub
 
-Public Function GetOrcaRouterConversationDisplay( _
-    Optional ByVal pendingQuestion As String = "", _
-    Optional ByVal pendingAnswer As String = "") As String
+Public Function GetOrcaRouterAnswerDisplay( _
+    Optional ByVal answerText As String = "") As String
 
-    Dim i As Long
     Dim result As String
 
-    For i = 1 To conversationCount
-        result = result & "YOU" & vbCrLf
-        result = result & conversationUsers(i) & vbCrLf & vbCrLf
-        result = result & "ASSISTANT" & vbCrLf
-        result = result & conversationAssistants(i) & vbCrLf & vbCrLf
-    Next i
-
-    If Len(pendingQuestion) > 0 Then
-        result = result & "YOU" & vbCrLf
-        result = result & pendingQuestion & vbCrLf & vbCrLf
-    End If
-
-    If Len(pendingAnswer) > 0 Then
-        result = result & "ASSISTANT" & vbCrLf
-        result = result & pendingAnswer & vbCrLf & vbCrLf
-    End If
-
-    If Len(result) = 0 Then
-        result = "The conversation will appear here."
+    If Len(answerText) > 0 Then
+        result = answerText
+    ElseIf conversationCount > 0 Then
+        result = conversationAssistants(conversationCount)
+    Else
+        result = "The answer will appear here."
     End If
 
     If Len(result) > RAW_JSON_MAX_TEXT Then
-        result = "...(older display text omitted)..." & vbCrLf & _
-                 Right$(result, RAW_JSON_MAX_TEXT - 40)
+        result = Left$(result, RAW_JSON_MAX_TEXT - 40) & vbCrLf & _
+                 "...(answer truncated for Excel cell limit)..."
     End If
 
-    GetOrcaRouterConversationDisplay = result
+    GetOrcaRouterAnswerDisplay = result
 
 End Function
+
+Public Sub SetOrcaRouterUiStatus( _
+    ByVal ws As Worksheet, _
+    ByVal statusMessage As String, _
+    Optional ByVal isError As Boolean = False)
+
+    ws.Range("B16").Value = statusMessage
+
+    If isError Then
+        ws.Range("B16").Font.Color = RGB(180, 35, 24)
+    Else
+        ws.Range("B16").Font.Color = RGB(71, 85, 105)
+    End If
+
+End Sub
 
 Private Sub UpdateVbaHistoryStatus(ByVal ws As Worksheet)
 
@@ -749,10 +761,10 @@ Public Sub SendOrcaRouterChat()
         GoTo CleanExit
     End If
 
-    'Permanent UI contract:
-    'while waiting, keep committed conversation unchanged.
-    'Do not flash the submitted question before a response exists.
-    ws.Range("B11").Value = GetOrcaRouterConversationDisplay()
+    'Primary result is answer-only. Keep history internal and clear the
+    'previous answer while waiting for the new response.
+    ws.Range("B11").Value = vbNullString
+    SetOrcaRouterUiStatus ws, "Waiting for OrcaRouter response..."
     PrepareRawResponse ws, "Raw JSON Response - " & mode
 
     'STEP 1: Validate inputs.
@@ -862,7 +874,8 @@ Public Sub SendOrcaRouterChat()
 
     'STEP 6: Update UI and trace.
     CommitOrcaRouterConversationTurn question, assistantText
-    ws.Range("B11").Value = GetOrcaRouterConversationDisplay()
+    ws.Range("B11").Value = GetOrcaRouterAnswerDisplay(assistantText)
+    SetOrcaRouterUiStatus ws, "Completed"
     UpdateOrcaRouterDeveloperInformation _
         ws, _
         httpStatus, _
@@ -892,11 +905,10 @@ ErrorHandler:
 
     If Not ws Is Nothing Then
 
-        'Show the submitted question and error without committing the failed turn.
+        'Do not commit failed turns. The Question remains in its own input area.
         ws.Range("B11").Value = _
-            GetOrcaRouterConversationDisplay( _
-                question, _
-                "ERROR: " & errorDescription)
+            GetOrcaRouterAnswerDisplay("ERROR: " & errorDescription)
+        SetOrcaRouterUiStatus ws, "Error - check Answer / Developer / Trace", True
 
         If startedAt > 0 Then
             elapsedTimeSeconds = ElapsedSeconds(startedAt)
@@ -1075,15 +1087,20 @@ Public Sub RunOrcaRouterVbaSelfTests()
     'Advanced builders must reuse the same committed history.
     RunOrcaRouterAdvancedSelfTests True
 
-    displayText = GetOrcaRouterConversationDisplay( _
-                      "failed question", _
-                      "ERROR: synthetic failure")
+    displayText = GetOrcaRouterAnswerDisplay("ERROR: synthetic failure")
 
-    If InStr(1, displayText, "failed question", vbBinaryCompare) = 0 Or _
+    If InStr(1, displayText, "failed question", vbBinaryCompare) > 0 Or _
        InStr(1, displayText, "ERROR: synthetic failure", vbBinaryCompare) = 0 Then
 
         Err.Raise vbObjectError + 3006, "RunOrcaRouterVbaSelfTests", _
-                  "Failed requests must keep the submitted question and error visible."
+                  "Answer display must show error only and must not repeat Question."
+    End If
+
+    displayText = GetOrcaRouterAnswerDisplay()
+
+    If displayText <> "first answer" Then
+        Err.Raise vbObjectError + 3007, "RunOrcaRouterVbaSelfTests", _
+                  "Answer display must show only the latest committed assistant response."
     End If
 
     ClearConversationHistoryState
