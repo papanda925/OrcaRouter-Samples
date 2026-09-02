@@ -570,6 +570,10 @@ function Process-OrcaRouterWorkerEvents {
                 Set-DeveloperInformation -WorkerEvent $workerEvent
                 Set-ViewModelValue -Name 'StatusText' -Value 'Completed'
                 $statusText.Foreground = '#0F766E'
+
+                # Completion returns the user to the conversation so the answer
+                # is immediately visible. Developer / Trace remain one click away.
+                $resultTabs.SelectedIndex = 0
                 Set-UiBusy -Busy $false
                 $script:workerFinishedInUi = $true
             }
@@ -850,6 +854,18 @@ if ($UiBindingCheck) {
             throw 'ApplyPromptExampleButton was not found.'
         }
 
+        # Selecting a prompt example must not overwrite the user's question.
+        $questionBox.Text = 'Prompt selection must not overwrite this text'
+        $promptExampleBox.SelectedIndex = 1
+        $window.Dispatcher.Invoke(
+            [System.Action]{ },
+            [System.Windows.Threading.DispatcherPriority]::Background
+        )
+
+        if ($questionBox.Text -ne 'Prompt selection must not overwrite this text') {
+            throw 'Selecting PromptExampleBox must not change QuestionBox until Apply is clicked.'
+        }
+
         $resultTabs.SelectedIndex = 0
         $window.UpdateLayout()
 
@@ -910,6 +926,55 @@ if ($UiBindingCheck) {
         if ([string]$viewModel.Row['Question'] -ne 'Question editor input test') {
             throw 'QuestionBox TextChanged did not update the ViewModel.'
         }
+
+        # Regression test: an API/worker error must remain visible in Answer,
+        # must populate Developer, and must not force the Trace tab.
+        $script:currentQuestion = 'Synthetic question'
+        $script:workerEventQueue = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
+        $script:workerAsyncResult = $null
+        $script:workerFinishedInUi = $false
+
+        $script:workerEventQueue.Enqueue(
+            [pscustomobject]@{
+                Type = 'Error'
+                Message = 'Synthetic API error'
+                ExceptionType = 'System.Exception'
+                TotalElapsedMs = 42
+                HttpStatus = 429
+                Usage = $null
+                Request = [pscustomobject]@{ model = 'orcarouter/free' }
+                Response = [pscustomobject]@{ error = 'quota' }
+                ActualModel = 'orcarouter/free'
+            }
+        )
+
+        Process-OrcaRouterWorkerEvents
+        $window.Dispatcher.Invoke(
+            [System.Action]{ },
+            [System.Windows.Threading.DispatcherPriority]::DataBind
+        )
+
+        if ($answerBox.Text -notmatch 'Synthetic question') {
+            throw 'Error rendering lost the submitted question.'
+        }
+
+        if ($answerBox.Text -notmatch 'Synthetic API error') {
+            throw 'Error rendering did not show the API error in Answer.'
+        }
+
+        if ($developerBox.Text -notmatch 'HTTP Status\s+: 429') {
+            throw 'Developer Information did not receive error HTTP status.'
+        }
+
+        if ($developerBox.Text -notmatch 'Synthetic API error') {
+            throw 'Developer Information did not show error details.'
+        }
+
+        if ($resultTabs.SelectedIndex -ne 0) {
+            throw 'Error handling must keep the Answer tab selected.'
+        }
+
+        $script:workerEventQueue = $null
     }
     finally {
         $window.Close()
