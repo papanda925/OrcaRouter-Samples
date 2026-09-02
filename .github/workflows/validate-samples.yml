@@ -164,6 +164,72 @@ jobs:
             throw 'Background runspace self-test emitted an unexpected Error event.'
           }
 
+
+          # Full Chat pipeline regression:
+          # exercise the same STEP 1 -> STEP 6 path as a successful real request,
+          # but use a mock HTTP response so CI never needs a real API key.
+          foreach ($historyCase in @(
+              @(),
+              @([pscustomobject]@{ User = 'previous question'; Assistant = 'previous answer' })
+          )) {
+              $queue = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
+              $worker = [System.Management.Automation.PowerShell]::Create()
+
+              [void]$worker.AddCommand((Resolve-Path '.\PowerShell\OrcaRouterWorker.ps1').Path)
+              [void]$worker.AddParameter('PipelineSelfTest', $true)
+              [void]$worker.AddParameter('ApiKey', 'test-key')
+              [void]$worker.AddParameter('Model', 'orcarouter/free')
+              [void]$worker.AddParameter('Question', 'pipeline test')
+              [void]$worker.AddParameter('Mode', 'Chat')
+              [void]$worker.AddParameter('History', [object[]]$historyCase)
+              [void]$worker.AddParameter('EventQueue', $queue)
+
+              $async = $worker.BeginInvoke()
+
+              if (-not $async.AsyncWaitHandle.WaitOne(5000)) {
+                  $worker.Stop()
+                  $worker.Dispose()
+                  throw 'Full Chat pipeline self-test timed out.'
+              }
+
+              [void]$worker.EndInvoke($async)
+              $worker.Dispose()
+
+              $events = @()
+              $item = $null
+
+              while ($queue.TryDequeue([ref]$item)) {
+                  $events += $item
+                  $item = $null
+              }
+
+              $errors = @($events | Where-Object Type -eq 'Error')
+              if ($errors.Length -gt 0) {
+                  $first = $errors[0]
+                  throw "Full Chat pipeline emitted Error: $($first.Message) line=$($first.ScriptLineNumber) $($first.PositionMessage)"
+              }
+
+              $completed = @($events | Where-Object Type -eq 'Completed')
+              if ($completed.Length -ne 1) {
+                  throw 'Full Chat pipeline must emit exactly one Completed event.'
+              }
+
+              if ([string]$completed[0].Answer -ne 'mock pipeline answer') {
+                  throw "Unexpected mock Chat answer: $($completed[0].Answer)"
+              }
+
+              $step6 = @(
+                  $events |
+                  Where-Object {
+                      $_.Type -eq 'Trace' -and $_.Step -eq 'STEP 6'
+                  }
+              )
+
+              if ($step6.Length -ne 1) {
+                  throw 'Full Chat pipeline did not reach STEP 6.'
+              }
+          }
+
   safety:
     name: Source safety checks
     runs-on: ubuntu-latest
