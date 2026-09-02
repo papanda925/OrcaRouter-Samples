@@ -508,11 +508,11 @@ Public Function GetOrcaRouterConversationDisplay( _
     If Len(pendingQuestion) > 0 Then
         result = result & "YOU" & vbCrLf
         result = result & pendingQuestion & vbCrLf & vbCrLf
+    End If
 
-        If Len(pendingAnswer) > 0 Then
-            result = result & "ASSISTANT" & vbCrLf
-            result = result & pendingAnswer & vbCrLf & vbCrLf
-        End If
+    If Len(pendingAnswer) > 0 Then
+        result = result & "ASSISTANT" & vbCrLf
+        result = result & pendingAnswer & vbCrLf & vbCrLf
     End If
 
     If Len(result) = 0 Then
