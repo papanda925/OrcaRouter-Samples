@@ -128,6 +128,7 @@ $traceBox = $window.FindName('TraceBox')
 $sendButton = $window.FindName('SendButton')
 $clearTraceButton = $window.FindName('ClearTraceButton')
 $resultTabs = $window.FindName('ResultTabs')
+$pageScrollViewer = $window.FindName('PageScrollViewer')
 $busyProgressBar = $window.FindName('BusyProgressBar')
 $statusText = $window.FindName('StatusText')
 $historyStatusText = $window.FindName('HistoryStatusText')
@@ -885,9 +886,43 @@ if ($UiBindingCheck) {
             throw 'Window must support resize/minimize/maximize.'
         }
 
+        if ($null -eq $pageScrollViewer) {
+            throw 'PageScrollViewer was not found.'
+        }
+
+        if (
+            $pageScrollViewer.VerticalScrollBarVisibility -ne
+            [System.Windows.Controls.ScrollBarVisibility]::Auto
+        ) {
+            throw 'PageScrollViewer must use an automatic vertical scrollbar.'
+        }
+
         if ($null -eq $busyProgressBar) {
             throw 'BusyProgressBar was not found.'
         }
+
+        # At a shorter window height, the entire form must remain reachable
+        # through the right-side page scrollbar.
+        $window.Height = 720
+        $window.UpdateLayout()
+
+        if ($pageScrollViewer.ScrollableHeight -le 0) {
+            throw 'PageScrollViewer must provide a vertical scroll range.'
+        }
+
+        $pageScrollViewer.ScrollToEnd()
+        $window.Dispatcher.Invoke(
+            [System.Action]{ },
+            [System.Windows.Threading.DispatcherPriority]::Background
+        )
+
+        if ($pageScrollViewer.VerticalOffset -le 0) {
+            throw 'PageScrollViewer could not scroll to the lower RESULT area.'
+        }
+
+        $pageScrollViewer.ScrollToHome()
+        $window.Height = 900
+        $window.UpdateLayout()
 
         # Long text must stay inside the Question/Answer editors. The outer
         # window remains resizable instead of growing a page-sized document.
