@@ -134,6 +134,7 @@ $historyStatusText = $window.FindName('HistoryStatusText')
 $developerBox = $window.FindName('DeveloperBox')
 $newChatButton = $window.FindName('NewChatButton')
 $promptExampleBox = $window.FindName('PromptExampleBox')
+$applyPromptExampleButton = $window.FindName('ApplyPromptExampleButton')
 $referralButton = $window.FindName('ReferralButton')
 $firstRunPanel = $window.FindName('FirstRunPanel')
 
@@ -377,6 +378,107 @@ function Set-DeveloperInformation {
     ) -join [Environment]::NewLine
 }
 
+function Set-DeveloperErrorInformation {
+    param(
+        [string]$Message,
+        [string]$ExceptionType = '',
+        $WorkerEvent = $null
+    )
+
+    $httpStatus = '-'
+    $elapsed = '-'
+    $model = [string]$viewModel.Row['Model']
+    $requestText = '{}'
+    $responseText = '{}'
+
+    if ($null -ne $WorkerEvent) {
+        if ($null -ne $WorkerEvent.PSObject.Properties['HttpStatus'] -and $null -ne $WorkerEvent.HttpStatus) {
+            $httpStatus = [string]$WorkerEvent.HttpStatus
+        }
+        if ($null -ne $WorkerEvent.PSObject.Properties['TotalElapsedMs'] -and $null -ne $WorkerEvent.TotalElapsedMs) {
+            $elapsed = "$($WorkerEvent.TotalElapsedMs) ms"
+        }
+        if ($null -ne $WorkerEvent.PSObject.Properties['ActualModel'] -and -not [string]::IsNullOrWhiteSpace([string]$WorkerEvent.ActualModel)) {
+            $model = [string]$WorkerEvent.ActualModel
+        }
+        if ($null -ne $WorkerEvent.PSObject.Properties['Request'] -and $null -ne $WorkerEvent.Request) {
+            $requestText = ConvertTo-TraceText -Data $WorkerEvent.Request
+        }
+        if ($null -ne $WorkerEvent.PSObject.Properties['Response'] -and $null -ne $WorkerEvent.Response) {
+            $responseText = ConvertTo-TraceText -Data $WorkerEvent.Response
+        }
+    }
+
+    $developerBox.Text = @(
+        'Developer Information'
+        ('=' * 72)
+        'Result           : ERROR'
+        "HTTP Status      : $httpStatus"
+        "Elapsed          : $elapsed"
+        "Model            : $model"
+        'Prompt Tokens    : -'
+        'Completion Tokens: -'
+        'Total Tokens     : -'
+        'Cost             : (not returned)'
+        "History          : $($script:conversationHistory.Count) / $($script:MaxHistoryTurns) turns"
+        ''
+        '--- Error ---'
+        $Message
+        $(if (-not [string]::IsNullOrWhiteSpace($ExceptionType)) { "Type: $ExceptionType" } else { '' })
+        ''
+        '--- Request JSON ---'
+        $requestText
+        ''
+        '--- Response / Error body ---'
+        $responseText
+    ) -join [Environment]::NewLine
+}
+
+function Show-RequestError {
+    param(
+        [string]$Message,
+        [string]$ExceptionType = '',
+        $WorkerEvent = $null
+    )
+
+    $safeMessage = Protect-LocalTraceText -Text $Message
+    $errorAnswer = Get-ConversationTranscript -PendingQuestion $script:currentQuestion -PendingAnswer ("ERROR: " + $safeMessage)
+
+    Set-ViewModelValue -Name 'Answer' -Value $errorAnswer
+    Set-ViewModelValue -Name 'StatusText' -Value 'Error - 回答欄とDeveloper/Traceを確認してください'
+    $statusText.Foreground = '#B42318'
+
+    Set-DeveloperErrorInformation -Message $safeMessage -ExceptionType $ExceptionType -WorkerEvent $WorkerEvent
+
+    # Keep the Answer tab visible. The user can open Developer/Trace when needed.
+    $resultTabs.SelectedIndex = 0
+}
+
+function Get-PromptExampleText {
+    $selectedText = [string](($promptExampleBox.SelectedItem).Content)
+    $blankLine = [Environment]::NewLine + [Environment]::NewLine
+
+    switch ($selectedText) {
+        '要約' {
+            return '次の文章を3行で要約してください。' + $blankLine + 'ここに文章を貼り付けてください。'
+        }
+        '初心者向け説明' {
+            return '次の内容を、専門用語を補足しながら初心者向けに説明してください。' + $blankLine + 'ここに内容を貼り付けてください。'
+        }
+        'コードレビュー' {
+            return '次のコードをレビューし、問題点・理由・改善例の順に説明してください。' + $blankLine + 'ここにコードを貼り付けてください。'
+        }
+        'JSON形式で整理' {
+            return '次の内容を整理し、JSON形式だけで返してください。' + $blankLine + 'ここに内容を貼り付けてください。'
+        }
+        '英訳' {
+            return '次の日本語を自然な英語に翻訳してください。' + $blankLine + 'ここに文章を貼り付けてください。'
+        }
+        default {
+            return ''
+        }
+    }
+}
 function Set-UiBusy {
     param([bool]$Busy)
 
@@ -386,6 +488,7 @@ function Set-UiBusy {
     $modelBox.IsEnabled = -not $Busy
     $modeBox.IsEnabled = -not $Busy
     $promptExampleBox.IsEnabled = -not $Busy
+    $applyPromptExampleButton.IsEnabled = -not $Busy
 
     # The user can prepare the next question while the current request runs.
     $questionBox.IsEnabled = $true
@@ -482,10 +585,7 @@ function Complete-OrcaRouterWorker {
             Message = $safeMessage
         }
 
-        Set-ViewModelValue -Name 'Answer' -Value (Get-ConversationTranscript)
-        Set-ViewModelValue -Name 'StatusText' -Value 'Error - Trace を確認してください'
-        $statusText.Foreground = '#B42318'
-        $resultTabs.SelectedIndex = 2
+        Show-RequestError -Message $safeMessage -ExceptionType $_.Exception.GetType().FullName
     }
     finally {
         try {
@@ -544,10 +644,7 @@ function Process-OrcaRouterWorkerEvents {
                     Type = [string]$workerEvent.ExceptionType
                 }
 
-                Set-ViewModelValue -Name 'Answer' -Value (Get-ConversationTranscript)
-                Set-ViewModelValue -Name 'StatusText' -Value 'Error - Trace を確認してください'
-                $statusText.Foreground = '#B42318'
-                $resultTabs.SelectedIndex = 2
+                Show-RequestError -Message $safeMessage -ExceptionType ([string]$workerEvent.ExceptionType) -WorkerEvent $workerEvent
                 Set-UiBusy -Busy $false
                 $script:workerFinishedInUi = $true
             }
@@ -619,9 +716,10 @@ function Invoke-OrcaRouterChat {
 
     $resultTabs.SelectedIndex = 0
     $script:currentQuestion = $question
-    $pendingTranscript = Get-ConversationTranscript -PendingQuestion $question
-    Set-ViewModelValue -Name 'Answer' -Value $pendingTranscript
-    Set-ViewModelValue -Name 'StatusText' -Value 'Processing...'
+
+    # Keep the previous conversation visible while waiting. Do not flash the question in Answer.
+    Set-ViewModelValue -Name 'Answer' -Value (Get-ConversationTranscript)
+    Set-ViewModelValue -Name 'StatusText' -Value '送信中...'
     $statusText.Foreground = '#64748B'
     Set-UiBusy -Busy $true
 
@@ -662,31 +760,29 @@ $apiKeyBox.Add_PasswordChanged({
 
 $promptExampleBox.Add_SelectionChanged({
     if ($promptExampleBox.SelectedIndex -le 0) {
+        Set-ViewModelValue -Name 'StatusText' -Value 'Ready'
         return
     }
 
     $selectedText = [string](($promptExampleBox.SelectedItem).Content)
-    $blankLine = [Environment]::NewLine + [Environment]::NewLine
+    Set-ViewModelValue -Name 'StatusText' -Value "プロンプト例「$selectedText」を選択しました。［質問欄へ反映］を押してください。"
+    $statusText.Foreground = '#64748B'
+})
 
-    switch ($selectedText) {
-        '要約' {
-            $questionBox.Text = '次の文章を3行で要約してください。' + $blankLine + 'ここに文章を貼り付けてください。'
-        }
-        '初心者向け説明' {
-            $questionBox.Text = '次の内容を、専門用語を補足しながら初心者向けに説明してください。' + $blankLine + 'ここに内容を貼り付けてください。'
-        }
-        'コードレビュー' {
-            $questionBox.Text = '次のコードをレビューし、問題点・理由・改善例の順に説明してください。' + $blankLine + 'ここにコードを貼り付けてください。'
-        }
-        'JSON形式で整理' {
-            $questionBox.Text = '次の内容を整理し、JSON形式だけで返してください。' + $blankLine + 'ここに内容を貼り付けてください。'
-        }
-        '英訳' {
-            $questionBox.Text = '次の日本語を自然な英語に翻訳してください。' + $blankLine + 'ここに文章を貼り付けてください。'
-        }
+$applyPromptExampleButton.Add_Click({
+    $promptText = Get-PromptExampleText
+
+    if ([string]::IsNullOrWhiteSpace($promptText)) {
+        Set-ViewModelValue -Name 'StatusText' -Value 'プロンプト例を選択してください。'
+        $statusText.Foreground = '#B45309'
+        return
     }
 
+    $questionBox.Text = $promptText
+    Set-ViewModelValue -Name 'StatusText' -Value 'プロンプト例を質問欄へ反映しました。内容を編集してから送信してください。'
+    $statusText.Foreground = '#0F766E'
     [void]$questionBox.Focus()
+    $questionBox.CaretIndex = $questionBox.Text.Length
 })
 
 $modeBox.Add_SelectionChanged({
@@ -794,6 +890,10 @@ if ($UiBindingCheck) {
 
         if ($null -eq $promptExampleBox) {
             throw 'PromptExampleBox was not found.'
+        }
+
+        if ($null -eq $applyPromptExampleButton) {
+            throw 'ApplyPromptExampleButton was not found.'
         }
 
         $resultTabs.SelectedIndex = 0
