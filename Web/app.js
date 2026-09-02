@@ -101,9 +101,10 @@ function renderConversation(pendingQuestion = "", pendingAssistant = "") {
 
   if (pendingQuestion) {
     messages.push({ role: "user", content: pendingQuestion });
-    if (pendingAssistant) {
-      messages.push({ role: "assistant", content: pendingAssistant });
-    }
+  }
+
+  if (pendingAssistant) {
+    messages.push({ role: "assistant", content: pendingAssistant });
   }
 
   if (messages.length === 0) {
