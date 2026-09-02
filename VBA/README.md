@@ -16,7 +16,8 @@ Excel VBA から OrcaRouter の Chat Completions API を呼び出し、**Chat / 
 | Mode | B5:D5 |
 | Question | B6:H9 |
 | Prompt template (optional) | B10:D10 |
-| Conversation | B11:H15 |
+| Answer | B11:H15 |
+| Status | B16:H16 |
 | Raw JSON title/status | J1:P2 |
 | Response JSON | J3:P15 |
 | Developer metrics | J17:P20 |
@@ -165,7 +166,7 @@ Content-Type: application/json
 
 APIからHTTPレスポンスを受信すると、同じ結果を利用者向け表示と開発者向けRaw JSONの2つの見方で確認できます。
 
-- **Conversation（B11:H15）**: 成功済みの user / assistant 履歴と、今回の回答またはエラーを表示
+- **Answer（B11:H15）**: 最新のAssistant回答、Streaming途中回答、またはERRORだけを表示
 - **Raw JSON（J3:P15）**: APIから受信したレスポンス本文または最新SSEイベントを、解析前の内容として表示
 
 通常Chatでは受信したJSON全体をRaw JSONへ表示してからAssistant本文を解析します。そのため、本文抽出でエラーになった場合でもRaw JSONを見ればAPIが実際に何を返したか確認できます。
@@ -184,9 +185,9 @@ Chat / Streaming / Tool Calling は、VBAモジュール内の**同じ成功済�
 
 B10:D10 は **Prompt template (optional)** です。最初は `(select)` で、テンプレートを選んだだけではQuestionは変わりません。選択後に **Insert prompt** を押したときだけ、要約・初心者向け説明・コードレビュー・JSON・翻訳の雛形をQuestionへ入れます。
 
-通常Chat / Tool Callingでは、Send直後に未確定QuestionをConversationへ点滅表示せず、成功済み履歴を維持します。Streamingは実際にdeltaを受信した時点から、今回Question + 途中回答をConversationへ表示します。
+Send直後はAnswerをクリアし、B16:H16のStatusへ待機中であることを表示します。通常Chat / Tool Callingは完了時に最新Assistant回答だけをAnswerへ表示し、Streamingは実際にdeltaを受信した時点から途中回答だけを表示します。
 
-成功時だけ今回Question + Assistantを履歴へ確定します。APIエラー、timeout、入力検証エラーは履歴へ追加しませんが、**今回Question + ERROR内容をConversationに残します**。Streaming途中で失敗した場合は、受信済みのpartial answerも残したうえでERRORを追記します。
+成功時だけ今回Question + Assistantを内部履歴へ確定します。APIエラー、timeout、入力検証エラーは履歴へ追加せず、AnswerにはERROR内容だけを表示します。Streaming途中で失敗した場合は、受信済みpartial answerにERRORを追記します。Question自体はB6:H9に残るため、Answerへ重複表示しません。
 
 Developer Informationでは HTTP Status、Elapsed、Model、Prompt / Completion / Total Tokens、Costを確認できます。Request JSONはJ22:P30、Response JSON / Error bodyはRaw JSON領域J3:P15で確認します。Chat / Streaming / Tool Callingの成功・失敗の両方で、取得できた診断情報を更新します。Tool Callingでは2回のAPIレスポンスにUsage/Costがある場合、それらを合算します。Cost取得には `X-OrcaRouter-Include-Cost: true` を使い、APIが値を返さない場合は推測しません。
 
