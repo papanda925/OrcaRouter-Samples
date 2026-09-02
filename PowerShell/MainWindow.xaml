@@ -38,13 +38,21 @@
         </Style>
     </Window.Resources>
 
-    <Grid Margin="24">
+    <ScrollViewer
+        x:Name="PageScrollViewer"
+        VerticalScrollBarVisibility="Auto"
+        HorizontalScrollBarVisibility="Disabled"
+        CanContentScroll="False"
+        PanningMode="VerticalOnly"
+        HorizontalContentAlignment="Stretch"
+        VerticalContentAlignment="Top">
+        <Grid Margin="24" MinHeight="960">
             <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="290" MinHeight="260"/>
             <RowDefinition Height="8"/>
-            <RowDefinition Height="*" MinHeight="220"/>
+            <RowDefinition Height="360" MinHeight="300"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
@@ -246,6 +254,7 @@
                     x:Name="QuestionBox"
                     Grid.Row="3"
                     MinHeight="120"
+                    MaxHeight="160"
                     Padding="12"
                     FontSize="15"
                     AcceptsReturn="True"
@@ -318,6 +327,7 @@
                                 VerticalScrollBarVisibility="Auto"
                                 HorizontalScrollBarVisibility="Disabled"
                                 MinHeight="140"
+                                MaxHeight="250"
                                 VerticalContentAlignment="Top"
                                 Text="{Binding Answer, Mode=OneWay}"/>
                         </Grid>
@@ -421,5 +431,6 @@
                 Foreground="#94A3B8"
                 VerticalAlignment="Center"/>
         </Grid>
-    </Grid>
+        </Grid>
+    </ScrollViewer>
 </Window>

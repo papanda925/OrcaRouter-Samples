@@ -92,8 +92,16 @@ jobs:
             throw 'ApplyPromptExampleButton was not found in MainWindow.xaml'
           }
 
-          if ($null -ne $window.FindName('PageScrollViewer')) {
-            throw 'The page-level ScrollViewer must not return; long text belongs inside editor scrollbars.'
+          $pageScrollViewer = $window.FindName('PageScrollViewer')
+          if ($null -eq $pageScrollViewer) {
+            throw 'PageScrollViewer was not found in MainWindow.xaml'
+          }
+
+          if (
+            $pageScrollViewer.VerticalScrollBarVisibility -ne
+            [System.Windows.Controls.ScrollBarVisibility]::Auto
+          ) {
+            throw 'PageScrollViewer must use an automatic vertical scrollbar.'
           }
 
           $busyProgressBar = $window.FindName('BusyProgressBar')
