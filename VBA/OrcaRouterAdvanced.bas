@@ -787,7 +787,8 @@ ErrorHandler:
 
 End Sub
 
-Public Sub RunOrcaRouterAdvancedSelfTests()
+Public Sub RunOrcaRouterAdvancedSelfTests( _
+    Optional ByVal expectSharedHistory As Boolean = False)
 
     Dim streamingJson As String
     Dim toolJson As String
@@ -837,6 +838,25 @@ Public Sub RunOrcaRouterAdvancedSelfTests()
                          "calculate_sum", _
                          "{""a"":1,""b"":2}", _
                          "{""a"":1,""b"":2,""sum"":3}")
+
+    If expectSharedHistory Then
+
+        If InStr(1, streamingJson, "first answer", vbBinaryCompare) = 0 Then
+            Err.Raise vbObjectError + 3112, "RunOrcaRouterAdvancedSelfTests", _
+                      "Streaming request did not include shared conversation history."
+        End If
+
+        If InStr(1, toolJson, "first answer", vbBinaryCompare) = 0 Then
+            Err.Raise vbObjectError + 3113, "RunOrcaRouterAdvancedSelfTests", _
+                      "Tool request did not include shared conversation history."
+        End If
+
+        If InStr(1, toolResultJson, "first answer", vbBinaryCompare) = 0 Then
+            Err.Raise vbObjectError + 3114, "RunOrcaRouterAdvancedSelfTests", _
+                      "Tool result request did not include shared conversation history."
+        End If
+
+    End If
 
     If InStr(1, toolResultJson, """tool_call_id"":""call_123""", vbBinaryCompare) = 0 Or _
        InStr(1, toolResultJson, """role"":""tool""", vbBinaryCompare) = 0 Then
