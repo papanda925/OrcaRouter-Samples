@@ -30,6 +30,11 @@ $apiEndpoint = 'https://api.orcarouter.ai/v1/chat/completions'
 $requestTimeoutSeconds = 120
 $maxStreamTraceEvents = 50
 
+# Keep the latest transport state so the UI can show useful Developer info even on errors.
+$script:LastRequest = $null
+$script:LastResponse = $null
+$script:LastHttpStatus = $null
+
 function Add-WorkerEvent {
     param(
         [Parameter(Mandatory = $true)][string]$Type,
@@ -394,6 +399,10 @@ function Invoke-JsonRequest {
     $response = $null
 
     try {
+        $script:LastRequest = $Body
+        $script:LastResponse = $null
+        $script:LastHttpStatus = $null
+
         $requestJson = $Body | ConvertTo-Json -Depth 30 -Compress
 
         Add-WorkerTrace -Step 'STEP 3' -Direction 'REQUEST' -Title $TraceTitle -Data @{
@@ -407,6 +416,8 @@ function Invoke-JsonRequest {
         $rawResponse = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
         $headers = Get-ResponseHeaders -Response $response
         $status = [int]$response.StatusCode
+        $script:LastHttpStatus = $status
+        $script:LastResponse = $rawResponse
 
         Add-WorkerTrace -Step 'STEP 4' -Direction 'RESPONSE' -Title 'HTTPレスポンスを受信' -Data @{
             Status = $status
@@ -423,6 +434,7 @@ function Invoke-JsonRequest {
 
         try {
             $json = $rawResponse | ConvertFrom-Json
+            $script:LastResponse = $json
         }
         catch {
             throw "レスポンスJSONの解析に失敗しました: $($_.Exception.Message)"
@@ -510,6 +522,10 @@ function Invoke-Streaming {
             TimeoutSeconds = $requestTimeoutSeconds
         }
 
+        $script:LastRequest = $body
+        $script:LastResponse = $null
+        $script:LastHttpStatus = $null
+
         $requestJson = $body | ConvertTo-Json -Depth 30 -Compress
         $client = New-HttpClient
         $request = New-JsonRequest -Json $requestJson
@@ -521,9 +537,11 @@ function Invoke-Streaming {
 
         $headers = Get-ResponseHeaders -Response $response
         $status = [int]$response.StatusCode
+        $script:LastHttpStatus = $status
 
         if (-not $response.IsSuccessStatusCode) {
             $rawResponse = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+            $script:LastResponse = $rawResponse
 
             Add-WorkerTrace -Step 'STEP 4' -Direction 'RESPONSE' -Title 'Streaming開始前にHTTPエラー' -Data @{
                 Status = $status
@@ -569,6 +587,7 @@ function Invoke-Streaming {
             try {
                 $chunk = $payload | ConvertFrom-Json
                 $latestChunk = $chunk
+                $script:LastResponse = $chunk
             }
             catch {
                 Add-WorkerTrace -Step 'STEP 4' -Direction 'STREAM' -Title 'JSON化できないSSE data' -Data $payload
@@ -845,6 +864,11 @@ catch {
     Add-WorkerEvent -Type 'Error' -Values @{
         Message = $_.Exception.Message
         ExceptionType = $_.Exception.GetType().FullName
+        TotalElapsedMs = $stopwatch.ElapsedMilliseconds
+        HttpStatus = $script:LastHttpStatus
+        Request = $script:LastRequest
+        Response = $script:LastResponse
+        ActualModel = $Model
     }
 }
 finally {
