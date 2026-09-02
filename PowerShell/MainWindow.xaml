@@ -165,6 +165,7 @@
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
                 <Grid Grid.Row="0" Margin="0,0,0,10">
@@ -180,19 +181,6 @@
                         Grid.Column="1"
                         Orientation="Horizontal"
                         VerticalAlignment="Center">
-                        <ComboBox
-                            x:Name="PromptExampleBox"
-                            Width="190"
-                            Height="38"
-                            Margin="0,0,8,0"
-                            SelectedIndex="0">
-                            <ComboBoxItem Content="Prompt example"/>
-                            <ComboBoxItem Content="要約"/>
-                            <ComboBoxItem Content="初心者向け説明"/>
-                            <ComboBoxItem Content="コードレビュー"/>
-                            <ComboBoxItem Content="JSON形式で整理"/>
-                            <ComboBoxItem Content="英訳"/>
-                        </ComboBox>
                         <Button
                             x:Name="NewChatButton"
                             Content="新しいチャット"
@@ -210,9 +198,55 @@
                             BorderBrush="#0F172A"/>
                     </StackPanel>
                 </Grid>
+
+                <Grid Grid.Row="1" Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="230"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        Grid.Column="0"
+                        Text="プロンプト例"
+                        Margin="0,0,10,0"
+                        VerticalAlignment="Center"
+                        Foreground="#64748B"
+                        FontWeight="SemiBold"/>
+                    <ComboBox
+                        x:Name="PromptExampleBox"
+                        Grid.Column="1"
+                        Height="36"
+                        SelectedIndex="0"
+                        ToolTip="使いたい定型文を選びます。選択しただけでは質問欄は変わりません。">
+                        <ComboBoxItem Content="例を選択してください"/>
+                        <ComboBoxItem Content="要約"/>
+                        <ComboBoxItem Content="初心者向け説明"/>
+                        <ComboBoxItem Content="コードレビュー"/>
+                        <ComboBoxItem Content="JSON形式で整理"/>
+                        <ComboBoxItem Content="英訳"/>
+                    </ComboBox>
+                    <Button
+                        x:Name="ApplyPromptExampleButton"
+                        Grid.Column="2"
+                        Content="質問欄に挿入"
+                        MinWidth="120"
+                        Margin="8,0,10,0"
+                        Padding="12,6"
+                        Background="White"
+                        Foreground="#172033"
+                        BorderBrush="#D9E1EC"/>
+                    <TextBlock
+                        Grid.Column="3"
+                        Text="選択した例を質問欄に入れるだけです。自動送信はしません。"
+                        VerticalAlignment="Center"
+                        Foreground="#64748B"
+                        FontSize="12"/>
+                </Grid>
+
                 <TextBox
                     x:Name="QuestionBox"
-                    Grid.Row="1"
+                    Grid.Row="2"
                     MinHeight="80"
                     Padding="12"
                     FontSize="15"
