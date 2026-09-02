@@ -145,11 +145,13 @@ Model欄は自由入力なので、無料ルーターと有料モデルで同じ
 
 ## 画面
 
-1画面で次の3点を確認できます。
+1画面で次を確認できます。
 
 - 質問
-- OrcaRouterからの回答（「回答」タブ）
+- 最大10往復の会話とOrcaRouterからの回答（「回答」タブ）
+- HTTP Status / Elapsed / Token / Cost / Request / Response（「Developer」タブ）
 - 処理ステップとHTTPトレース（「トレース」タブ）
+- プロンプト例（任意）と明示的な「質問欄に挿入」
 
 トレースには、APIキーを伏せたリクエスト情報、Request JSON、HTTPステータス、Response headers、Raw response、例外情報などを表示します。
 
