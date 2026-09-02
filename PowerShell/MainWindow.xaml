@@ -208,7 +208,7 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock
                         Grid.Column="0"
-                        Text="プロンプト例"
+                        Text="プロンプト例（任意）"
                         Margin="0,0,10,0"
                         VerticalAlignment="Center"
                         Foreground="#64748B"
