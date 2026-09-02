@@ -294,7 +294,7 @@ VBEで次を実行します。
 SetupOrcaRouterSample
 ```
 
-これで `OrcaRouter Chat` シートと、入力欄・Conversation・Prompt example・Developer Information・Request/Response JSON・Trace・Send/New chatボタンが作成されます。
+これで `OrcaRouter Chat` シートと、入力欄・Conversation・Prompt template (optional)・Developer Information・Request/Response JSON・Trace・Send/New chatボタンが作成されます。
 
 **BASファイルをインポートしただけでは、操作用シートは完成しません。最初にSetupを実行してください。**
 
