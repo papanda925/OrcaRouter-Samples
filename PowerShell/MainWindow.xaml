@@ -38,23 +38,13 @@
         </Style>
     </Window.Resources>
 
-    <ScrollViewer
-        x:Name="PageScrollViewer"
-        VerticalScrollBarVisibility="Auto"
-        HorizontalScrollBarVisibility="Disabled"
-        CanContentScroll="False"
-        PanningMode="VerticalOnly"
-        HorizontalContentAlignment="Stretch"
-        VerticalContentAlignment="Stretch">
-        <Grid
-            Margin="24"
-            MinHeight="900">
+    <Grid Margin="24">
             <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="2*" MinHeight="170"/>
+            <RowDefinition Height="2*" MinHeight="140"/>
             <RowDefinition Height="8"/>
-            <RowDefinition Height="5*" MinHeight="320"/>
+            <RowDefinition Height="3*" MinHeight="220"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
@@ -316,7 +306,7 @@
                                 TextWrapping="Wrap"
                                 VerticalScrollBarVisibility="Auto"
                                 HorizontalScrollBarVisibility="Disabled"
-                                MinHeight="180"
+                                MinHeight="140"
                                 VerticalContentAlignment="Top"
                                 Text="{Binding Answer, Mode=OneWay}"/>
                         </Grid>
@@ -394,6 +384,14 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal">
+                <ProgressBar
+                    x:Name="BusyProgressBar"
+                    Width="110"
+                    Height="6"
+                    Margin="0,0,12,0"
+                    VerticalAlignment="Center"
+                    IsIndeterminate="True"
+                    Visibility="Collapsed"/>
                 <TextBlock
                     x:Name="StatusText"
                     Text="{Binding StatusText, Mode=OneWay}"
@@ -412,6 +410,5 @@
                 Foreground="#94A3B8"
                 VerticalAlignment="Center"/>
         </Grid>
-        </Grid>
-    </ScrollViewer>
+    </Grid>
 </Window>
