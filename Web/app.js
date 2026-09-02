@@ -30,6 +30,7 @@ const newChatButton = document.getElementById("newChatButton");
 const promptExampleInput = document.getElementById("promptExample");
 const applyPromptExampleButton = document.getElementById("applyPromptExampleButton");
 const historyStatus = document.getElementById("historyStatus");
+const busyIndicator = document.getElementById("busyIndicator");
 const firstRunHelp = document.getElementById("firstRunHelp");
 const devHttpStatus = document.getElementById("devHttpStatus");
 const devElapsed = document.getElementById("devElapsed");
@@ -90,43 +91,8 @@ function updateHistoryStatus() {
   devHistory.textContent = `${count} / ${MAX_HISTORY_TURNS} turns`;
 }
 
-function renderConversation(pendingQuestion = "", pendingAssistant = "") {
-  answerBox.innerHTML = "";
-
-  const messages = [];
-  for (const turn of conversationHistory) {
-    messages.push({ role: "user", content: turn.user });
-    messages.push({ role: "assistant", content: turn.assistant });
-  }
-
-  if (pendingQuestion) {
-    messages.push({ role: "user", content: pendingQuestion });
-  }
-
-  if (pendingAssistant) {
-    messages.push({ role: "assistant", content: pendingAssistant });
-  }
-
-  if (messages.length === 0) {
-    answerBox.textContent = "ここに会話が表示されます。";
-    return;
-  }
-
-  for (const message of messages) {
-    const item = document.createElement("div");
-    item.className = `conversation-message ${message.role}`;
-
-    const role = document.createElement("span");
-    role.className = "conversation-role";
-    role.textContent = message.role === "user" ? "YOU" : "ASSISTANT";
-
-    const body = document.createElement("div");
-    body.textContent = message.content;
-
-    item.append(role, body);
-    answerBox.appendChild(item);
-  }
-
+function renderAnswer(answerText = "") {
+  answerBox.textContent = answerText || "ここに回答が表示されます。";
   answerBox.scrollTop = answerBox.scrollHeight;
 }
 
@@ -134,14 +100,14 @@ function addConversationTurn(question, assistant) {
   conversationHistory.push({ user: question, assistant });
   trimConversationHistory();
   updateHistoryStatus();
-  renderConversation();
+  renderAnswer(assistant);
 }
 
 function startNewChat() {
   conversationHistory.length = 0;
   transientAssistantText = "";
   updateHistoryStatus();
-  renderConversation();
+  renderAnswer();
   setStatus("New chat - 履歴をクリアしました");
 }
 
@@ -218,6 +184,24 @@ function resetDeveloperInfo() {
 function setStatus(message, isError = false) {
   statusText.textContent = message;
   statusText.classList.toggle("error", isError);
+}
+
+function setUiBusy(isBusy) {
+  sendButton.disabled = isBusy;
+  newChatButton.disabled = isBusy;
+  apiKeyInput.disabled = isBusy;
+  apiKeyFileInput.disabled = isBusy;
+  modelInput.disabled = isBusy;
+  modeInput.disabled = isBusy;
+  promptExampleInput.disabled = isBusy;
+  applyPromptExampleButton.disabled = isBusy;
+
+  // Keep the Question editor available so the user can prepare the next prompt.
+  questionInput.disabled = false;
+
+  sendButton.textContent = isBusy ? "回答待ち..." : "送信";
+  busyIndicator.hidden = !isBusy;
+  answerBox.setAttribute("aria-busy", isBusy ? "true" : "false");
 }
 
 function maskApiKey(apiKey) {
@@ -730,7 +714,8 @@ async function runStreaming(apiKey, model, question, startedAt) {
         if (typeof delta === "string" && delta.length > 0) {
           answer += delta;
           transientAssistantText = answer;
-          renderConversation(question, answer);
+          renderAnswer(answer);
+          setStatus("回答受信中...");
         }
 
         if (chunk.usage) {
@@ -760,7 +745,8 @@ async function runStreaming(apiKey, model, question, startedAt) {
             if (typeof delta === "string" && delta.length > 0) {
               answer += delta;
               transientAssistantText = answer;
-              renderConversation(question, answer);
+              renderAnswer(answer);
+              setStatus("回答受信中...");
             }
             if (chunk.usage) usage = chunk.usage;
           } catch {
@@ -973,11 +959,8 @@ async function sendChat() {
         ? "Raw JSON - Tool Calling"
         : "Raw JSON - Chat"
   );
-  setStatus("送信中...");
-  sendButton.disabled = true;
-  newChatButton.disabled = true;
-  promptExampleInput.disabled = true;
-  applyPromptExampleButton.disabled = true;
+  setStatus("送信済み・回答待ち...");
+  setUiBusy(true);
   transientAssistantText = "";
 
   // Developer Information must describe the current attempt, not a previous one.
@@ -988,10 +971,9 @@ async function sendChat() {
   try {
     validateInputs(apiKey, model, question, mode);
 
-    // Permanent UI contract:
-    // while waiting, keep the committed conversation unchanged.
-    // Do not flash the submitted question in the result area before a response exists.
-    renderConversation();
+    // The primary result is answer-only. Clear the previous answer while the
+    // new request runs; conversationHistory remains internal API context.
+    renderAnswer("");
 
     let result;
 
@@ -1043,9 +1025,9 @@ async function sendChat() {
       ? `${transientAssistantText}\n\n[ERROR]\n${message}`
       : `ERROR: ${message}`;
 
-    // Keep the submitted question and the error visible without committing
-    // the failed turn to conversation history.
-    renderConversation(question, errorText);
+    // Failed turns are not committed. Keep the Question in the editor and
+    // show only the error/partial assistant result in the Answer area.
+    renderAnswer(errorText);
 
     let requestForDisplay = {};
     try {
@@ -1063,12 +1045,9 @@ async function sendChat() {
       response: error?.details ?? { error: message }
     });
 
-    setStatus("Error - 会話欄とDeveloper / Traceを確認してください", true);
+    setStatus("Error - 回答欄とDeveloper / Traceを確認してください", true);
   } finally {
-    sendButton.disabled = false;
-    newChatButton.disabled = false;
-    promptExampleInput.disabled = false;
-    applyPromptExampleButton.disabled = false;
+    setUiBusy(false);
   }
 }
 
@@ -1144,5 +1123,5 @@ questionInput.addEventListener("keydown", (event) => {
 clearTrace();
 updateFirstRunHelp();
 updateHistoryStatus();
-renderConversation();
+renderAnswer();
 resetDeveloperInfo();

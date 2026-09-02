@@ -416,16 +416,23 @@ jobs:
               "Web explicit prompt apply control is missing.",
           )
           require(
-              "renderConversation(question, errorText);" in web,
-              "Web error result must keep question/error visible.",
+              "renderAnswer(errorText);" in web,
+              "Web error result must remain visible without repeating Question.",
           )
           require(
               "resetDeveloperInfo();" in web,
               "Web must reset Developer Information for each request attempt.",
           )
           require(
-              'renderConversation(question, "");' not in web,
-              "Web must not flash pending question before a response.",
+              "renderConversation" not in web,
+              "Web must not render the conversation transcript in the Answer area.",
+          )
+          require(
+              'renderAnswer("");' in web
+              and "setUiBusy(true)" in web
+              and "setUiBusy(false)" in web
+              and 'id="busyIndicator"' in web_html,
+              "Web must clear the old answer and show a busy state while waiting.",
           )
 
           require(
@@ -466,13 +473,19 @@ jobs:
               "VBA prompt template workflow is not explicit enough.",
           )
           require(
-              'GetOrcaRouterConversationDisplay(question)' not in vba,
-              "VBA Chat must not flash pending Question before response.",
+              "GetOrcaRouterConversationDisplay" not in vba
+              and "GetOrcaRouterConversationDisplay" not in vba_adv,
+              "VBA must not render conversation transcripts in the Answer area.",
           )
           require(
-              'GetOrcaRouterConversationDisplay( _' in vba
-              and '"ERROR: " & errorDescription' in vba,
-              "VBA Chat error must keep submitted Question/error visible.",
+              "GetOrcaRouterAnswerDisplay" in vba
+              and "SetOrcaRouterUiStatus" in vba,
+              "VBA answer-only renderer or request status helper is missing.",
+          )
+          require(
+              'ws.Range("B11").Value = vbNullString' in vba
+              and 'GetOrcaRouterAnswerDisplay("ERROR: " & errorDescription)' in vba,
+              "VBA Chat must clear old Answer while waiting and show error only on failure.",
           )
           require(
               "ResetOrcaRouterDeveloperInformation ws" in vba,
@@ -507,6 +520,7 @@ jobs:
           referral='https://www.orcarouter.ai/ref/ref_5074f764e512c8dd3d9d'
 
           grep -q "$referral" README.md
+          grep -q 'Powered_by-OrcaRouter-2563eb' README.md
           grep -q "$referral" Web/index.html
           grep -q "$referral" PowerShell/OrcaRouterChat.ps1
           grep -q "$referral" VBA/OrcaRouterSample.bas

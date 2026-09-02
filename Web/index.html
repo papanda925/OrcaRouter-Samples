@@ -94,7 +94,10 @@
           placeholder="例: TCPとUDPの違いを初心者向けに説明してください。"
         >日本語で「こんにちは。Web版Chatのテストです。」とだけ答えてください。</textarea>
         <div class="status-row">
-          <p id="statusText" class="status-text" aria-live="polite">Ready</p>
+          <div class="status-primary">
+            <span id="busyIndicator" class="busy-indicator" hidden aria-hidden="true"></span>
+            <p id="statusText" class="status-text" aria-live="polite">Ready</p>
+          </div>
           <p id="historyStatus" class="status-text">履歴 0 / 10 往復</p>
         </div>
       </article>
@@ -102,11 +105,11 @@
       <article class="panel answer-panel">
         <div class="panel-header">
           <div>
-            <span class="step-label">CONVERSATION</span>
-            <h2>会話</h2>
+            <span class="step-label">RESULT</span>
+            <h2>回答</h2>
           </div>
         </div>
-        <div id="answer" class="answer-box conversation-box" aria-live="polite">ここに会話が表示されます。</div>
+        <div id="answer" class="answer-box answer-scroll-box" aria-live="polite">ここに回答が表示されます。</div>
       </article>
     </section>
 

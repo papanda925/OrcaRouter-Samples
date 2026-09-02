@@ -250,8 +250,10 @@ textarea {
 
 textarea {
   min-height: 210px;
+  max-height: 360px;
   padding: 14px;
   resize: vertical;
+  overflow-y: auto;
   line-height: 1.65;
 }
 
@@ -303,6 +305,27 @@ textarea:focus {
   flex-wrap: wrap;
 }
 
+.status-primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.busy-indicator {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #cbd5e1;
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: busy-spin 0.8s linear infinite;
+}
+
+@keyframes busy-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .primary-button {
   border: 1px solid var(--surface-strong);
   background: var(--surface-strong);
@@ -334,37 +357,9 @@ textarea:focus {
   overflow-wrap: anywhere;
 }
 
-.conversation-box {
+.answer-scroll-box {
   max-height: 520px;
   overflow-y: auto;
-}
-
-.conversation-message {
-  padding: 10px 12px;
-  border-radius: 10px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.conversation-message + .conversation-message {
-  margin-top: 10px;
-}
-
-.conversation-message.user {
-  background: #f1f5f9;
-}
-
-.conversation-message.assistant {
-  background: #ecfeff;
-}
-
-.conversation-role {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
 }
 
 .status-text {

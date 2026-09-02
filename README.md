@@ -2,6 +2,7 @@
 
 **Learning-focused OrcaRouter API samples for Web, PowerShell/WPF, and Excel VBA — including Chat, Streaming, Tool Calling, request/response tracing, and error handling.**
 
+[![Powered by OrcaRouter](https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb)](https://www.orcarouter.ai/ref/ref_5074f764e512c8dd3d9d)
 [![Validate samples](https://github.com/papanda925/OrcaRouter-Samples/actions/workflows/validate-samples.yml/badge.svg)](https://github.com/papanda925/OrcaRouter-Samples/actions/workflows/validate-samples.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -64,7 +65,7 @@ OrcaRouter API を **Web / PowerShell / Excel VBA** から呼び出す、学習�
 - **10-turn limit** - user + assistant を1往復として、直近10往復のみ保持
 - **New chat** - APIへリセット電文は送らず、アプリ側の履歴だけをクリア
 - **Prompt examples** - 選択だけではQuestionを書き換えず、明示的なInsert/Applyで要約、説明、コードレビュー、JSON、翻訳を挿入
-- **Stable request state** - 送信中は成功済み履歴を維持し、成功時のみturnをcommit。失敗時はQuestion + ERRORを残す
+- **Stable request state** - 送信中は回答待ち状態を明示し、成功時のみturnを内部履歴へcommit。回答欄には最新のAssistant回答だけを表示し、失敗時はERRORを表示
 - **Developer Information** - 成功/失敗の両方でHTTP Status、Elapsed、Model、Prompt Tokens、Completion Tokens、Total Tokens、Cost、Request JSON、Response/Error body
 
 Cost取得では OrcaRouter のChat Completions仕様にある `X-OrcaRouter-Include-Cost: true` を使用します。APIから `usage.cost_usd` が返らない場合は、推測せず `(not returned)` と表示します。
@@ -111,8 +112,8 @@ Authorization: Bearer <API_KEY>
 
 各サンプルは、同じ画面または同じ操作単位で次の内容を確認しやすいようにしています。
 
-1. **質問と最大10往復の会話履歴**
-2. **OrcaRouterからの回答**
+1. **質問入力と最大10往復の内部会話履歴（次回Request用）**
+2. **OrcaRouterからの最新回答**
 3. **Developer Information（HTTP Status / Elapsed / Token / Cost）**
 4. **Request JSON / Response JSON**
 5. **Raw response / Raw JSON**
