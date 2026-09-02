@@ -956,6 +956,60 @@ if ($UiBindingCheck) {
         if ([string]$viewModel.Row['Question'] -ne 'Question editor input test') {
             throw 'QuestionBox TextChanged did not update the ViewModel.'
         }
+
+        # Prompt examples must not overwrite the Question just by selecting an item.
+        $questionBox.Text = 'Keep this question'
+        $promptExampleBox.SelectedIndex = 1
+        $window.Dispatcher.Invoke(
+            [System.Action]{ },
+            [System.Windows.Threading.DispatcherPriority]::Background
+        )
+
+        if ($questionBox.Text -ne 'Keep this question') {
+            throw 'Selecting a prompt example must not overwrite QuestionBox.'
+        }
+
+        $applyPromptExampleButton.RaiseEvent(
+            [System.Windows.RoutedEventArgs]::new(
+                [System.Windows.Controls.Button]::ClickEvent
+            )
+        )
+
+        if ($questionBox.Text -notmatch '3行で要約') {
+            throw 'ApplyPromptExampleButton did not copy the selected example to QuestionBox.'
+        }
+
+        # Regression test: request errors stay on Answer and remain visible.
+        $script:currentQuestion = 'Regression test question'
+        $fakeErrorEvent = [pscustomobject]@{
+            HttpStatus = 429
+            TotalElapsedMs = 123
+            ActualModel = 'orcarouter/free'
+            Request = [pscustomobject]@{ model = 'orcarouter/free' }
+            Response = [pscustomobject]@{ error = 'rate limited' }
+        }
+
+        Show-RequestError -Message 'Regression test error' -ExceptionType 'TestException' -WorkerEvent $fakeErrorEvent
+
+        $window.Dispatcher.Invoke(
+            [System.Action]{ },
+            [System.Windows.Threading.DispatcherPriority]::DataBind
+        )
+
+        if ($resultTabs.SelectedIndex -ne 0) {
+            throw 'Request errors must keep the Answer tab selected.'
+        }
+
+        if ($answerBox.Text -notmatch 'Regression test error') {
+            throw 'Request error must remain visible in AnswerBox.'
+        }
+
+        if ($developerBox.Text -notmatch 'HTTP Status\s+: 429') {
+            throw 'DeveloperBox must show HTTP status for request errors.'
+        }
+
+        Clear-ConversationHistory
+        $promptExampleBox.SelectedIndex = 0
     }
     finally {
         $window.Close()
