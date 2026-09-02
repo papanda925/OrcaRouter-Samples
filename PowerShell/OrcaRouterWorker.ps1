@@ -11,6 +11,7 @@
 
 param(
     [switch]$SelfTest,
+    [switch]$PipelineSelfTest,
     [string]$ApiKey = '',
     [string]$Model = 'orcarouter/free',
     [string]$Question = '',
@@ -37,6 +38,18 @@ $script:lastResponse = $null
 $script:lastHttpStatus = $null
 $script:lastUsage = $null
 $script:lastActualModel = $Model
+
+# Normalize History once. PowerShell functions can emit $null/scalar/array values
+# differently across Windows PowerShell 5.1 call paths. Never rely on a dynamic
+# .Count property for request history.
+$historyItems = @()
+$historyTurnCount = 0
+
+foreach ($turn in $historyItems) {
+    if ($null -eq $turn) { continue }
+    $historyItems += $turn
+    $historyTurnCount += 1
+}
 
 function Add-WorkerEvent {
     param(
@@ -122,7 +135,7 @@ function New-ConversationMessages {
 
     $messages = @()
 
-    foreach ($turn in @($History)) {
+    foreach ($turn in $historyItems) {
         if ($null -eq $turn) { continue }
 
         $userText = Get-PropertyValue -Object $turn -Name 'User'
@@ -413,6 +426,54 @@ function Invoke-JsonRequest {
             TimeoutSeconds = $requestTimeoutSeconds
         }
 
+        if ($PipelineSelfTest) {
+            $json = [pscustomobject]@{
+                id = 'mock-chat-completion'
+                object = 'chat.completion'
+                created = 0
+                model = 'mock/provider-model'
+                choices = @(
+                    [pscustomobject]@{
+                        index = 0
+                        message = [pscustomobject]@{
+                            role = 'assistant'
+                            content = 'mock pipeline answer'
+                        }
+                        finish_reason = 'stop'
+                    }
+                )
+                usage = [pscustomobject]@{
+                    prompt_tokens = 10
+                    completion_tokens = 5
+                    total_tokens = 15
+                }
+            }
+
+            $rawResponse = $json | ConvertTo-Json -Depth 30 -Compress
+            $headers = [ordered]@{ 'X-Orca-Test' = 'pipeline-self-test' }
+            $status = 200
+
+            $script:lastHttpStatus = $status
+            $script:lastResponse = $json
+            $script:lastUsage = $json.usage
+            $script:lastActualModel = $json.model
+
+            Add-WorkerTrace -Step 'STEP 4' -Direction 'RESPONSE' -Title 'Mock HTTPレスポンスを受信' -Data @{
+                Status = $status
+                StatusText = 'OK'
+                ElapsedMs = $Stopwatch.ElapsedMilliseconds
+                Headers = $headers
+                RawBody = $rawResponse
+            }
+
+            return [pscustomobject]@{
+                Json = $json
+                RawBody = $rawResponse
+                Headers = $headers
+                Status = $status
+            }
+        }
+
         $client = New-HttpClient
         $request = New-JsonRequest -Json $requestJson
         $response = $client.SendAsync($request).GetAwaiter().GetResult()
@@ -475,7 +536,7 @@ function Invoke-Chat {
     Add-WorkerTrace -Step 'STEP 2' -Direction 'REQUEST' -Title '通常Chatリクエストを組み立て' -Data @{
         Endpoint = $apiEndpoint
         Authorization = 'Bearer {0}' -f (Mask-ApiKey -Value $ApiKey)
-        HistoryTurns = @($History).Count
+        HistoryTurns = $historyTurnCount
         IncludeCost = $true
         Body = $body
     }
@@ -491,7 +552,7 @@ function Invoke-Chat {
 
     Add-WorkerTrace -Step 'STEP 5' -Direction 'LOCAL' -Title 'Assistantメッセージを解析' -Data @{
         AnswerChars = $answer.Length
-        HistoryTurns = @($History).Count
+        HistoryTurns = $historyTurnCount
         Usage = if ($null -ne $usage) { $usage } else { '(usage not returned)' }
     }
 
@@ -799,7 +860,7 @@ function Invoke-ToolCalling {
 
     Add-WorkerTrace -Step 'STEP 5' -Direction 'LOCAL' -Title 'Tool Calling後の最終回答を解析' -Data @{
         AnswerChars = $answer.Length
-        HistoryTurns = @($History).Count
+        HistoryTurns = $historyTurnCount
         Usage = if ($null -ne $usage) { $usage } else { '(usage not returned)' }
     }
 
@@ -849,7 +910,7 @@ try {
     Add-WorkerTrace -Step 'STEP 6' -Direction 'LOCAL' -Title 'バックグラウンド処理を完了' -Data @{
         Mode = $Mode
         Completed = $true
-        HistoryTurns = @($History).Count
+        HistoryTurns = $historyTurnCount
         TotalElapsedMs = $stopwatch.ElapsedMilliseconds
     }
 
@@ -867,6 +928,9 @@ catch {
     Add-WorkerEvent -Type 'Error' -Values @{
         Message = $_.Exception.Message
         ExceptionType = $_.Exception.GetType().FullName
+        ScriptLineNumber = $_.InvocationInfo.ScriptLineNumber
+        PositionMessage = $_.InvocationInfo.PositionMessage
+        ScriptStackTrace = $_.ScriptStackTrace
         TotalElapsedMs = $stopwatch.ElapsedMilliseconds
         HttpStatus = $script:lastHttpStatus
         Usage = $script:lastUsage
