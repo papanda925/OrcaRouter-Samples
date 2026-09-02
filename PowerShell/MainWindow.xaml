@@ -165,6 +165,7 @@
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
                 <Grid Grid.Row="0" Margin="0,0,0,10">
@@ -180,19 +181,6 @@
                         Grid.Column="1"
                         Orientation="Horizontal"
                         VerticalAlignment="Center">
-                        <ComboBox
-                            x:Name="PromptExampleBox"
-                            Width="190"
-                            Height="38"
-                            Margin="0,0,8,0"
-                            SelectedIndex="0">
-                            <ComboBoxItem Content="Prompt example"/>
-                            <ComboBoxItem Content="要約"/>
-                            <ComboBoxItem Content="初心者向け説明"/>
-                            <ComboBoxItem Content="コードレビュー"/>
-                            <ComboBoxItem Content="JSON形式で整理"/>
-                            <ComboBoxItem Content="英訳"/>
-                        </ComboBox>
                         <Button
                             x:Name="NewChatButton"
                             Content="新しいチャット"
@@ -210,9 +198,70 @@
                             BorderBrush="#0F172A"/>
                     </StackPanel>
                 </Grid>
+
+                <Border
+                    Grid.Row="1"
+                    Margin="0,0,0,10"
+                    Padding="10"
+                    Background="#F8FAFC"
+                    BorderBrush="#E2E8F0"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="220"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock
+                                Text="プロンプト例（任意）"
+                                Foreground="#334155"
+                                FontWeight="SemiBold"/>
+                            <TextBlock
+                                Text="選んだ例を質問欄へ入れて編集できます"
+                                Margin="0,2,0,0"
+                                Foreground="#64748B"
+                                FontSize="11"/>
+                        </StackPanel>
+                        <ComboBox
+                            x:Name="PromptExampleBox"
+                            Grid.Column="2"
+                            Height="34"
+                            SelectedIndex="0">
+                            <ComboBoxItem Content="選択してください"/>
+                            <ComboBoxItem Content="要約"/>
+                            <ComboBoxItem Content="初心者向け説明"/>
+                            <ComboBoxItem Content="コードレビュー"/>
+                            <ComboBoxItem Content="JSON形式で整理"/>
+                            <ComboBoxItem Content="英訳"/>
+                        </ComboBox>
+                        <Button
+                            x:Name="ApplyPromptExampleButton"
+                            Grid.Column="4"
+                            Content="質問欄へ反映"
+                            MinWidth="110"
+                            Padding="12,6"
+                            Background="White"
+                            Foreground="#172033"
+                            BorderBrush="#CBD5E1"/>
+                        <TextBlock
+                            Grid.Column="6"
+                            Text="※ 選択しただけでは質問欄を書き換えません。反映後に自由に編集してから送信してください。"
+                            VerticalAlignment="Center"
+                            Foreground="#64748B"
+                            FontSize="11"
+                            TextWrapping="Wrap"/>
+                    </Grid>
+                </Border>
+
                 <TextBox
                     x:Name="QuestionBox"
-                    Grid.Row="1"
+                    Grid.Row="2"
                     MinHeight="80"
                     Padding="12"
                     FontSize="15"
