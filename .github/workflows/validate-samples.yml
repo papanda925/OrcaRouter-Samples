@@ -18,7 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check JavaScript syntax
-        run: node --check Web/app.js
+        run: |
+          node --check Web/app.js
+          node --check Web/ui-contract.test.js
+
+      - name: Verify Web UI behavior contract
+        run: node Web/ui-contract.test.js
 
   powershell:
     name: PowerShell and XAML
@@ -277,6 +282,101 @@ jobs:
               sys.exit(1)
 
           print("Secret/personal-path audit passed.")
+          PY
+
+      - name: Check cross-sample UI behavior contract
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import sys
+
+          failures = []
+
+          def require(condition, message):
+              if not condition:
+                  failures.append(message)
+
+          web = Path("Web/app.js").read_text(encoding="utf-8")
+          web_html = Path("Web/index.html").read_text(encoding="utf-8")
+          ps = Path("PowerShell/OrcaRouterChat.ps1").read_text(encoding="utf-8-sig")
+          vba = Path("VBA/OrcaRouterSample.bas").read_text(encoding="ascii")
+          vba_adv = Path("VBA/OrcaRouterAdvanced.bas").read_text(encoding="ascii")
+
+          require(
+              Path("docs/ui-behavior-contract.md").is_file(),
+              "Shared UI behavior contract document is missing.",
+          )
+
+          require(
+              'id="applyPromptExampleButton"' in web_html,
+              "Web explicit prompt apply control is missing.",
+          )
+          require(
+              "renderConversation(question, errorText);" in web,
+              "Web error result must keep question/error visible.",
+          )
+          require(
+              'renderConversation(question, "");' not in web,
+              "Web must not flash pending question before a response.",
+          )
+
+          mode_start = ps.find("$modeBox.Add_SelectionChanged({")
+          mode_end = ps.find("$questionBox.Add_TextChanged({", mode_start)
+          require(mode_start >= 0 and mode_end > mode_start, "PowerShell Mode handler not found.")
+          if mode_start >= 0 and mode_end > mode_start:
+              require(
+                  "$questionBox.Text =" not in ps[mode_start:mode_end],
+                  "PowerShell Mode change must not overwrite Question.",
+              )
+
+          invoke_start = ps.find("function Invoke-OrcaRouterChat")
+          invoke_end = ps.find("$script:workerPollTimer.Add_Tick", invoke_start)
+          require(invoke_start >= 0 and invoke_end > invoke_start, "PowerShell send function not found.")
+          if invoke_start >= 0 and invoke_end > invoke_start:
+              invoke = ps[invoke_start:invoke_end]
+              require(
+                  "Get-ConversationTranscript -PendingQuestion $question" not in invoke,
+                  "PowerShell must not flash pending Question before response.",
+              )
+              require(
+                  "Show-RequestError" in invoke,
+                  "PowerShell input errors must use the shared visible error renderer.",
+              )
+
+          require(
+              'Prompt template (optional)' in vba
+              and '.TextFrame2.TextRange.Text = "Insert prompt"' in vba,
+              "VBA prompt template workflow is not explicit enough.",
+          )
+          require(
+              'GetOrcaRouterConversationDisplay(question)' not in vba,
+              "VBA Chat must not flash pending Question before response.",
+          )
+          require(
+              'GetOrcaRouterConversationDisplay( _' in vba
+              and '"ERROR: " & errorDescription' in vba,
+              "VBA Chat error must keep submitted Question/error visible.",
+          )
+          require(
+              vba_adv.count("BuildOrcaRouterConversationMessageItemsJson(question)") >= 3,
+              "VBA Streaming/Tool Calling must reuse shared conversation history.",
+          )
+          require(
+              vba_adv.count("CommitOrcaRouterConversationTurn") >= 2,
+              "VBA advanced modes must commit successful turns.",
+          )
+          require(
+              vba_adv.count("UpdateOrcaRouterDeveloperInformation") >= 4,
+              "VBA advanced modes must update Developer Information on success/error.",
+          )
+
+          if failures:
+              for failure in failures:
+                  print(f"UI contract failure: {failure}")
+              sys.exit(1)
+
+          print("Cross-sample UI behavior contract checks passed.")
           PY
 
       - name: Check priority-one playground features
