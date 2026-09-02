@@ -128,7 +128,7 @@ $traceBox = $window.FindName('TraceBox')
 $sendButton = $window.FindName('SendButton')
 $clearTraceButton = $window.FindName('ClearTraceButton')
 $resultTabs = $window.FindName('ResultTabs')
-$pageScrollViewer = $window.FindName('PageScrollViewer')
+$busyProgressBar = $window.FindName('BusyProgressBar')
 $statusText = $window.FindName('StatusText')
 $historyStatusText = $window.FindName('HistoryStatusText')
 $developerBox = $window.FindName('DeveloperBox')
@@ -178,6 +178,8 @@ $script:workerEventQueue = $null
 $script:workerFinishedInUi = $false
 $script:currentQuestion = ''
 $script:conversationHistory = [System.Collections.ArrayList]::new()
+$script:traceBuffer = [System.Text.StringBuilder]::new()
+$script:latestDeveloperEvent = $null
 
 $script:workerPollTimer = [System.Windows.Threading.DispatcherTimer]::new()
 $script:workerPollTimer.Interval = [TimeSpan]::FromMilliseconds(50)
@@ -213,9 +215,15 @@ function Add-Trace {
     }
 
     $block += ''
+    $blockText = ($block -join [Environment]::NewLine) + [Environment]::NewLine
+    [void]$script:traceBuffer.Append($blockText)
 
-    $traceBox.AppendText(($block -join [Environment]::NewLine))
-    $traceBox.ScrollToEnd()
+    # Keep diagnostics separate from the main answer view. Updating a large,
+    # hidden TextBox for every trace event can make long requests feel frozen.
+    if ($resultTabs.SelectedIndex -eq 2) {
+        $traceBox.AppendText($blockText)
+        $traceBox.ScrollToEnd()
+    }
 }
 
 function Test-ConfiguredApiKey {
@@ -242,42 +250,6 @@ function Update-HistoryStatus {
     $historyStatusText.Text = "履歴 $count / $($script:MaxHistoryTurns) 往復"
 }
 
-function Get-ConversationTranscript {
-    param(
-        [string]$PendingQuestion = '',
-        [string]$PendingAnswer = ''
-    )
-
-    $lines = [System.Collections.Generic.List[string]]::new()
-
-    foreach ($turn in $script:conversationHistory) {
-        $lines.Add('YOU')
-        $lines.Add([string]$turn.User)
-        $lines.Add('')
-        $lines.Add('ASSISTANT')
-        $lines.Add([string]$turn.Assistant)
-        $lines.Add('')
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace($PendingQuestion)) {
-        $lines.Add('YOU')
-        $lines.Add($PendingQuestion)
-        $lines.Add('')
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace($PendingAnswer)) {
-        $lines.Add('ASSISTANT')
-        $lines.Add($PendingAnswer)
-        $lines.Add('')
-    }
-
-    if ($lines.Count -eq 0) {
-        return 'ここに会話が表示されます。'
-    }
-
-    return ($lines -join [Environment]::NewLine).TrimEnd()
-}
-
 function Add-ConversationTurn {
     param(
         [Parameter(Mandatory = $true)][string]$Question,
@@ -296,14 +268,17 @@ function Add-ConversationTurn {
     }
 
     Update-HistoryStatus
-    Set-ViewModelValue -Name 'Answer' -Value (Get-ConversationTranscript)
+
+    # The primary Answer area shows only the latest assistant response.
+    # Conversation history is kept internally only for the next API request.
+    Set-ViewModelValue -Name 'Answer' -Value $Assistant
 }
 
 function Clear-ConversationHistory {
     $script:conversationHistory.Clear()
     $script:currentQuestion = ''
     Update-HistoryStatus
-    Set-ViewModelValue -Name 'Answer' -Value (Get-ConversationTranscript)
+    Set-ViewModelValue -Name 'Answer' -Value 'ここに回答が表示されます。'
     Set-ViewModelValue -Name 'StatusText' -Value 'New chat - 履歴をクリアしました'
     $statusText.Foreground = '#64748B'
 }
@@ -453,6 +428,21 @@ function Set-DeveloperPendingInformation {
         'Request / Response will appear when the worker reports them.'
     ) -join [Environment]::NewLine
 }
+function Store-DeveloperInformation {
+    param($WorkerEvent)
+
+    $script:latestDeveloperEvent = $WorkerEvent
+    $developerBox.Text = @(
+        'Developer Information'
+        ('=' * 72)
+        '診断情報を取得しました。Developer タブを開くと Request / Response を展開します。'
+    ) -join [Environment]::NewLine
+
+    if ($resultTabs.SelectedIndex -eq 1) {
+        Set-DeveloperInformation -WorkerEvent $WorkerEvent
+    }
+}
+
 function Show-RequestError {
     param(
         [Parameter(Mandatory = $true)][string]$Message,
@@ -461,9 +451,7 @@ function Show-RequestError {
     )
 
     $safeMessage = Protect-LocalTraceText -Text $Message
-    $errorAnswer = Get-ConversationTranscript -PendingQuestion $script:currentQuestion -PendingAnswer ("ERROR: " + $safeMessage)
-
-    Set-ViewModelValue -Name 'Answer' -Value $errorAnswer
+    Set-ViewModelValue -Name 'Answer' -Value ("ERROR: " + $safeMessage)
 
     if ($null -eq $WorkerEvent) {
         $WorkerEvent = [pscustomobject]@{
@@ -473,8 +461,8 @@ function Show-RequestError {
         }
     }
 
-    Set-DeveloperInformation -WorkerEvent $WorkerEvent
-    Set-ViewModelValue -Name 'StatusText' -Value 'Error - 回答欄にエラーを表示しました'
+    Store-DeveloperInformation -WorkerEvent $WorkerEvent
+    Set-ViewModelValue -Name 'StatusText' -Value 'Error - エラー内容を回答欄に表示しました'
     $statusText.Foreground = '#B42318'
 
     # The primary result remains visible; Developer / Trace are optional diagnostics.
@@ -484,14 +472,22 @@ function Set-UiBusy {
     param([bool]$Busy)
 
     $sendButton.IsEnabled = -not $Busy
+    $sendButton.Content = if ($Busy) { '回答待ち...' } else { '送信' }
     $newChatButton.IsEnabled = -not $Busy
     $apiKeyBox.IsEnabled = -not $Busy
     $modelBox.IsEnabled = -not $Busy
     $modeBox.IsEnabled = -not $Busy
     $promptExampleBox.IsEnabled = -not $Busy
     $applyPromptExampleButton.IsEnabled = -not $Busy
+    $busyProgressBar.Visibility = if ($Busy) {
+        [System.Windows.Visibility]::Visible
+    }
+    else {
+        [System.Windows.Visibility]::Collapsed
+    }
 
-    # The user can prepare the next question while the current request runs.
+    # The current HTTP request runs in a background runspace. Keep the editor
+    # and the window itself responsive while the user waits for the answer.
     $questionBox.IsEnabled = $true
 }
 
@@ -609,39 +605,62 @@ function Complete-OrcaRouterWorker {
     }
 }
 
+function Show-StreamingAnswer {
+    param([string]$Text)
+
+    Set-ViewModelValue -Name 'Answer' -Value $Text
+    Set-ViewModelValue -Name 'StatusText' -Value '回答受信中...'
+    $statusText.Foreground = '#64748B'
+    $answerBox.ScrollToEnd()
+}
+
 function Process-OrcaRouterWorkerEvents {
     if ($null -eq $script:workerEventQueue) {
         return
     }
 
+    # Do not drain an arbitrarily large queue in one Dispatcher tick.
+    # Long Streaming responses can otherwise monopolize the WPF UI thread.
+    $maxEventsPerTick = 40
+    $processed = 0
     $workerEvent = $null
+    $latestAnswer = $null
 
-    while ($script:workerEventQueue.TryDequeue([ref]$workerEvent)) {
+    while (
+        $processed -lt $maxEventsPerTick -and
+        $script:workerEventQueue.TryDequeue([ref]$workerEvent)
+    ) {
+        $processed += 1
+
         switch ([string]$workerEvent.Type) {
             'Trace' {
                 Add-Trace -Step ([string]$workerEvent.Step) -Direction ([string]$workerEvent.Direction) -Title ([string]$workerEvent.Title) -Data $workerEvent.Data
             }
 
             'Answer' {
-                $pendingTranscript = Get-ConversationTranscript -PendingQuestion $script:currentQuestion -PendingAnswer ([string]$workerEvent.Text)
-                Set-ViewModelValue -Name 'Answer' -Value $pendingTranscript
-                $answerBox.ScrollToEnd()
+                # Coalesce multiple Streaming updates and paint only the latest
+                # value once per UI tick.
+                $latestAnswer = [string]$workerEvent.Text
             }
 
             'Completed' {
+                if ($null -ne $latestAnswer) {
+                    Show-StreamingAnswer -Text $latestAnswer
+                    $latestAnswer = $null
+                }
+
                 Add-ConversationTurn -Question $script:currentQuestion -Assistant ([string]$workerEvent.Answer)
-                Set-DeveloperInformation -WorkerEvent $workerEvent
+                Store-DeveloperInformation -WorkerEvent $workerEvent
                 Set-ViewModelValue -Name 'StatusText' -Value 'Completed'
                 $statusText.Foreground = '#0F766E'
 
-                # Completion returns the user to the conversation so the answer
-                # is immediately visible. Developer / Trace remain one click away.
                 $resultTabs.SelectedIndex = 0
                 Set-UiBusy -Busy $false
                 $script:workerFinishedInUi = $true
             }
 
             'Error' {
+                $latestAnswer = $null
                 $safeMessage = Protect-LocalTraceText -Text ([string](Get-WorkerEventValue -WorkerEvent $workerEvent -Name 'Message' -DefaultValue 'Unknown error'))
                 $exceptionType = [string](Get-WorkerEventValue -WorkerEvent $workerEvent -Name 'ExceptionType' -DefaultValue '(unknown)')
 
@@ -661,6 +680,10 @@ function Process-OrcaRouterWorkerEvents {
         }
 
         $workerEvent = $null
+    }
+
+    if ($null -ne $latestAnswer) {
+        Show-StreamingAnswer -Text $latestAnswer
     }
 
     if (
@@ -726,11 +749,10 @@ function Invoke-OrcaRouterChat {
     $resultTabs.SelectedIndex = 0
     $script:currentQuestion = $question
 
-    # Permanent UI contract:
-    # while waiting, keep the committed conversation unchanged.
-    # Do not flash the submitted question in the Answer tab before a response exists.
-    Set-ViewModelValue -Name 'Answer' -Value (Get-ConversationTranscript)
-    Set-ViewModelValue -Name 'StatusText' -Value '送信中...'
+    # The main result area is answer-only. Clear the previous answer and use
+    # the always-visible status row to show that the request is in progress.
+    Set-ViewModelValue -Name 'Answer' -Value ''
+    Set-ViewModelValue -Name 'StatusText' -Value '送信済み・回答待ち...'
     $statusText.Foreground = '#64748B'
     Set-DeveloperPendingInformation -Model $model
     Set-UiBusy -Busy $true
@@ -753,6 +775,7 @@ $sendButton.Add_Click({
 })
 
 $clearTraceButton.Add_Click({
+    [void]$script:traceBuffer.Clear()
     $traceBox.Clear()
     Set-ViewModelValue -Name 'StatusText' -Value 'Ready'
     $statusText.Foreground = '#64748B'
@@ -804,6 +827,22 @@ $applyPromptExampleButton.Add_Click({
     $questionBox.CaretIndex = $questionBox.Text.Length
 })
 
+$resultTabs.Add_SelectionChanged({
+    param($sender, $eventArgs)
+
+    if ($sender -ne $resultTabs) {
+        return
+    }
+
+    if ($resultTabs.SelectedIndex -eq 1 -and $null -ne $script:latestDeveloperEvent) {
+        Set-DeveloperInformation -WorkerEvent $script:latestDeveloperEvent
+    }
+    elseif ($resultTabs.SelectedIndex -eq 2) {
+        $traceBox.Text = $script:traceBuffer.ToString()
+        $traceBox.ScrollToEnd()
+    }
+})
+
 $modeBox.Add_SelectionChanged({
     $mode = Get-SelectedMode
 
@@ -843,39 +882,26 @@ if ($UiBindingCheck) {
             throw 'Window must support resize/minimize/maximize.'
         }
 
-        if ($null -eq $pageScrollViewer) {
-            throw 'PageScrollViewer was not found.'
+        if ($null -eq $busyProgressBar) {
+            throw 'BusyProgressBar was not found.'
+        }
+
+        # Long text must stay inside the Question/Answer editors. The outer
+        # window remains resizable instead of growing a page-sized document.
+        if (
+            $questionBox.VerticalScrollBarVisibility -ne
+            [System.Windows.Controls.ScrollBarVisibility]::Auto
+        ) {
+            throw 'QuestionBox must use its own automatic vertical scrollbar.'
         }
 
         if (
-            $pageScrollViewer.VerticalScrollBarVisibility -ne
+            $answerBox.VerticalScrollBarVisibility -ne
             [System.Windows.Controls.ScrollBarVisibility]::Auto
         ) {
-            throw 'PageScrollViewer must use an automatic vertical scrollbar.'
+            throw 'AnswerBox must use its own automatic vertical scrollbar.'
         }
 
-        # At a shorter window height, the whole page must remain reachable
-        # through the right-side vertical scrollbar.
-        $window.Height = 720
-        $window.UpdateLayout()
-
-        if ($pageScrollViewer.ScrollableHeight -le 0) {
-            throw 'PageScrollViewer must have a scrollable vertical range.'
-        }
-
-        $pageScrollViewer.ScrollToEnd()
-        $window.Dispatcher.Invoke(
-            [System.Action]{ },
-            [System.Windows.Threading.DispatcherPriority]::Background
-        )
-
-        if ($pageScrollViewer.VerticalOffset -le 0) {
-            throw 'PageScrollViewer could not scroll to the lower content.'
-        }
-
-        $pageScrollViewer.ScrollToHome()
-        $window.Height = 900
-        $window.UpdateLayout()
 
         if ($questionBox.IsReadOnly) { throw 'QuestionBox must be editable.' }
         if (-not $questionBox.IsEnabled) { throw 'QuestionBox must be enabled.' }
@@ -938,7 +964,7 @@ if ($UiBindingCheck) {
         $resultTabs.SelectedIndex = 0
         $window.UpdateLayout()
 
-        if ($answerBox.ActualHeight -lt 180) {
+        if ($answerBox.ActualHeight -lt 140) {
             throw "Answer tab is too small: $($answerBox.ActualHeight)"
         }
 
@@ -958,6 +984,46 @@ if ($UiBindingCheck) {
 
         $resultTabs.SelectedIndex = 0
         $window.UpdateLayout()
+
+        $questionHeightBefore = $questionBox.ActualHeight
+        $answerHeightBefore = $answerBox.ActualHeight
+        $longText = ('長文テスト ' * 4000)
+
+        $questionBox.Text = $longText
+        Set-ViewModelValue -Name 'Answer' -Value $longText
+        $window.Dispatcher.Invoke(
+            [System.Action]{ },
+            [System.Windows.Threading.DispatcherPriority]::DataBind
+        )
+        $window.UpdateLayout()
+
+        if ([Math]::Abs($questionBox.ActualHeight - $questionHeightBefore) -gt 2) {
+            throw 'Long Question text must not expand the whole form.'
+        }
+
+        if ([Math]::Abs($answerBox.ActualHeight - $answerHeightBefore) -gt 2) {
+            throw 'Long Answer text must not expand the whole form.'
+        }
+
+        Set-UiBusy -Busy $true
+
+        if ($busyProgressBar.Visibility -ne [System.Windows.Visibility]::Visible) {
+            throw 'Busy indicator must be visible while a request is running.'
+        }
+
+        if (-not $questionBox.IsEnabled) {
+            throw 'QuestionBox must stay enabled while waiting for an answer.'
+        }
+
+        if ($sendButton.IsEnabled) {
+            throw 'SendButton must be disabled while a request is running.'
+        }
+
+        Set-UiBusy -Busy $false
+
+        if ($busyProgressBar.Visibility -ne [System.Windows.Visibility]::Collapsed) {
+            throw 'Busy indicator must collapse after the request finishes.'
+        }
 
         if ($viewModel -isnot [System.ComponentModel.INotifyPropertyChanged]) {
             throw 'ViewModel must implement INotifyPropertyChanged.'
@@ -1023,13 +1089,25 @@ if ($UiBindingCheck) {
             [System.Windows.Threading.DispatcherPriority]::DataBind
         )
 
-        if ($answerBox.Text -notmatch 'Synthetic question') {
-            throw 'Error rendering lost the submitted question.'
+        if ($answerBox.Text -match 'Synthetic question') {
+            throw 'Answer must not repeat the submitted question.'
         }
 
         if ($answerBox.Text -notmatch 'Synthetic API error') {
             throw 'Error rendering did not show the API error in Answer.'
         }
+
+        if ($resultTabs.SelectedIndex -ne 0) {
+            throw 'Error handling must keep the Answer tab selected.'
+        }
+
+        # Diagnostics are intentionally separate and rendered only when the
+        # Developer tab is opened.
+        $resultTabs.SelectedIndex = 1
+        $window.Dispatcher.Invoke(
+            [System.Action]{ },
+            [System.Windows.Threading.DispatcherPriority]::Background
+        )
 
         if ($developerBox.Text -notmatch 'HTTP Status\s+: 429') {
             throw 'Developer Information did not receive error HTTP status.'
@@ -1039,9 +1117,7 @@ if ($UiBindingCheck) {
             throw 'Developer Information did not show error details.'
         }
 
-        if ($resultTabs.SelectedIndex -ne 0) {
-            throw 'Error handling must keep the Answer tab selected.'
-        }
+        $resultTabs.SelectedIndex = 0
 
         $script:workerEventQueue = $null
     }
