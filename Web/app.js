@@ -638,6 +638,7 @@ async function runStreaming(apiKey, model, question, startedAt) {
     let usage = null;
     let latestPayload = "";
     let latestChunk = null;
+    let streamDone = false;
 
     rawJsonTitle.textContent = "Raw JSON - Streaming (latest SSE event)";
     rawJsonStatus.textContent = `HTTP Status: ${response.status} / Streaming`;
@@ -660,7 +661,9 @@ async function runStreaming(apiKey, model, question, startedAt) {
           addTrace("STEP 4", "STREAM", "SSE終了 [DONE]", {
             events: eventCount
           });
-          continue;
+          streamDone = true;
+          buffer = "";
+          break;
         }
 
         latestPayload = payload;
@@ -722,6 +725,8 @@ async function runStreaming(apiKey, model, question, startedAt) {
           usage = chunk.usage;
         }
       }
+
+      if (streamDone) break;
     }
 
     buffer += decoder.decode();
