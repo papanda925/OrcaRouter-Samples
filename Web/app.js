@@ -726,7 +726,17 @@ async function runStreaming(apiKey, model, question, startedAt) {
         }
       }
 
-      if (streamDone) break;
+      if (streamDone) {
+        // [DONE] is the protocol-level terminal event. Cancel the reader as
+        // resource cleanup as well, so a provider that forgets to close the
+        // HTTP body does not leave the fetch stream locked in the background.
+        try {
+          await reader.cancel();
+        } catch {
+          // The answer is already complete; reader cleanup is best-effort.
+        }
+        break;
+      }
     }
 
     buffer += decoder.decode();
