@@ -774,7 +774,16 @@ function Invoke-Streaming {
             $script:lastHttpStatus = $status
 
             if (-not $response.IsSuccessStatusCode) {
-                $rawResponse = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+                # ResponseHeadersRead also means an error body's content read
+                # is outside HttpClient.Timeout. Keep the same overall request
+                # deadline here so a non-2xx response cannot stall forever.
+                $remainingMilliseconds = [int][Math]::Ceiling(
+                    ($requestTimeoutSeconds * 1000) - $Stopwatch.ElapsedMilliseconds
+                )
+                $rawResponse = Wait-TaskWithinTimeout `
+                    -Task $response.Content.ReadAsStringAsync() `
+                    -TimeoutMilliseconds $remainingMilliseconds `
+                    -TimeoutMessage "Streaming error body timed out after $requestTimeoutSeconds seconds."
                 $script:lastResponse = $rawResponse
 
                 Add-WorkerTrace -Step 'STEP 4' -Direction 'RESPONSE' -Title 'Streaming開始前にHTTPエラー' -Data @{
