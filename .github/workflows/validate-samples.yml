@@ -341,7 +341,12 @@ jobs:
               throw 'Streaming must not perform an unbounded error-body ReadAsStringAsync.'
           }
 
+          if ($streamSource -match 'ReadAsStreamAsync\(\)\.GetAwaiter\(\)\.GetResult\(\)') {
+              throw 'Streaming must not perform an unbounded response-body ReadAsStreamAsync.'
+          }
+
           if ($streamSource -notmatch 'Read-StreamingLineWithDeadline' -or
+              $streamSource -notmatch 'Streaming response body timed out' -or
               $streamSource -notmatch 'Streaming error body timed out') {
               throw 'Streaming request-deadline guards are missing.'
           }
