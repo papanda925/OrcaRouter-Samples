@@ -802,7 +802,13 @@ function Invoke-Streaming {
                 ElapsedMs = $Stopwatch.ElapsedMilliseconds
             }
 
-            $stream = $response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
+            $remainingMilliseconds = [int][Math]::Ceiling(
+                ($requestTimeoutSeconds * 1000) - $Stopwatch.ElapsedMilliseconds
+            )
+            $stream = Wait-TaskWithinTimeout `
+                -Task $response.Content.ReadAsStreamAsync() `
+                -TimeoutMilliseconds $remainingMilliseconds `
+                -TimeoutMessage "Streaming response body timed out after $requestTimeoutSeconds seconds."
             $reader = [System.IO.StreamReader]::new(
                 $stream,
                 [System.Text.Encoding]::UTF8
