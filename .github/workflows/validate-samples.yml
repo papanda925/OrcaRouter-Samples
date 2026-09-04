@@ -325,6 +325,27 @@ jobs:
               throw "Unexpected Streaming Error message: $($streamError.Message)"
           }
 
+          # Static guard for ResponseHeadersRead: both normal SSE line reads and
+          # non-2xx error-body reads must use the explicit request deadline.
+          $workerSource = Get-Content '.\PowerShell\OrcaRouterWorker.ps1' -Raw -Encoding UTF8
+          $streamStart = $workerSource.IndexOf('function Invoke-Streaming {')
+          $streamEnd = $workerSource.IndexOf('function Invoke-CalculateSumTool {', $streamStart)
+
+          if ($streamStart -lt 0 -or $streamEnd -le $streamStart) {
+              throw 'Invoke-Streaming source block could not be located.'
+          }
+
+          $streamSource = $workerSource.Substring($streamStart, $streamEnd - $streamStart)
+
+          if ($streamSource -match 'ReadAsStringAsync\(\)\.GetAwaiter\(\)\.GetResult\(\)') {
+              throw 'Streaming must not perform an unbounded error-body ReadAsStringAsync.'
+          }
+
+          if ($streamSource -notmatch 'Read-StreamingLineWithDeadline' -or
+              $streamSource -notmatch 'Streaming error body timed out') {
+              throw 'Streaming request-deadline guards are missing.'
+          }
+
   safety:
     name: Source safety checks
     runs-on: ubuntu-latest
