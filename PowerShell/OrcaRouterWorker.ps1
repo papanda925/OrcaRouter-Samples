@@ -107,6 +107,53 @@ function Get-HistoryTurnCount {
     return $count
 }
 
+function Wait-TaskWithinTimeout {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Threading.Tasks.Task]$Task,
+        [Parameter(Mandatory = $true)]
+        [int]$TimeoutMilliseconds,
+        [Parameter(Mandatory = $true)]
+        [string]$TimeoutMessage
+    )
+
+    if ($TimeoutMilliseconds -le 0) {
+        throw $TimeoutMessage
+    }
+
+    $delayTask = [System.Threading.Tasks.Task]::Delay($TimeoutMilliseconds)
+    $completedTask = [System.Threading.Tasks.Task]::WhenAny(
+        [System.Threading.Tasks.Task[]]@($Task, $delayTask)
+    ).GetAwaiter().GetResult()
+
+    if (-not [object]::ReferenceEquals($completedTask, $Task)) {
+        throw $TimeoutMessage
+    }
+
+    return $Task.GetAwaiter().GetResult()
+}
+
+function Read-StreamingLineWithDeadline {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.IO.StreamReader]$Reader,
+        [Parameter(Mandatory = $true)]
+        [System.Diagnostics.Stopwatch]$Stopwatch
+    )
+
+    # ResponseHeadersRead means HttpClient.Timeout no longer protects the
+    # response-content read. Enforce the same overall request deadline while
+    # waiting for each SSE line so a stalled stream cannot wait forever.
+    $remainingMilliseconds = [int][Math]::Ceiling(
+        ($requestTimeoutSeconds * 1000) - $Stopwatch.ElapsedMilliseconds
+    )
+
+    return Wait-TaskWithinTimeout `
+        -Task $Reader.ReadLineAsync() `
+        -TimeoutMilliseconds $remainingMilliseconds `
+        -TimeoutMessage "Streaming timed out after $requestTimeoutSeconds seconds."
+}
+
 if ($SelfTest) {
     if ((Get-HistoryTurnCount -Items @()) -ne 0) {
         throw 'History count self-test failed for an empty array.'
@@ -123,6 +170,33 @@ if ($SelfTest) {
 
     if ((Get-HistoryTurnCount -Items @($historyTestTurn)) -ne 1) {
         throw 'History count self-test failed for one turn.'
+    }
+
+    # Verify the timeout helper itself without making a network request.
+    [void](Wait-TaskWithinTimeout `
+        -Task ([System.Threading.Tasks.Task]::Delay(1)) `
+        -TimeoutMilliseconds 1000 `
+        -TimeoutMessage 'Fast task unexpectedly timed out.')
+
+    $timeoutObserved = $false
+
+    try {
+        [void](Wait-TaskWithinTimeout `
+            -Task ([System.Threading.Tasks.Task]::Delay(200)) `
+            -TimeoutMilliseconds 20 `
+            -TimeoutMessage 'Expected timeout self-test marker.')
+    }
+    catch {
+        if ($_.Exception.Message -eq 'Expected timeout self-test marker.') {
+            $timeoutObserved = $true
+        }
+        else {
+            throw
+        }
+    }
+
+    if (-not $timeoutObserved) {
+        throw 'Task timeout self-test did not observe the expected timeout.'
     }
 
     Add-WorkerEvent -Type 'Trace' -Values @{
@@ -621,6 +695,15 @@ function Invoke-Streaming {
         Body = $body
     }
 
+    # Streaming does not use Invoke-JsonRequest, so keep its diagnostic state
+    # here as well. Error events can then populate Developer Information with
+    # the request, HTTP status, latest response chunk, usage, and model.
+    $script:lastRequest = $body
+    $script:lastResponse = $null
+    $script:lastHttpStatus = $null
+    $script:lastUsage = $null
+    $script:lastActualModel = $Model
+
     $client = $null
     $request = $null
     $response = $null
@@ -633,38 +716,104 @@ function Invoke-Streaming {
         }
 
         $requestJson = $body | ConvertTo-Json -Depth 30 -Compress
-        $client = New-HttpClient
-        $request = New-JsonRequest -Json $requestJson
 
-        $response = $client.SendAsync(
-            $request,
-            [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead
-        ).GetAwaiter().GetResult()
+        if ($PipelineSelfTest) {
+            $status = 200
+            $headers = [ordered]@{
+                'Content-Type' = 'text/event-stream'
+                'X-Orca-Test' = 'pipeline-self-test'
+            }
+            $script:lastHttpStatus = $status
 
-        $headers = Get-ResponseHeaders -Response $response
-        $status = [int]$response.StatusCode
-
-        if (-not $response.IsSuccessStatusCode) {
-            $rawResponse = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
-
-            Add-WorkerTrace -Step 'STEP 4' -Direction 'RESPONSE' -Title 'Streaming開始前にHTTPエラー' -Data @{
-                Status = $status
-                Headers = $headers
-                RawBody = $rawResponse
+            if ($Model -eq 'mock/stream-error') {
+                $mockSse = (
+                    'data: {"error":{"message":"mock streaming failure","type":"mock","code":"mock_error"}}' +
+                    [Environment]::NewLine +
+                    [Environment]::NewLine
+                )
+            }
+            else {
+                $mockSse = (
+                    'data: {"model":"mock/provider-model","choices":[{"delta":{"content":"mock streaming answer"}}]}' +
+                    [Environment]::NewLine +
+                    [Environment]::NewLine +
+                    'data: {"model":"mock/provider-model","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}' +
+                    [Environment]::NewLine +
+                    [Environment]::NewLine +
+                    'data: [DONE]' +
+                    [Environment]::NewLine +
+                    [Environment]::NewLine
+                )
             }
 
-            $details = Get-OrcaErrorDetails -HttpStatus $status -HttpStatusText $response.ReasonPhrase -Headers $headers -RawBody $rawResponse
-            throw "HTTP $status : $($details.ErrorMessage) $($details.Guidance)"
-        }
+            $stream = [System.IO.MemoryStream]::new(
+                [System.Text.Encoding]::UTF8.GetBytes($mockSse)
+            )
+            $reader = [System.IO.StreamReader]::new(
+                $stream,
+                [System.Text.Encoding]::UTF8
+            )
 
-        Add-WorkerTrace -Step 'STEP 4' -Direction 'RESPONSE' -Title 'SSEストリームを開始' -Data @{
-            Status = $status
-            ContentType = Get-HeaderValue -Headers $headers -Name 'Content-Type'
-            ElapsedMs = $Stopwatch.ElapsedMilliseconds
+            Add-WorkerTrace -Step 'STEP 4' -Direction 'RESPONSE' -Title 'Mock SSEストリームを開始' -Data @{
+                Status = $status
+                ContentType = $headers['Content-Type']
+                ElapsedMs = $Stopwatch.ElapsedMilliseconds
+            }
         }
+        else {
+            $client = New-HttpClient
+            $request = New-JsonRequest -Json $requestJson
 
-        $stream = $response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
-        $reader = [System.IO.StreamReader]::new($stream, [System.Text.Encoding]::UTF8)
+            $response = $client.SendAsync(
+                $request,
+                [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead
+            ).GetAwaiter().GetResult()
+
+            $headers = Get-ResponseHeaders -Response $response
+            $status = [int]$response.StatusCode
+            $script:lastHttpStatus = $status
+
+            if (-not $response.IsSuccessStatusCode) {
+                # ResponseHeadersRead also means an error body's content read
+                # is outside HttpClient.Timeout. Keep the same overall request
+                # deadline here so a non-2xx response cannot stall forever.
+                $remainingMilliseconds = [int][Math]::Ceiling(
+                    ($requestTimeoutSeconds * 1000) - $Stopwatch.ElapsedMilliseconds
+                )
+                $rawResponse = Wait-TaskWithinTimeout `
+                    -Task $response.Content.ReadAsStringAsync() `
+                    -TimeoutMilliseconds $remainingMilliseconds `
+                    -TimeoutMessage "Streaming error body timed out after $requestTimeoutSeconds seconds."
+                $script:lastResponse = $rawResponse
+
+                Add-WorkerTrace -Step 'STEP 4' -Direction 'RESPONSE' -Title 'Streaming開始前にHTTPエラー' -Data @{
+                    Status = $status
+                    Headers = $headers
+                    RawBody = $rawResponse
+                }
+
+                $details = Get-OrcaErrorDetails -HttpStatus $status -HttpStatusText $response.ReasonPhrase -Headers $headers -RawBody $rawResponse
+                throw "HTTP $status : $($details.ErrorMessage) $($details.Guidance)"
+            }
+
+            Add-WorkerTrace -Step 'STEP 4' -Direction 'RESPONSE' -Title 'SSEストリームを開始' -Data @{
+                Status = $status
+                ContentType = Get-HeaderValue -Headers $headers -Name 'Content-Type'
+                ElapsedMs = $Stopwatch.ElapsedMilliseconds
+            }
+
+            $remainingMilliseconds = [int][Math]::Ceiling(
+                ($requestTimeoutSeconds * 1000) - $Stopwatch.ElapsedMilliseconds
+            )
+            $stream = Wait-TaskWithinTimeout `
+                -Task $response.Content.ReadAsStreamAsync() `
+                -TimeoutMilliseconds $remainingMilliseconds `
+                -TimeoutMessage "Streaming response body timed out after $requestTimeoutSeconds seconds."
+            $reader = [System.IO.StreamReader]::new(
+                $stream,
+                [System.Text.Encoding]::UTF8
+            )
+        }
 
         $answer = [System.Text.StringBuilder]::new()
         $eventCount = 0
@@ -673,9 +822,10 @@ function Invoke-Streaming {
         $lastPublishedAtMs = $Stopwatch.ElapsedMilliseconds
         $lastPublishedLength = 0
 
-        while (-not $reader.EndOfStream) {
-            $line = $reader.ReadLine()
+        while ($true) {
+            $line = Read-StreamingLineWithDeadline -Reader $reader -Stopwatch $Stopwatch
 
+            if ($null -eq $line) { break }
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
             if (-not $line.StartsWith('data:')) { continue }
 
@@ -685,7 +835,7 @@ function Invoke-Streaming {
                 Add-WorkerTrace -Step 'STEP 4' -Direction 'STREAM' -Title 'SSE終了 [DONE]' -Data @{
                     Events = $eventCount
                 }
-                continue
+                break
             }
 
             if ([string]::IsNullOrWhiteSpace($payload)) { continue }
@@ -693,6 +843,12 @@ function Invoke-Streaming {
             try {
                 $chunk = $payload | ConvertFrom-Json
                 $latestChunk = $chunk
+                $script:lastResponse = $chunk
+
+                $chunkModel = Get-PropertyValue -Object $chunk -Name 'model'
+                if (-not [string]::IsNullOrWhiteSpace([string]$chunkModel)) {
+                    $script:lastActualModel = [string]$chunkModel
+                }
             }
             catch {
                 Add-WorkerTrace -Step 'STEP 4' -Direction 'STREAM' -Title 'JSON化できないSSE data' -Data $payload
@@ -745,11 +901,18 @@ function Invoke-Streaming {
             }
 
             $usageValue = Get-PropertyValue -Object $chunk -Name 'usage'
-            if ($null -ne $usageValue) { $usage = $usageValue }
+            if ($null -ne $usageValue) {
+                $usage = $usageValue
+                $script:lastUsage = $usageValue
+            }
         }
 
         if ($answer.Length -gt $lastPublishedLength) {
             Add-WorkerEvent -Type 'Answer' -Values @{ Text = $answer.ToString() }
+        }
+
+        if ($answer.Length -eq 0) {
+            throw 'Streaming completed but no answer text was captured.'
         }
 
         Add-WorkerTrace -Step 'STEP 5' -Direction 'LOCAL' -Title 'Streaming結果を集約' -Data @{
@@ -759,19 +922,28 @@ function Invoke-Streaming {
 
         $actualModel = Get-PropertyValue -Object $latestChunk -Name 'model'
         if ([string]::IsNullOrWhiteSpace([string]$actualModel)) {
+            $actualModel = $script:lastActualModel
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$actualModel)) {
             $actualModel = $Model
         }
+
+        $streamResponse = [pscustomobject]@{
+            stream = $true
+            latest_event = $latestChunk
+            usage = $usage
+            note = 'Streaming uses SSE; latest_event is the final parsed event observed by this sample.'
+        }
+
+        $script:lastResponse = $streamResponse
+        $script:lastUsage = $usage
+        $script:lastActualModel = [string]$actualModel
 
         return [pscustomobject]@{
             Answer = $answer.ToString()
             Usage = $usage
             Request = $body
-            Response = [pscustomobject]@{
-                stream = $true
-                latest_event = $latestChunk
-                usage = $usage
-                note = 'Streaming uses SSE; latest_event is the final parsed event observed by this sample.'
-            }
+            Response = $streamResponse
             HttpStatus = $status
             ActualModel = [string]$actualModel
         }
@@ -784,7 +956,6 @@ function Invoke-Streaming {
         if ($null -ne $client) { $client.Dispose() }
     }
 }
-
 function Invoke-CalculateSumTool {
     param($ArgumentsObject)
 

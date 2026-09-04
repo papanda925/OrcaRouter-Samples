@@ -112,4 +112,19 @@ assert(
   "Web result rendering must not recreate prior user/assistant transcript blocks."
 );
 
+const streamingHandler = extractHandler(
+  app,
+  "async function runStreaming(",
+  "function calculateSumTool"
+);
+
+assert(
+  streamingHandler.includes("let streamDone = false;") &&
+    streamingHandler.includes('if (payload === "[DONE]")') &&
+    streamingHandler.includes("streamDone = true;") &&
+    streamingHandler.includes("if (streamDone) {") &&
+    streamingHandler.includes("await reader.cancel();"),
+  "Web Streaming must stop and release the SSE reader after terminal [DONE]."
+);
+
 console.log("Web UI behavior contract checks passed.");

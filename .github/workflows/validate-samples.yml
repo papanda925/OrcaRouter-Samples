@@ -190,69 +190,165 @@ jobs:
           }
 
 
-          # Full Chat pipeline regression:
-          # exercise the same STEP 1 -> STEP 6 path as a successful real request,
-          # but use a mock HTTP response so CI never needs a real API key.
-          foreach ($historyCase in @(
-              @(),
-              @([pscustomobject]@{ User = 'previous question'; Assistant = 'previous answer' })
-          )) {
-              $queue = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
-              $worker = [System.Management.Automation.PowerShell]::Create()
+          # Full Chat / Streaming pipeline regression:
+          # exercise the same STEP 1 -> STEP 6 path as successful real requests,
+          # but use mock responses so CI never needs a real API key.
+          foreach ($modeCase in @('Chat', 'Streaming')) {
+              foreach ($historyCase in @(
+                  @(),
+                  @([pscustomobject]@{ User = 'previous question'; Assistant = 'previous answer' })
+              )) {
+                  $queue = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
+                  $worker = [System.Management.Automation.PowerShell]::Create()
 
-              [void]$worker.AddCommand((Resolve-Path '.\PowerShell\OrcaRouterWorker.ps1').Path)
-              [void]$worker.AddParameter('PipelineSelfTest', $true)
-              [void]$worker.AddParameter('ApiKey', 'test-key')
-              [void]$worker.AddParameter('Model', 'orcarouter/free')
-              [void]$worker.AddParameter('Question', 'pipeline test')
-              [void]$worker.AddParameter('Mode', 'Chat')
-              [void]$worker.AddParameter('History', [object[]]$historyCase)
-              [void]$worker.AddParameter('EventQueue', $queue)
+                  [void]$worker.AddCommand((Resolve-Path '.\PowerShell\OrcaRouterWorker.ps1').Path)
+                  [void]$worker.AddParameter('PipelineSelfTest', $true)
+                  [void]$worker.AddParameter('ApiKey', 'test-key')
+                  [void]$worker.AddParameter('Model', 'orcarouter/free')
+                  [void]$worker.AddParameter('Question', 'pipeline test')
+                  [void]$worker.AddParameter('Mode', $modeCase)
+                  [void]$worker.AddParameter('History', [object[]]$historyCase)
+                  [void]$worker.AddParameter('EventQueue', $queue)
 
-              $async = $worker.BeginInvoke()
+                  $async = $worker.BeginInvoke()
 
-              if (-not $async.AsyncWaitHandle.WaitOne(5000)) {
-                  $worker.Stop()
-                  $worker.Dispose()
-                  throw 'Full Chat pipeline self-test timed out.'
-              }
-
-              [void]$worker.EndInvoke($async)
-              $worker.Dispose()
-
-              $events = @()
-              $item = $null
-
-              while ($queue.TryDequeue([ref]$item)) {
-                  $events += $item
-                  $item = $null
-              }
-
-              $errors = @($events | Where-Object Type -eq 'Error')
-              if ($errors.Length -gt 0) {
-                  $first = $errors[0]
-                  throw "Full Chat pipeline emitted Error: $($first.Message) line=$($first.ScriptLineNumber) $($first.PositionMessage)"
-              }
-
-              $completed = @($events | Where-Object Type -eq 'Completed')
-              if ($completed.Length -ne 1) {
-                  throw 'Full Chat pipeline must emit exactly one Completed event.'
-              }
-
-              if ([string]$completed[0].Answer -ne 'mock pipeline answer') {
-                  throw "Unexpected mock Chat answer: $($completed[0].Answer)"
-              }
-
-              $step6 = @(
-                  $events |
-                  Where-Object {
-                      $_.Type -eq 'Trace' -and $_.Step -eq 'STEP 6'
+                  if (-not $async.AsyncWaitHandle.WaitOne(5000)) {
+                      $worker.Stop()
+                      $worker.Dispose()
+                      throw "Full $modeCase pipeline self-test timed out."
                   }
-              )
 
-              if ($step6.Length -ne 1) {
-                  throw 'Full Chat pipeline did not reach STEP 6.'
+                  [void]$worker.EndInvoke($async)
+                  $worker.Dispose()
+
+                  $events = @()
+                  $item = $null
+
+                  while ($queue.TryDequeue([ref]$item)) {
+                      $events += $item
+                      $item = $null
+                  }
+
+                  $errors = @($events | Where-Object Type -eq 'Error')
+                  if ($errors.Length -gt 0) {
+                      $first = $errors[0]
+                      throw "Full $modeCase pipeline emitted Error: $($first.Message) line=$($first.ScriptLineNumber) $($first.PositionMessage)"
+                  }
+
+                  $completed = @($events | Where-Object Type -eq 'Completed')
+                  if ($completed.Length -ne 1) {
+                      throw "Full $modeCase pipeline must emit exactly one Completed event."
+                  }
+
+                  $expectedAnswer = if ($modeCase -eq 'Streaming') {
+                      'mock streaming answer'
+                  }
+                  else {
+                      'mock pipeline answer'
+                  }
+
+                  if ([string]$completed[0].Answer -ne $expectedAnswer) {
+                      throw "Unexpected mock $modeCase answer: $($completed[0].Answer)"
+                  }
+
+                  if ([int]$completed[0].HttpStatus -ne 200) {
+                      throw "Full $modeCase pipeline did not preserve HTTP status."
+                  }
+
+                  if ($null -eq $completed[0].Request -or $null -eq $completed[0].Response) {
+                      throw "Full $modeCase pipeline did not preserve request/response diagnostics."
+                  }
+
+                  $step6 = @(
+                      $events |
+                      Where-Object {
+                          $_.Type -eq 'Trace' -and $_.Step -eq 'STEP 6'
+                      }
+                  )
+
+                  if ($step6.Length -ne 1) {
+                      throw "Full $modeCase pipeline did not reach STEP 6."
+                  }
               }
+          }
+
+          # Streaming error regression:
+          # Developer Information depends on Error events preserving the latest
+          # request, HTTP status, and SSE response chunk.
+          $queue = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
+          $worker = [System.Management.Automation.PowerShell]::Create()
+
+          [void]$worker.AddCommand((Resolve-Path '.\PowerShell\OrcaRouterWorker.ps1').Path)
+          [void]$worker.AddParameter('PipelineSelfTest', $true)
+          [void]$worker.AddParameter('ApiKey', 'test-key')
+          [void]$worker.AddParameter('Model', 'mock/stream-error')
+          [void]$worker.AddParameter('Question', 'stream error test')
+          [void]$worker.AddParameter('Mode', 'Streaming')
+          [void]$worker.AddParameter('History', [object[]]@())
+          [void]$worker.AddParameter('EventQueue', $queue)
+
+          $async = $worker.BeginInvoke()
+
+          if (-not $async.AsyncWaitHandle.WaitOne(5000)) {
+              $worker.Stop()
+              $worker.Dispose()
+              throw 'Streaming error pipeline self-test timed out.'
+          }
+
+          [void]$worker.EndInvoke($async)
+          $worker.Dispose()
+
+          $events = @()
+          $item = $null
+
+          while ($queue.TryDequeue([ref]$item)) {
+              $events += $item
+              $item = $null
+          }
+
+          $errors = @($events | Where-Object Type -eq 'Error')
+          if ($errors.Length -ne 1) {
+              throw 'Streaming error pipeline must emit exactly one Error event.'
+          }
+
+          $streamError = $errors[0]
+
+          if ([int]$streamError.HttpStatus -ne 200) {
+              throw 'Streaming Error event did not preserve HTTP status.'
+          }
+
+          if ($null -eq $streamError.Request -or $null -eq $streamError.Response) {
+              throw 'Streaming Error event did not preserve request/response diagnostics.'
+          }
+
+          if ([string]$streamError.Message -notmatch 'mock streaming failure') {
+              throw "Unexpected Streaming Error message: $($streamError.Message)"
+          }
+
+          # Static guard for ResponseHeadersRead: both normal SSE line reads and
+          # non-2xx error-body reads must use the explicit request deadline.
+          $workerSource = Get-Content '.\PowerShell\OrcaRouterWorker.ps1' -Raw -Encoding UTF8
+          $streamStart = $workerSource.IndexOf('function Invoke-Streaming {')
+          $streamEnd = $workerSource.IndexOf('function Invoke-CalculateSumTool {', $streamStart)
+
+          if ($streamStart -lt 0 -or $streamEnd -le $streamStart) {
+              throw 'Invoke-Streaming source block could not be located.'
+          }
+
+          $streamSource = $workerSource.Substring($streamStart, $streamEnd - $streamStart)
+
+          if ($streamSource -match 'ReadAsStringAsync\(\)\.GetAwaiter\(\)\.GetResult\(\)') {
+              throw 'Streaming must not perform an unbounded error-body ReadAsStringAsync.'
+          }
+
+          if ($streamSource -match 'ReadAsStreamAsync\(\)\.GetAwaiter\(\)\.GetResult\(\)') {
+              throw 'Streaming must not perform an unbounded response-body ReadAsStreamAsync.'
+          }
+
+          if ($streamSource -notmatch 'Read-StreamingLineWithDeadline' -or
+              $streamSource -notmatch 'Streaming response body timed out' -or
+              $streamSource -notmatch 'Streaming error body timed out') {
+              throw 'Streaming request-deadline guards are missing.'
           }
 
   safety:

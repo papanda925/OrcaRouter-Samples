@@ -638,6 +638,7 @@ async function runStreaming(apiKey, model, question, startedAt) {
     let usage = null;
     let latestPayload = "";
     let latestChunk = null;
+    let streamDone = false;
 
     rawJsonTitle.textContent = "Raw JSON - Streaming (latest SSE event)";
     rawJsonStatus.textContent = `HTTP Status: ${response.status} / Streaming`;
@@ -660,7 +661,9 @@ async function runStreaming(apiKey, model, question, startedAt) {
           addTrace("STEP 4", "STREAM", "SSE終了 [DONE]", {
             events: eventCount
           });
-          continue;
+          streamDone = true;
+          buffer = "";
+          break;
         }
 
         latestPayload = payload;
@@ -721,6 +724,18 @@ async function runStreaming(apiKey, model, question, startedAt) {
         if (chunk.usage) {
           usage = chunk.usage;
         }
+      }
+
+      if (streamDone) {
+        // [DONE] is the protocol-level terminal event. Cancel the reader as
+        // resource cleanup as well, so a provider that forgets to close the
+        // HTTP body does not leave the fetch stream locked in the background.
+        try {
+          await reader.cancel();
+        } catch {
+          // The answer is already complete; reader cleanup is best-effort.
+        }
+        break;
       }
     }
 
